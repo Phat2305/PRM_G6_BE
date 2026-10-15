@@ -1,9 +1,18 @@
 HELP.md
-.gradle
+.gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
+
+# Node / JS
+node_modules/
+dist/
+
+# Secrets & Local Envs
+.env
+.env.local
+*.local
 
 ### STS ###
 .apt_generated
@@ -31,7 +40,7 @@ out/
 /nbbuild/
 /dist/
 /nbdist/
-/.nb-gradle/
+/--nb-gradle/
 
 ### VS Code ###
 .vscode/

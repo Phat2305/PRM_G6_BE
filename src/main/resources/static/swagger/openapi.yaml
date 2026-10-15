@@ -1,0 +1,1873 @@
+openapi: 3.0.3
+info:
+  title: Art Course & Supplies Platform - Backend 2 (BE2) API
+  description: |
+    Tài liệu đặc tả API chuẩn OpenAPI 3.0 cho phân hệ Backend 2 (BE2).
+    Hệ thống bao gồm: Thương mại, Giỏ hàng, Đơn hàng, Thanh toán, Vận chuyển, Tài chính & Sổ cái, Kiểm duyệt & Quản trị.
+    
+    ### Cơ chế Xác thực:
+    - **Header**: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+    - **Thuật toán ký**: HMAC-SHA256 (HS256)
+    - **Claims bắt buộc**:
+      - `userId`: UUID của người dùng
+      - `role`: Vai trò (`PARENT`, `TEACHER`, `STAFF`, `ADMIN`)
+      - `type`: Phải là `ACCESS` (Token `REFRESH` bị từ chối)
+    
+    ### Chuẩn phản hồi chung (ApiResponse):
+    Mọi phản hồi JSON đều bọc trong cấu trúc chuẩn:
+    ```json
+    {
+      "success": true,
+      "message": "Thông điệp thành công",
+      "data": { ... },
+      "error": null,
+      "timestamp": "2026-10-14T12:00:00Z"
+    }
+    ```
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Máy chủ Localhost phát triển
+
+tags:
+  - name: Shop & Courses
+    description: Duyệt danh mục khóa học, xem chi tiết (an toàn không lộ video thô), xem thử bài học và đánh giá (SHOP-01, SHOP-09, SHOP-10)
+  - name: Supplies
+    description: Xem danh mục dụng cụ vẽ và kiểm tra tồn kho khả dụng (SHOP-02)
+  - name: Cart
+    description: Quản lý giỏ hàng phụ huynh, kiểm tra xung đột mua trùng khóa học và kiểm tra tồn kho (SHOP-03, SHOP-04, SHOP-08)
+  - name: Orders
+    description: Tạo đơn hàng tách theo giáo viên, tra cứu và hủy đơn (SHOP-05, SHOP-06, BR-04)
+  - name: Payments
+    description: Tạo yêu cầu thanh toán (VNPay/MoMo/Mock), xử lý Webhook IPN idempotent và kiểm tra trạng thái (PAY-01, PAY-02, PAY-09, PAY-10)
+  - name: Fulfillment
+    description: Quản lý vòng đời vận chuyển dụng cụ giáo viên - phụ huynh - nhân viên (FUL-01 đến FUL-08)
+  - name: Teacher Finance
+    description: Tra cứu số dư sổ cái thời gian thực và yêu cầu rút tiền của Giáo viên (FIN-01, FIN-02, FIN-03, FIN-04)
+  - name: Admin Finance & Config
+    description: Duyệt/từ chối rút tiền, ghi nhận chi trả thủ công và cấu hình hệ thống (FIN-05, FIN-06, ADM-02, ADM-03)
+  - name: Refunds
+    description: Yêu cầu, xét duyệt và hoàn tất hoàn tiền theo dòng chi tiết (FIN-07, FIN-08, FIN-09, FIN-10)
+  - name: Staff
+    description: Kiểm duyệt dụng cụ vi phạm, tiếp nhận khiếu nại và tra cứu trao đổi có kiểm soát (STF-01 đến STF-06, MSG-06)
+  - name: Admin Analytics
+    description: Thống kê tài chính toàn diện sàn và tra cứu sổ cái kiểm toán (ADM-04, ADM-05, ADM-06)
+  - name: Moderation
+    description: Ghi nhận và truy vấn lịch sử nhật ký kiểm duyệt đa đối tượng (STF-07)
+  - name: Notifications
+    description: Hộp thư thông báo người dùng và cập nhật trạng thái đã đọc (NFR-08)
+
+paths:
+  # =========================================================================
+  # 1. SHOP & COURSES
+  # =========================================================================
+  /api/v1/shop/courses:
+    get:
+      tags: [Shop & Courses]
+      summary: Danh sách khóa học thương mại đã duyệt (SHOP-01)
+      description: Trả về danh sách khóa học có trạng thái APPROVED. Tuyệt đối không chứa video_url.
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseSummaryListResponse'
+
+  /api/v1/shop/courses/{courseId}:
+    get:
+      tags: [Shop & Courses]
+      summary: Chi tiết khóa học thương mại (SHOP-01)
+      description: Trả về thông tin chi tiết và danh sách bài học (chỉ metadata tiêu đề, thứ tự, is_trial; không chứa video_url).
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/shop/courses/lessons/{lessonId}/trial:
+    get:
+      tags: [Shop & Courses]
+      summary: Xem thử video bài học miễn phí (SHOP-10)
+      description: Cấp Signed URL xem video bài học dùng thử (thời hạn 1 giờ) thông qua hợp đồng với BE1.
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialLessonResponse'
+        '400':
+          description: Bài học không cho phép xem thử
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/course-reviews/course/{courseId}:
+    get:
+      tags: [Shop & Courses]
+      summary: Danh sách đánh giá của khóa học (SHOP-09)
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseReviewListResponse'
+    post:
+      tags: [Shop & Courses]
+      summary: Phụ huynh gửi đánh giá khóa học (SHOP-09)
+      description: Gửi đánh giá cho khóa học đã hoàn tất, đồng thời kích hoạt sự kiện giải phóng ký quỹ (Escrow Release).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '200':
+          description: Đánh giá thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseReviewResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # =========================================================================
+  # 2. SUPPLIES
+  # =========================================================================
+  /api/v1/supplies:
+    get:
+      tags: [Supplies]
+      summary: Danh mục dụng cụ vẽ (SHOP-02)
+      description: Danh sách dụng cụ vẽ đang mở bán kèm tồn kho khả dụng (`stock - reserved`).
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplyListResponse'
+
+  /api/v1/supplies/{supplyId}:
+    get:
+      tags: [Supplies]
+      summary: Chi tiết dụng cụ vẽ (SHOP-02)
+      parameters:
+        - name: supplyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplyResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # =========================================================================
+  # 3. CART
+  # =========================================================================
+  /api/v1/cart:
+    get:
+      tags: [Cart]
+      summary: Lấy giỏ hàng của Phụ huynh đăng nhập (SHOP-03)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/cart/items:
+    post:
+      tags: [Cart]
+      summary: Thêm sản phẩm vào giỏ hàng (SHOP-03, SHOP-04)
+      description: Thêm khóa học (chọn bé, chặn mua trùng BR-01) hoặc dụng cụ vẽ (kiểm tra tồn khả dụng).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartInput'
+      responses:
+        '200':
+          description: Đã thêm vào giỏ hàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemResponse'
+        '400':
+          description: Bé đã đăng ký khóa học này hoặc hết tồn kho
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/cart/items/{itemId}:
+    patch:
+      tags: [Cart]
+      summary: Cập nhật số lượng mục trong giỏ (SHOP-08)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQuantityInput'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemResponse'
+        '400':
+          description: Số lượng không hợp lệ hoặc vượt tồn khả dụng
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    delete:
+      tags: [Cart]
+      summary: Xóa mục khỏi giỏ hàng
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Đã xóa mục
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyApiResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # =========================================================================
+  # 4. ORDERS
+  # =========================================================================
+  /api/v1/orders/checkout:
+    post:
+      tags: [Orders]
+      summary: Đặt hàng / Checkout giỏ hàng (SHOP-05, SHOP-06)
+      description: Tách đơn tự động theo từng Giáo viên. Khóa bi quan và tăng reserved_quantity cho dụng cụ vẽ. Hạn thanh toán 15 phút.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+      responses:
+        '200':
+          description: Tạo đơn hàng thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '400':
+          description: Thiếu thông tin giao hàng hoặc dụng cụ hết tồn kho
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/orders/my-orders:
+    get:
+      tags: [Orders]
+      summary: Danh sách đơn hàng của Phụ huynh
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+
+  /api/v1/orders/teacher-orders:
+    get:
+      tags: [Orders]
+      summary: Danh sách đơn hàng bán được của Giáo viên
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+
+  /api/v1/orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Xem chi tiết đơn hàng (kèm dòng sản phẩm)
+      description: Chỉ chủ sở hữu (Parent/Teacher) hoặc STAFF/ADMIN mới có quyền xem.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetailResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/orders/{orderId}/cancel:
+    post:
+      tags: [Orders]
+      summary: Hủy đơn hàng đang chờ thanh toán
+      description: Hoàn trả tồn kho giữ chỗ. Chỉ cho phép khi đơn ở trạng thái PENDING_PAYMENT.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Đã hủy đơn hàng thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyApiResponse'
+        '400':
+          description: Đơn hàng không ở trạng thái chờ thanh toán
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  # =========================================================================
+  # 5. PAYMENTS
+  # =========================================================================
+  /api/v1/payments/create:
+    post:
+      tags: [Payments]
+      summary: Khởi tạo yêu cầu thanh toán & sinh URL cổng (PAY-01)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '200':
+          description: Tạo URL thanh toán thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponseDto'
+        '400':
+          description: Đơn hàng không hợp lệ hoặc đã thanh toán
+
+  /api/v1/payments/{paymentId}/status:
+    get:
+      tags: [Payments]
+      summary: Truy vấn chủ động trạng thái thanh toán (PAY-10)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponseDto'
+
+  /api/v1/payments/webhook/{gateway}:
+    post:
+      tags: [Payments]
+      summary: Webhook / IPN xử lý kết quả từ cổng thanh toán (PAY-01, PAY-02, PAY-09)
+      description: Xác thực chữ ký số HMAC, kiểm tra khớp số tiền (PAY-02), idempotent an toàn khi gọi lặp.
+      parameters:
+        - name: gateway
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [VNPAY, MOMO, MOCK]
+      responses:
+        '200':
+          description: "Phản hồi chuẩn cho Gateway (e.g. RspCode: 00)"
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [Payments]
+      summary: Webhook GET (cho cổng hỗ trợ IPN qua GET như VNPay)
+      parameters:
+        - name: gateway
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [VNPAY, MOMO, MOCK]
+      responses:
+        '200':
+          description: Phản hồi chuẩn cho Gateway
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/payments/return/{gateway}:
+    get:
+      tags: [Payments]
+      summary: Return URL người dùng chuyển hướng về sau thanh toán
+      parameters:
+        - name: gateway
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [VNPAY, MOMO, MOCK]
+      responses:
+        '200':
+          description: Kết quả xử lý trả về cho frontend
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # =========================================================================
+  # 6. FULFILLMENT
+  # =========================================================================
+  /api/v1/fulfillment/teacher/items/{orderDetailId}/confirm-or-reject:
+    post:
+      tags: [Fulfillment]
+      summary: Giáo viên xác nhận hoặc từ chối đơn dụng cụ (FUL-01)
+      description: CONFIRM -> Chuyển sang CONFIRMED. REJECT -> Chuyển sang CANCELLED, hoàn kho và tạo Refund PENDING.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderDetailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeacherConfirmDeliveryRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+
+  /api/v1/fulfillment/teacher/items/{orderDetailId}/shipping:
+    post:
+      tags: [Fulfillment]
+      summary: Giáo viên giao hàng và cập nhật mã vận đơn (FUL-02)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderDetailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingUpdateRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+
+  /api/v1/fulfillment/delivered/{orderDetailId}:
+    post:
+      tags: [Fulfillment]
+      summary: Đơn vị vận chuyển / Giáo viên báo hàng đã tới nơi (DELIVERED)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderDetailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+
+  /api/v1/fulfillment/parent/items/{orderDetailId}/confirm-received:
+    post:
+      tags: [Fulfillment]
+      summary: "Phụ huynh xác nhận đã nhận hàng (FUL-03: COMPLETED)"
+      description: Chuyển trạng thái sang COMPLETED và kích hoạt kiểm tra giải phóng ký quỹ nếu tất cả dòng hoàn tất.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderDetailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+
+  /api/v1/fulfillment/parent/items/{orderDetailId}/cancel:
+    post:
+      tags: [Fulfillment]
+      summary: Phụ huynh hủy dòng dụng cụ khi Giáo viên chưa xác nhận (FUL-06)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderDetailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Hủy dòng thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+
+  /api/v1/fulfillment/staff/items/{orderDetailId}/handle-failure:
+    post:
+      tags: [Fulfillment]
+      summary: Nhân viên xử lý giao hàng thất bại (FUL-07, FUL-08)
+      description: Hành động RE_SHIP (giao lại) hoặc REFUND (hoàn tiền).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderDetailId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [RE_SHIP, REFUND]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Xử lý thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryStatusResponse'
+
+  # =========================================================================
+  # 7. TEACHER FINANCE
+  # =========================================================================
+  /api/v1/teacher/finance/balance:
+    get:
+      tags: [TeacherFinance]
+      summary: Tra cứu số dư thời gian thực từ sổ cái (FIN-01..03)
+      description: Tính toán động từ money_ledger và payments (Held, Available, Pending Withdrawal, Withdrawn).
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherBalanceResponse'
+
+  /api/v1/teacher/finance/withdrawals:
+    get:
+      tags: [TeacherFinance]
+      summary: Lịch sử các yêu cầu rút tiền của Giáo viên
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalListResponse'
+    post:
+      tags: [TeacherFinance]
+      summary: Giáo viên gửi yêu cầu rút tiền (FIN-04, BR-15)
+      description: Khóa số dư khả dụng (`WITHDRAW_LOCK`). Tối đa 1 yêu cầu đang hoạt động (PENDING/APPROVED).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWithdrawalRequest'
+      responses:
+        '200':
+          description: Gửi yêu cầu thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+        '400':
+          description: Vượt quá số dư khả dụng hoặc đã có yêu cầu đang chờ xử lý
+
+  # =========================================================================
+  # 8. ADMIN FINANCE & CONFIG
+  # =========================================================================
+  /api/v1/admin/finance/withdrawals:
+    get:
+      tags: [Admin Finance & Config]
+      summary: Danh sách yêu cầu rút tiền toàn sàn (FIN-04)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, PAID]
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalListResponse'
+
+  /api/v1/admin/finance/withdrawals/{requestId}/approve:
+    post:
+      tags: [Admin Finance & Config]
+      summary: Admin phê duyệt yêu cầu rút tiền (ADM-03, FIN-05)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Duyệt thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+
+  /api/v1/admin/finance/withdrawals/{requestId}/reject:
+    post:
+      tags: [Admin Finance & Config]
+      summary: Admin từ chối yêu cầu rút tiền (FIN-05)
+      description: Hoàn trả số dư khả dụng cho Giáo viên (`WITHDRAW_UNLOCK`).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectWithdrawalRequest'
+      responses:
+        '200':
+          description: Từ chối và hoàn trả số dư thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+
+  /api/v1/admin/finance/withdrawals/{requestId}/paid:
+    post:
+      tags: [Admin Finance & Config]
+      summary: Nhân viên xác nhận đã chuyển khoản thành công (FIN-06)
+      description: Cung cấp mã giao dịch và ảnh ủy nhiệm chi. Ghi sổ cái `PAYOUT`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkPaidRequest'
+      responses:
+        '200':
+          description: Xác nhận chi trả thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+
+  /api/v1/admin/finance/configs:
+    get:
+      tags: [Admin Finance & Config]
+      summary: Lấy toàn bộ tham số cấu hình hệ thống (ADM-02)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfigListResponse'
+
+  /api/v1/admin/finance/configs/{key}:
+    put:
+      tags: [Admin Finance & Config]
+      summary: Admin cập nhật tham số cấu hình (hoa hồng, phí ship, thời gian chờ) (ADM-02)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfigResponse'
+
+  # =========================================================================
+  # 9. REFUNDS
+  # =========================================================================
+  /api/v1/refunds/request:
+    post:
+      tags: [Refunds]
+      summary: Phụ huynh gửi yêu cầu hoàn tiền cho dòng sản phẩm (FIN-07)
+      description: Kiểm tra tổng tiền hoàn không vượt quá số tiền đã thanh toán.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefundRequest'
+      responses:
+        '200':
+          description: Gửi yêu cầu hoàn tiền thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '400':
+          description: Vượt quá số tiền đã thanh toán hoặc dòng không hợp lệ
+
+  /api/v1/refunds/{refundId}/approve:
+    post:
+      tags: [Refunds]
+      summary: Nhân viên/Admin phê duyệt yêu cầu hoàn tiền (FIN-08)
+      description: Tự động gọi BE1 thu hồi quyền học khóa học (BR-12) hoặc hoàn trả kho dụng cụ.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: refundId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Duyệt hoàn tiền thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+
+  /api/v1/refunds/{refundId}/complete:
+    post:
+      tags: [Refunds]
+      summary: Nhân viên xác nhận đã chuyển khoản trả lại tiền phụ huynh (FIN-09)
+      description: Nhập mã giao dịch chuyển tiền. Ghi sổ cái `REFUND`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: refundId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteRefundRequest'
+      responses:
+        '200':
+          description: Hoàn tất chuyển tiền hoàn thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+
+  # =========================================================================
+  # 10. STAFF
+  # =========================================================================
+  /api/v1/staff/supplies/{supplyId}/moderate:
+    post:
+      tags: [Staff]
+      summary: Nhân viên kiểm duyệt dụng cụ vẽ vi phạm (STF-01)
+      description: Hành động FLAGGED (cảnh báo vi phạm), HIDE (tạm ẩn khỏi shop), hoặc UNHIDE (mở lại). Tự động ghi nhật ký moderation_reviews.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: supplyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [FLAGGED, HIDE, UNHIDE]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Xử lý thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplyResponse'
+
+  /api/v1/staff/complaints:
+    get:
+      tags: [Staff]
+      summary: Danh sách đơn hàng có khiếu nại (STF-02)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+
+  /api/v1/staff/complaints/{orderId}/conversations:
+    get:
+      tags: [Staff]
+      summary: Xem trao đổi tin nhắn giải quyết khiếu nại (MSG-06)
+      description: Bảo mật MSG-06 - Nhân viên CHỈ được xem tin nhắn khi đơn hàng có khiếu nại hợp lệ.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                type: object
+        '403':
+          description: Đơn hàng không có khiếu nại, cấm truy cập trao đổi
+
+  # =========================================================================
+  # 11. ADMIN ANALYTICS
+  # =========================================================================
+  /api/v1/admin/analytics/finance:
+    get:
+      tags: [Admin Analytics]
+      summary: Báo cáo phân tích tài chính toàn diện sàn (ADM-04, ADM-05, ADM-06)
+      description: Tổng doanh thu, đang giữ, khả dụng, chờ rút, đã chi trả, đã hoàn, doanh thu hoa hồng của sàn.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAnalyticsResponse'
+
+  /api/v1/admin/analytics/ledger-audit:
+    get:
+      tags: [Admin Analytics]
+      summary: Tra cứu sổ cái tài chính toàn sàn (Audit Log - ADM-04)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: teacherId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: entryType
+          in: query
+          schema:
+            type: string
+            enum: [HOLD, RELEASE, WITHDRAW_LOCK, WITHDRAW_UNLOCK, PAYOUT, REFUND]
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoneyLedgerListResponse'
+
+  # =========================================================================
+  # 12. MODERATION
+  # =========================================================================
+  /api/v1/moderation/reviews:
+    post:
+      tags: [Moderation]
+      summary: Ghi nhận nhật ký kiểm duyệt (STF-07)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerationReviewRequest'
+      responses:
+        '200':
+          description: Ghi nhận thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyApiResponse'
+
+  /api/v1/moderation/reviews/{targetType}/{targetId}:
+    get:
+      tags: [Moderation]
+      summary: Lịch sử kiểm duyệt theo đối tượng (STF-07)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: targetType
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: targetId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationReviewListResponse'
+
+  /api/v1/moderation/reviews/staff/{staffId}:
+    get:
+      tags: [Moderation]
+      summary: Lịch sử kiểm duyệt do một Nhân viên thực hiện
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationReviewListResponse'
+
+  # =========================================================================
+  # 13. NOTIFICATIONS
+  # =========================================================================
+  /api/v1/notifications/my-notifications:
+    get:
+      tags: [Notifications]
+      summary: Lấy danh sách thông báo của người dùng đăng nhập (NFR-08)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+
+  /api/v1/notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Đánh dấu một thông báo đã đọc
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Đã đánh dấu đọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmptyApiResponse'
+
+  /api/v1/notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Đánh dấu tất cả thông báo của người dùng đã đọc
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Đã đánh dấu tất cả đọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountResponse'
+
+# =============================================================================
+# COMPONENTS & SCHEMAS
+# =============================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Nhập JWT Bearer token HS256 được cấp từ BE1.
+        Phải chứa claim `userId`, `role` (PARENT/TEACHER/STAFF/ADMIN), `type=ACCESS`.
+
+  responses:
+    UnauthorizedError:
+      description: Chưa xác thực hoặc Token không hợp lệ / hết hạn / sai vai trò
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Không có quyền truy cập tài nguyên (Sai vai trò hoặc không phải chủ sở hữu)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Không tìm thấy tài nguyên
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # Error Response
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Không tìm thấy tài nguyên
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: NOT_FOUND
+            message:
+              type: string
+              example: Không tìm thấy đơn hàng
+        timestamp:
+          type: string
+          format: date-time
+
+    EmptyApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Thao tác thành công
+        data:
+          type: object
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+
+    CountResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: integer
+          example: 5
+        timestamp:
+          type: string
+          format: date-time
+
+    # DTOs & Models
+    CourseSummaryDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        teacherId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        thumbnailUrl:
+          type: string
+        price:
+          type: number
+          example: 500000
+        ratingAvg:
+          type: number
+          example: 4.8
+        totalStudents:
+          type: integer
+          example: 120
+
+    CourseSummaryListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseSummaryDto'
+
+    LessonSummaryDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        orderNumber: { type: integer }
+        durationMinutes: { type: integer }
+        isTrial: { type: boolean }
+
+    CourseDetailDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        thumbnailUrl: { type: string }
+        price: { type: number }
+        ratingAvg: { type: number }
+        totalStudents: { type: integer }
+        lessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonSummaryDto'
+
+    CourseDetailResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/CourseDetailDto'
+
+    TrialLessonDto:
+      type: object
+      properties:
+        lessonId: { type: string, format: uuid }
+        title: { type: string }
+        videoSignedUrl:
+          type: string
+          example: "https://storage.artcourse.com/videos/trial_123.mp4?signature=xyz"
+        expiresAt:
+          type: string
+          format: date-time
+
+    TrialLessonResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/TrialLessonDto'
+
+    CreateReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: string
+          example: "Khóa học rất bổ ích cho bé!"
+
+    CourseReview:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        courseId: { type: string, format: uuid }
+        parentId: { type: string, format: uuid }
+        rating: { type: integer }
+        comment: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CourseReviewResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+        data:
+          $ref: '#/components/schemas/CourseReview'
+
+    CourseReviewListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseReview'
+
+    Supply:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        price: { type: number, example: 120000 }
+        stockQuantity: { type: integer, example: 50 }
+        reservedQuantity: { type: integer, example: 5 }
+        soldQuantity: { type: integer, example: 20 }
+        availableStock: { type: integer, example: 45 }
+        status: { type: string, enum: [ACTIVE, HIDDEN, FLAGGED, OUT_OF_STOCK] }
+
+    SupplyResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/Supply'
+
+    SupplyListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supply'
+
+    AddToCartInput:
+      type: object
+      required: [itemType, quantity]
+      properties:
+        itemType:
+          type: string
+          enum: [COURSE, SUPPLY]
+        courseId:
+          type: string
+          format: uuid
+        supplyId:
+          type: string
+          format: uuid
+        childId:
+          type: string
+          format: uuid
+          description: Bắt buộc khi itemType là COURSE
+        quantity:
+          type: integer
+          minimum: 1
+          example: 1
+
+    UpdateQuantityInput:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+
+    CartItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cartId: { type: string, format: uuid }
+        productType: { type: string, enum: [COURSE, SUPPLY] }
+        courseId: { type: string, format: uuid, nullable: true }
+        supplyId: { type: string, format: uuid, nullable: true }
+        childId: { type: string, format: uuid, nullable: true }
+        quantity: { type: integer }
+        unitPrice: { type: number }
+
+    CartItemResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+        data:
+          $ref: '#/components/schemas/CartItem'
+
+    CartItemListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+
+    CheckoutItem:
+      type: object
+      required: [itemType, quantity]
+      properties:
+        itemType: { type: string, enum: [COURSE, SUPPLY] }
+        courseId: { type: string, format: uuid }
+        supplyId: { type: string, format: uuid }
+        childId: { type: string, format: uuid }
+        quantity: { type: integer, example: 1 }
+
+    CheckoutRequest:
+      type: object
+      properties:
+        useCart:
+          type: boolean
+          default: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckoutItem'
+        recipientName:
+          type: string
+          example: "Nguyen Van A"
+        recipientPhone:
+          type: string
+          example: "0901234567"
+        shippingAddress:
+          type: string
+          example: "123 Đường Nguyễn Trãi, Quận 1, TP.HCM"
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        parentId: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        orderCode: { type: string, example: "ORD-20261014-ABCD" }
+        subTotal: { type: number, example: 620000 }
+        shippingFee: { type: number, example: 30000 }
+        totalAmount: { type: number, example: 650000 }
+        status:
+          type: string
+          enum: [PENDING_PAYMENT, PAID, CANCELLED, EXPIRED, REFUNDED]
+        recipientName: { type: string }
+        recipientPhone: { type: string }
+        shippingAddress: { type: string }
+        expiredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    OrderDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        productType: { type: string, enum: [COURSE, SUPPLY] }
+        courseId: { type: string, format: uuid, nullable: true }
+        supplyId: { type: string, format: uuid, nullable: true }
+        childId: { type: string, format: uuid, nullable: true }
+        productName: { type: string }
+        unitPrice: { type: number }
+        quantity: { type: integer }
+        subTotal: { type: number }
+        commissionRate: { type: number, example: 0.2 }
+        commissionAmount: { type: number, example: 100000 }
+        teacherEarnings: { type: number, example: 400000 }
+        deliveryStatus:
+          type: string
+          enum: [PENDING, CONFIRMED, SHIPPING, DELIVERED, COMPLETED, CANCELLED, DELIVERY_FAILED, REFUNDED]
+
+    OrderListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+
+    OrderDetailResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            order:
+              $ref: '#/components/schemas/Order'
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderDetail'
+
+    CreatePaymentRequest:
+      type: object
+      required: [orderId, gateway, returnUrl]
+      properties:
+        orderId: { type: string, format: uuid }
+        gateway: { type: string, enum: [VNPAY, MOMO, MOCK] }
+        returnUrl: { type: string, example: "https://frontend.artcourse.com/payment/callback" }
+
+    PaymentResponseDto:
+      type: object
+      properties:
+        paymentId: { type: string, format: uuid }
+        paymentUrl: { type: string, example: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?..." }
+        gateway: { type: string }
+        amount: { type: number }
+
+    PaymentStatusResponseDto:
+      type: object
+      properties:
+        paymentId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING, COMPLETED, FAILED, REFUNDED] }
+        escrowStatus: { type: string, enum: [NONE, HELD, RELEASED, REFUNDED] }
+        amount: { type: number }
+
+    TeacherConfirmDeliveryRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [CONFIRM, REJECT] }
+        reason: { type: string, nullable: true }
+
+    ShippingUpdateRequest:
+      type: object
+      required: [shippingProvider, trackingCode]
+      properties:
+        shippingProvider: { type: string, example: "Giao Hàng Nhanh (GHN)" }
+        trackingCode: { type: string, example: "GHN123456789" }
+
+    DeliveryStatusResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            orderDetailId: { type: string, format: uuid }
+            deliveryStatus: { type: string }
+            shippingProvider: { type: string }
+            trackingCode: { type: string }
+
+    TeacherBalanceDto:
+      type: object
+      properties:
+        teacherId: { type: string, format: uuid }
+        heldBalance: { type: number, example: 500000, description: "Tiền đang ký quỹ (đơn chưa xong)" }
+        availableBalance: { type: number, example: 1200000, description: "Tiền khả dụng có thể rút" }
+        pendingWithdrawal: { type: number, example: 300000, description: "Tiền đang chờ duyệt rút" }
+        withdrawnAmount: { type: number, example: 4000000, description: "Tổng tiền đã rút về tài khoản" }
+
+    TeacherBalanceResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/TeacherBalanceDto'
+
+    CreateWithdrawalRequest:
+      type: object
+      required: [amount, bankInfo]
+      properties:
+        amount:
+          type: number
+          minimum: 50000
+          example: 500000
+        bankInfo:
+          type: string
+          example: "Techcombank - 190312345678 - NGUYEN VAN TEACHER"
+
+    RejectWithdrawalRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          example: "Thông tin tài khoản ngân hàng không trùng khớp"
+
+    MarkPaidRequest:
+      type: object
+      required: [transactionCode]
+      properties:
+        transactionCode:
+          type: string
+          example: "TXN-VIB-987654321"
+        proofImageUrl:
+          type: string
+          example: "https://storage.artcourse.com/proofs/payout_123.jpg"
+
+    WithdrawalResponseDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        amount: { type: number }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED, PAID] }
+        bankInfo: { type: string }
+        transactionCode: { type: string, nullable: true }
+        rejectionReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    WithdrawalResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+        data:
+          $ref: '#/components/schemas/WithdrawalResponseDto'
+
+    WithdrawalListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WithdrawalResponseDto'
+
+    CreateRefundRequest:
+      type: object
+      required: [orderId, orderDetailId, reason, bankInfo]
+      properties:
+        orderId: { type: string, format: uuid }
+        orderDetailId: { type: string, format: uuid }
+        reason: { type: string, example: "Bé không phù hợp với khóa học này" }
+        bankInfo: { type: string, example: "Vietcombank - 0123456789 - PHAM THI PARENT" }
+
+    CompleteRefundRequest:
+      type: object
+      required: [transactionCode]
+      properties:
+        transactionCode: { type: string, example: "REFUND-TXN-112233" }
+        proofImageUrl: { type: string, example: "https://storage.artcourse.com/proofs/refund_01.png" }
+
+    RefundResponseDto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        orderDetailId: { type: string, format: uuid }
+        amount: { type: number }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED, COMPLETED] }
+        reason: { type: string }
+        bankInfo: { type: string }
+        transactionCode: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    RefundResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+        data:
+          $ref: '#/components/schemas/RefundResponseDto'
+
+    SystemConfig:
+      type: object
+      properties:
+        key: { type: string, example: "default_shipping_fee" }
+        value: { type: string, example: "30000" }
+        description: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    SystemConfigResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string }
+        data:
+          $ref: '#/components/schemas/SystemConfig'
+
+    SystemConfigListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemConfig'
+
+    AdminAnalyticsDto:
+      type: object
+      properties:
+        totalRevenue: { type: number, example: 50000000 }
+        heldBalance: { type: number, example: 5000000 }
+        availableBalance: { type: number, example: 15000000 }
+        pendingWithdrawal: { type: number, example: 2000000 }
+        totalWithdrawn: { type: number, example: 25000000 }
+        totalRefunded: { type: number, example: 1000000 }
+        platformCommission: { type: number, example: 8000000 }
+
+    AdminAnalyticsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          $ref: '#/components/schemas/AdminAnalyticsDto'
+
+    MoneyLedger:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        teacherId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid, nullable: true }
+        paymentId: { type: string, format: uuid, nullable: true }
+        entryType:
+          type: string
+          enum: [HOLD, RELEASE, WITHDRAW_LOCK, WITHDRAW_UNLOCK, PAYOUT, REFUND]
+        amount: { type: number }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    MoneyLedgerListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoneyLedger'
+
+    ModerationReviewRequest:
+      type: object
+      required: [targetType, targetId, decision]
+      properties:
+        targetType:
+          type: string
+          enum: [TEACHER_PROFILE, COURSE, SUPPLY, CUSTOMIZE_REQUEST, REFUND]
+        targetId:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED, FLAGGED, RESOLVED]
+        reason:
+          type: string
+
+    ModerationReview:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        targetType: { type: string }
+        targetId: { type: string, format: uuid }
+        decision: { type: string }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ModerationReviewListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModerationReview'
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        title: { type: string }
+        message: { type: string }
+        type: { type: string }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    NotificationListResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'

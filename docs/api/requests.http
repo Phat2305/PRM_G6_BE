@@ -1,0 +1,267 @@
+### =========================================================================
+### ART COURSE & SUPPLIES PLATFORM - HTTP CLIENT TEST SUITE (BE2)
+### Sử dụng được với: VS Code REST Client / IntelliJ IDEA HTTP Client / Postman
+### =========================================================================
+
+@baseUrl = http://localhost:8080
+
+# Để lấy token thật theo secret của bạn, chạy lệnh:
+# python scripts/gen_tokens.py "<JWT_SECRET>"
+# Sau đó dán các token vào bên dưới:
+
+@parentToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJyb2xlIjoiUEFSRU5UIiwidHlwZSI6IkFDQ0VTUyIsImlhdCI6MTc5MjA0NjI3OSwiZXhwIjoxNzk0NjM4Mjc5fQ.Iw21tIDKXKUq_hMvcmEhP6slbmekpNvKSKAL9Vrv3PU
+@teacherToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJyb2xlIjoiVEVBQ0hFUiIsInR5cGUiOiJBQ0NFU1MiLCJpYXQiOjE3OTIwNDYyNzksImV4cCI6MTc5NDYzODI3OX0.U4XItnFK7NSCexRYmldGtBQqP1OjsFyBQ5DbaIRo8K0
+@staffToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJyb2xlIjoiU1RBRkYiLCJ0eXBlIjoiQUNDRVNTIiwiaWF0IjoxNzkyMDQ2Mjc5LCJleHAiOjE3OTQ2MzgyNzl9.Kc3VQ3aE3LgenbPQu8NGfKMY8ADu83UGjBTdMcQtArU
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI0NDQ0NDQ0NC00NDQ0LTQ0NDQtNDQ0NC00NDQ0NDQ0NDQ0NDQiLCJyb2xlIjoiQURNSU4iLCJ0eXBlIjoiQUNDRVNTIiwiaWF0IjoxNzkyMDQ2Mjc5LCJleHAiOjE3OTQ2MzgyNzl9.oKsTIr3Ojverc1Io5lwXksBBMU4XkDUXXhgcJtpDs68
+
+### -------------------------------------------------------------------------
+### PHẦN 1: API CÔNG KHAI (PUBLIC - KHÔNG CẦN TOKEN)
+### -------------------------------------------------------------------------
+
+### 1.1 Xem danh sách khóa học thương mại (SHOP-01: An toàn, không lộ video_url)
+GET {{baseUrl}}/api/v1/shop/courses
+
+### 1.2 Xem chi tiết một khóa học (Thay UUID bằng ID khóa học thật)
+GET {{baseUrl}}/api/v1/shop/courses/c0000000-0000-0000-0000-000000000001
+
+### 1.3 Xem thử bài học miễn phí qua Signed URL BE1 (SHOP-10)
+GET {{baseUrl}}/api/v1/shop/courses/lessons/e0000000-0000-0000-0000-000000000001/trial
+
+### 1.4 Xem danh mục dụng cụ vẽ & tồn kho khả dụng (SHOP-02)
+GET {{baseUrl}}/api/v1/supplies
+
+### 1.5 Xem chi tiết dụng cụ vẽ
+GET {{baseUrl}}/api/v1/supplies/d0000000-0000-0000-0000-000000000001
+
+### 1.6 Xem đánh giá của một khóa học (SHOP-09)
+GET {{baseUrl}}/api/v1/course-reviews/course/c0000000-0000-0000-0000-000000000001
+
+
+### -------------------------------------------------------------------------
+### PHẦN 2: LUỒNG PHỤ HUYNH (PARENT FLOW)
+### -------------------------------------------------------------------------
+
+### 2.1 Xem giỏ hàng của phụ huynh
+GET {{baseUrl}}/api/v1/cart
+Authorization: Bearer {{parentToken}}
+
+### 2.2 Thêm dụng cụ vào giỏ hàng (SHOP-03)
+POST {{baseUrl}}/api/v1/cart/items
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "itemType": "SUPPLY",
+  "supplyId": "d0000000-0000-0000-0000-000000000001",
+  "quantity": 2
+}
+
+### 2.3 Thêm khóa học vào giỏ hàng cho bé (SHOP-03, SHOP-04 - Check trùng BR-01)
+POST {{baseUrl}}/api/v1/cart/items
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "itemType": "COURSE",
+  "courseId": "c0000000-0000-0000-0000-000000000001",
+  "childId": "a0000000-0000-0000-0000-000000000001",
+  "quantity": 1
+}
+
+### 2.4 Cập nhật số lượng dụng cụ trong giỏ (SHOP-08)
+PATCH {{baseUrl}}/api/v1/cart/items/55555555-5555-5555-5555-555555555555
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "quantity": 3
+}
+
+### 2.5 Đặt hàng / Checkout (SHOP-05: Tách đơn theo GV, giữ chỗ tồn reserved_quantity)
+# @name checkoutOrder
+POST {{baseUrl}}/api/v1/orders/checkout
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "useCart": true,
+  "recipientName": "Nguyễn Văn Phụ Huynh",
+  "recipientPhone": "0912345678",
+  "shippingAddress": "123 Đường Sáng Tạo, Quận 1, TP. Hồ Chí Minh"
+}
+
+### 2.6 Xem danh sách đơn hàng của phụ huynh
+GET {{baseUrl}}/api/v1/orders/my-orders
+Authorization: Bearer {{parentToken}}
+
+### 2.7 Xem chi tiết một đơn hàng kèm các dòng chi tiết
+GET {{baseUrl}}/api/v1/orders/99999999-9999-9999-9999-999999999999
+Authorization: Bearer {{parentToken}}
+
+### 2.8 Khởi tạo thanh toán tạo link VNPay/MoMo/Mock (PAY-01)
+POST {{baseUrl}}/api/v1/payments/create
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "orderId": "99999999-9999-9999-9999-999999999999",
+  "gateway": "MOCK",
+  "returnUrl": "http://localhost:3000/payment/callback"
+}
+
+### 2.9 Phụ huynh xác nhận đã nhận hàng dụng cụ (FUL-03: sang COMPLETED)
+POST {{baseUrl}}/api/v1/fulfillment/parent/items/88888888-8888-8888-8888-888888888888/confirm-received
+Authorization: Bearer {{parentToken}}
+
+### 2.10 Phụ huynh gửi đánh giá khóa học (SHOP-09: kích hoạt giải phóng ký quỹ)
+POST {{baseUrl}}/api/v1/course-reviews/course/c0000000-0000-0000-0000-000000000001
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "rating": 5,
+  "comment": "Khóa học màu nước rất sinh động, con tôi học rất hứng thú!"
+}
+
+### 2.11 Phụ huynh gửi yêu cầu hoàn tiền (FIN-07)
+POST {{baseUrl}}/api/v1/refunds/request
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "orderId": "99999999-9999-9999-9999-999999999999",
+  "orderDetailId": "88888888-8888-8888-8888-888888888888",
+  "reason": "Dụng cụ bị gãy vỡ trong quá trình vận chuyển",
+  "bankInfo": "Vietcombank - 0123456789 - NGUYEN VAN PHU HUYNH"
+}
+
+
+### -------------------------------------------------------------------------
+### PHẦN 3: XỬ LÝ THANH TOÁN WEBHOOK (PAYMENT GATEWAY IPN)
+### -------------------------------------------------------------------------
+
+### 3.1 Giả lập Webhook MOCK thanh toán thành công (Chuyển Order PAID, Payment HELD, cấn trừ kho)
+POST {{baseUrl}}/api/v1/payments/webhook/MOCK?orderId=99999999-9999-9999-9999-999999999999&amount=530000&vnp_ResponseCode=00&signature=mock_valid_signature
+
+
+### -------------------------------------------------------------------------
+### PHẦN 4: LUỒNG GIÁO VIÊN (TEACHER FLOW)
+### -------------------------------------------------------------------------
+
+### 4.1 Xem danh sách đơn hàng bán được của giáo viên
+GET {{baseUrl}}/api/v1/orders/teacher-orders
+Authorization: Bearer {{teacherToken}}
+
+### 4.2 Giáo viên xác nhận đơn dụng cụ (FUL-01: CONFIRM -> sang CONFIRMED)
+POST {{baseUrl}}/api/v1/fulfillment/teacher/items/88888888-8888-8888-8888-888888888888/confirm-or-reject
+Authorization: Bearer {{teacherToken}}
+Content-Type: application/json
+
+{
+  "action": "CONFIRM"
+}
+
+### 4.3 Giáo viên nhập mã vận đơn và đơn vị vận chuyển (FUL-02: sang SHIPPING)
+POST {{baseUrl}}/api/v1/fulfillment/teacher/items/88888888-8888-8888-8888-888888888888/shipping
+Authorization: Bearer {{teacherToken}}
+Content-Type: application/json
+
+{
+  "shippingProvider": "Giao Hàng Nhanh (GHN)",
+  "trackingCode": "GHN-20261015-XYZ"
+}
+
+### 4.4 Giáo viên tra cứu số dư sổ cái thời gian thực (FIN-01, FIN-02, FIN-03)
+GET {{baseUrl}}/api/v1/teacher/finance/balance
+Authorization: Bearer {{teacherToken}}
+
+### 4.5 Giáo viên gửi yêu cầu rút tiền (FIN-04, BR-15: khóa số dư WITHDRAW_LOCK)
+POST {{baseUrl}}/api/v1/teacher/finance/withdrawals
+Authorization: Bearer {{teacherToken}}
+Content-Type: application/json
+
+{
+  "amount": 500000,
+  "bankInfo": "Techcombank - 190312345678 - NGUYEN VAN GIAO VIEN"
+}
+
+### 4.6 Xem lịch sử các yêu cầu rút tiền của giáo viên
+GET {{baseUrl}}/api/v1/teacher/finance/withdrawals
+Authorization: Bearer {{teacherToken}}
+
+
+### -------------------------------------------------------------------------
+### PHẦN 5: LUỒNG NHÂN VIÊN & QUẢN TRỊ VIÊN (STAFF & ADMIN FLOW)
+### -------------------------------------------------------------------------
+
+### 5.1 Admin xem danh sách tất cả yêu cầu rút tiền đang chờ duyệt
+GET {{baseUrl}}/api/v1/admin/finance/withdrawals?status=PENDING
+Authorization: Bearer {{adminToken}}
+
+### 5.2 Admin duyệt yêu cầu rút tiền (FIN-05, ADM-03)
+POST {{baseUrl}}/api/v1/admin/finance/withdrawals/77777777-7777-7777-7777-777777777777/approve
+Authorization: Bearer {{adminToken}}
+
+### 5.3 Admin từ chối yêu cầu rút tiền (FIN-05: hoàn số dư WITHDRAW_UNLOCK)
+POST {{baseUrl}}/api/v1/admin/finance/withdrawals/77777777-7777-7777-7777-777777777777/reject
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reason": "Tên chủ tài khoản không khớp với hồ sơ giáo viên"
+}
+
+### 5.4 Staff xác nhận đã chuyển khoản thành công (FIN-06: ghi sổ cái PAYOUT)
+POST {{baseUrl}}/api/v1/admin/finance/withdrawals/77777777-7777-7777-7777-777777777777/paid
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "transactionCode": "FT26101599887766",
+  "proofImageUrl": "https://storage.artcourse.com/proofs/transfer_receipt.jpg"
+}
+
+### 5.5 Staff phê duyệt hoàn tiền (FIN-08: thu hồi quyền học BE1, hoàn kho)
+POST {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/approve
+Authorization: Bearer {{staffToken}}
+
+### 5.6 Staff hoàn tất chi tiền hoàn cho phụ huynh (FIN-09: ghi sổ cái REFUND)
+POST {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/complete
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "transactionCode": "REF-FT261015001122",
+  "proofImageUrl": "https://storage.artcourse.com/proofs/refund_receipt.jpg"
+}
+
+### 5.7 Staff kiểm duyệt dụng cụ vi phạm (STF-01: HIDE và tự ghi moderation_reviews)
+POST {{baseUrl}}/api/v1/staff/supplies/d0000000-0000-0000-0000-000000000001/moderate
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "action": "HIDE",
+  "reason": "Sản phẩm có chứa hình ảnh phản cảm hoặc vi phạm bản quyền"
+}
+
+### 5.8 Admin xem báo cáo thống kê tài chính toàn diện sàn (ADM-04, ADM-05, ADM-06)
+GET {{baseUrl}}/api/v1/admin/analytics/finance
+Authorization: Bearer {{adminToken}}
+
+### 5.9 Admin tra cứu Audit log sổ cái tài chính toàn sàn (ADM-04)
+GET {{baseUrl}}/api/v1/admin/analytics/ledger-audit?entryType=RELEASE
+Authorization: Bearer {{adminToken}}
+
+### 5.10 Đọc danh sách cấu hình hệ thống (ADM-02)
+GET {{baseUrl}}/api/v1/admin/finance/configs
+Authorization: Bearer {{adminToken}}
+
+### 5.11 Admin cập nhật cấu hình hệ thống (ADM-02: phí ship, hoa hồng)
+PUT {{baseUrl}}/api/v1/admin/finance/configs/default_shipping_fee
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "value": "35000"
+}

@@ -1,0 +1,28 @@
+package com.example.art_course.modules.course.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+/**
+ * DTO tóm tắt khóa học phục vụ duyệt danh mục mua sắm (SHOP-01).
+ * Tuyệt đối không chứa trường videoUrl.
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class CourseSummaryDto {
+    private UUID id;
+    private UUID teacherId;
+    private String name;
+    private String description;
+    private String category;
+    private String coverImageUrl;
+    private BigDecimal price;
+    private String status;
+}

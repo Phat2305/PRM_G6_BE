@@ -1,0 +1,9 @@
+#	Quyết định
+1	Khóa học không có trường trình độ (theo SRS CRS-01). Chưa thêm cột độ tuổi cho khóa vì #6 SRS chưa chốt. “Art Kit” là học cụ gợi ý tổng hợp từ các bài, bán giá lẻ, không có giá gói (CRS-08, #15).
+2	Chỉ Teacher upload video. Sửa UC 6.1 bỏ “Admin”.
+3	READY tính theo từng videobài. Khóa chỉ công khai khi Staff duyệt và mọi video READY.
+4	Đổi tên UC 6.2 thành “Course Builder”, xóa ghi chú “Customize chưa định nghĩa”.
+5	Xóa ghi chú “nhiều Teacher trong một đơn”. Đã có BR-04.
+6	Giải phóng tiền cả khoản thanh toán khi mọi dòng trong đơn đủ điều kiện (#26). Sửa lại Task D “từng loại sản phẩm” cho khớp.
+7	Escrow chỉ dựng khung mốc N, M, X do Admin cấu hình, hoàn tiền và tranh chấp Staff xử lý từng ca.
+8	Phạm vi là Backend 2, chung một codebase với Backend 1. Backend 2 sở hữu giỏ hàng, đơn hàng, thanh toán, giao hàng, dòng tiền, StaffAdmin, thông báo, job nền. Các bảng của Backend 1 (users, courses, lessons, conversations, submissions, offers...) Backend 2 chỉ đọc. Nếu cần đổi thì ghi vào danh sách bàn giao, không tự sửa.

@@ -1,0 +1,214 @@
+package com.example.art_course.modules.cart.service;
+
+import com.example.art_course.common.AppError;
+import com.example.art_course.modules.cart.entity.Cart;
+import com.example.art_course.modules.cart.entity.CartItem;
+import com.example.art_course.modules.cart.repository.CartItemRepository;
+import com.example.art_course.modules.cart.repository.CartRepository;
+import com.example.art_course.modules.course.entity.Course;
+import com.example.art_course.modules.course.repository.CourseRepository;
+import com.example.art_course.modules.product.entity.Supply;
+import com.example.art_course.modules.product.repository.SupplyRepository;
+import jakarta.persistence.EntityManager;
+import lombok.Builder;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class CartService {
+
+    private final CartRepository cartRepository;
+    private final CartItemRepository cartItemRepository;
+    private final CourseRepository courseRepository;
+    private final SupplyRepository supplyRepository;
+    private final EntityManager entityManager;
+
+    @Transactional
+    public Cart getOrCreateCart(UUID parentId) {
+        return cartRepository.findByParentId(parentId)
+                .orElseGet(() -> cartRepository.save(Cart.builder().parentId(parentId).build()));
+    }
+
+    @Transactional(readOnly = true)
+    public List<CartItem> getCartItems(UUID parentId) {
+        Cart cart = getOrCreateCart(parentId);
+        return cartItemRepository.findByCartId(cart.getId());
+    }
+
+    @Transactional
+    public CartItem addToCart(UUID parentId, AddToCartInput input) {
+        Cart cart = getOrCreateCart(parentId);
+
+        if ("COURSE".equalsIgnoreCase(input.getItemType())) {
+            if (input.getCourseId() == null || input.getChildId() == null) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học yêu cầu courseId và childId");
+            }
+
+            // 1. Kiểm tra Parent có ít nhất 1 Child (ACC-04)
+            String childSql = "SELECT user_id FROM child_profiles WHERE parent_id = :parentId AND user_id = :childId";
+            List<?> children = entityManager.createNativeQuery(childSql)
+                    .setParameter("parentId", parentId)
+                    .setParameter("childId", input.getChildId())
+                    .getResultList();
+
+            if (children.isEmpty()) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "NO_VALID_CHILD", "Phụ huynh phải có hồ sơ con hợp lệ để mua khóa học (ACC-04)");
+            }
+
+            // 2. Kiểm tra khóa học tồn tại và PUBLISHED
+            Course course = courseRepository.findById(input.getCourseId())
+                    .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
+
+            if (!"PUBLISHED".equalsIgnoreCase(course.getStatus())) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "COURSE_UNAVAILABLE", "Khóa học chưa được công khai");
+            }
+
+            // 3. Chặn mua trùng 1 khóa cho cùng 1 Child (SHOP-04)
+            // Kiểm tra trong child_enroll
+            String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND status = 'ACTIVE'";
+            List<?> enrolled = entityManager.createNativeQuery(enrollSql)
+                    .setParameter("childId", input.getChildId())
+                    .setParameter("courseId", input.getCourseId())
+                    .getResultList();
+
+            if (!enrolled.isEmpty()) {
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+            }
+
+            // Kiểm tra trong giỏ hàng
+            if (cartItemRepository.findByCartIdAndCourseIdAndChildId(cart.getId(), input.getCourseId(), input.getChildId()).isPresent()) {
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_IN_CART", "Khóa học này cho bé đã có trong giỏ hàng (SHOP-04)");
+            }
+
+            CartItem item = CartItem.builder()
+                    .cartId(cart.getId())
+                    .productType("COURSE")
+                    .courseId(input.getCourseId())
+                    .childId(input.getChildId())
+                    .quantity(1)
+                    .build();
+            return cartItemRepository.save(item);
+
+        } else if ("SUPPLY".equalsIgnoreCase(input.getItemType())) {
+            if (input.getSupplyId() == null) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Dụng cụ yêu cầu supplyId");
+            }
+
+            Supply supply = supplyRepository.findById(input.getSupplyId())
+                    .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
+
+            int qty = input.getQuantity() > 0 ? input.getQuantity() : 1;
+            int available = supply.getAvailableStock();
+
+            var existingOpt = cartItemRepository.findByCartIdAndSupplyId(cart.getId(), input.getSupplyId());
+            if (existingOpt.isPresent()) {
+                CartItem existing = existingOpt.get();
+                int newQty = existing.getQuantity() + qty;
+                if (available < newQty) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK", "Tồn kho không đủ (còn " + available + ")");
+                }
+                existing.setQuantity(newQty);
+                existing.setUpdatedAt(Instant.now());
+                return cartItemRepository.save(existing);
+            } else {
+                if (available < qty) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK", "Tồn kho không đủ (còn " + available + ")");
+                }
+                CartItem item = CartItem.builder()
+                        .cartId(cart.getId())
+                        .productType("SUPPLY")
+                        .supplyId(input.getSupplyId())
+                        .quantity(qty)
+                        .build();
+                return cartItemRepository.save(item);
+            }
+        }
+
+        throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_PRODUCT_TYPE", "Loại sản phẩm không hợp lệ");
+    }
+
+    @Transactional
+    public void removeItem(UUID parentId, UUID itemId) {
+        Cart cart = getOrCreateCart(parentId);
+        CartItem item = cartItemRepository.findById(itemId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ITEM_NOT_FOUND", "Không tìm thấy mục trong giỏ"));
+
+        if (!item.getCartId().equals(cart.getId())) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Mục này không thuộc giỏ hàng của bạn");
+        }
+        cartItemRepository.delete(item);
+    }
+
+    /**
+     * Cập nhật số lượng mục trong giỏ: kiểm tra quyền sở hữu giỏ và tồn kho khả dụng.
+     */
+    @Transactional
+    public CartItem updateItemQuantity(UUID parentId, UUID itemId, int quantity) {
+        if (quantity <= 0) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_QUANTITY", "Số lượng sản phẩm phải lớn hơn 0");
+        }
+
+        Cart cart = getOrCreateCart(parentId);
+        CartItem item = cartItemRepository.findById(itemId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ITEM_NOT_FOUND", "Không tìm thấy mục trong giỏ"));
+
+        // 1. Kiểm tra quyền sở hữu giỏ hàng
+        if (!item.getCartId().equals(cart.getId())) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Mục này không thuộc giỏ hàng của bạn");
+        }
+
+        // 2. Khóa học cho một bé chỉ được phép số lượng 1
+        if ("COURSE".equalsIgnoreCase(item.getProductType())) {
+            if (quantity != 1) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_QUANTITY", "Khóa học cho mỗi bé chỉ có thể mua với số lượng 1");
+            }
+            return item;
+        }
+
+        // 3. Kiểm tra tồn kho khả dụng đối với dụng cụ vẽ
+        if ("SUPPLY".equalsIgnoreCase(item.getProductType())) {
+            Supply supply = supplyRepository.findById(item.getSupplyId())
+                    .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
+
+            int available = supply.getAvailableStock();
+            if (available < quantity) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK",
+                        "Dụng cụ \"" + supply.getName() + "\" không đủ tồn kho (còn " + available + ", yêu cầu " + quantity + ")");
+            }
+
+            item.setQuantity(quantity);
+            item.setUpdatedAt(Instant.now());
+            return cartItemRepository.save(item);
+        }
+
+        throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_PRODUCT_TYPE", "Loại sản phẩm không hợp lệ");
+    }
+
+    @Transactional
+    public void clearCart(UUID cartId) {
+        cartItemRepository.deleteByCartId(cartId);
+    }
+
+    @Data
+    @Builder
+    public static class AddToCartInput {
+        private String itemType;
+        private UUID courseId;
+        private UUID supplyId;
+        private UUID childId;
+        private int quantity;
+    }
+
+    @Data
+    public static class UpdateQuantityInput {
+        private int quantity;
+    }
+}
