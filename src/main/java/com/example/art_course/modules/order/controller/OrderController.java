@@ -6,7 +6,6 @@ import com.example.art_course.modules.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -55,6 +54,9 @@ public class OrderController {
         return ApiResponse.ok(orderService.getOrderDetail(orderId, userId, role));
     }
 
+    /**
+     * Hủy đơn hàng chưa thanh toán (không có mã riêng, BR-11).
+     */
     @PostMapping("/{orderId}/cancel")
     @PreAuthorize("hasAnyRole('PARENT', 'STAFF', 'ADMIN')")
     public ApiResponse<Void> cancelOrder(

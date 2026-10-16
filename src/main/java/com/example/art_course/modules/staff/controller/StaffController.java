@@ -20,6 +20,9 @@ public class StaffController {
 
     private final StaffService staffService;
 
+    /**
+     * Staff kiểm duyệt / ẩn / gỡ dụng cụ vi phạm (STF-02/STF-07).
+     */
     @PostMapping("/supplies/{supplyId}/moderate")
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<Supply> moderateSupply(
@@ -34,12 +37,18 @@ public class StaffController {
         return ApiResponse.ok("Xử lý kiểm duyệt dụng cụ thành công", supply);
     }
 
+    /**
+     * Danh sách đơn hàng có khiếu nại hoặc tranh chấp (STF-04).
+     */
     @GetMapping("/complaints")
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<List<Order>> getComplaintOrders() {
         return ApiResponse.ok(staffService.getComplaintOrders());
     }
 
+    /**
+     * Xem trao đổi tin nhắn giải quyết khiếu nại có kiểm soát (STF-04/MSG-06).
+     */
     @GetMapping("/complaints/{orderId}/conversations")
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<Map<String, Object>> getComplaintConversation(

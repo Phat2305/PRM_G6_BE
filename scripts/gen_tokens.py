@@ -31,13 +31,19 @@ def create_jwt(user_id: str, role: str, secret: str, expires_in_seconds: int = 8
     
     return f"{header_b64}.{payload_b64}.{sig_b64}"
 
+import os
+
 def main():
-    if len(sys.argv) < 2:
-        print("Cách dùng: python scripts/gen_tokens.py <JWT_SECRET>")
-        print("Ví dụ: python scripts/gen_tokens.py my-super-secret-key-that-is-at-least-32-bytes-long")
+    secret = os.environ.get("JWT_SECRET")
+    if not secret and len(sys.argv) >= 2:
+        secret = sys.argv[1]
+
+    if not secret:
+        print("[HƯỚNG DẪN] Cần cung cấp JWT_SECRET qua biến môi trường hoặc tham số dòng lệnh:")
+        print("  Cách 1 (Khuyên dùng): $env:JWT_SECRET = \"your-secret-key-at-least-32-chars\"; python scripts/gen_tokens.py")
+        print("  Cách 2: python scripts/gen_tokens.py \"your-secret-key-at-least-32-chars\"")
         sys.exit(1)
         
-    secret = sys.argv[1]
     if len(secret.encode('utf-8')) < 32:
         print("[LỖI] JWT_SECRET phải có độ dài tối thiểu 32 ký tự (256 bits) để đảm bảo an toàn HMAC-SHA256.")
         sys.exit(1)

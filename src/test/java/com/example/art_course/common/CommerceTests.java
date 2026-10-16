@@ -1,7 +1,6 @@
 package com.example.art_course.common;
 
 import com.example.art_course.common.statemachine.OrderStatus;
-import com.example.art_course.common.statemachine.StateMachineValidator;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Disabled;

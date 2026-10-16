@@ -1,6 +1,5 @@
 package com.example.art_course.config;
 
-import com.example.art_course.common.AppError;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

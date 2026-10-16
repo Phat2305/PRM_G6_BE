@@ -22,9 +22,7 @@ import com.example.art_course.modules.refund.repository.RefundRepository;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -112,12 +110,16 @@ public class FulfillmentService {
     }
 
     /**
-     * Báo hàng đã giao tới nơi (DELIVERED) bởi shipper/giáo viên.
+     * Báo hàng đã giao tới nơi (FUL-03: DELIVERED - chỉ Teacher chủ đơn gọi được).
      */
     @Transactional
-    public DeliveryStatusResponseDto markDelivered(UUID orderDetailId, UUID actorId) {
+    public DeliveryStatusResponseDto markDelivered(UUID orderDetailId, UUID teacherId) {
         OrderDetail detail = findSupplyDetail(orderDetailId);
         Order order = findOrder(detail.getOrderId());
+
+        if (!order.getTeacherId().equals(teacherId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ Giáo viên phụ trách đơn hàng mới có quyền báo đã giao hàng (FUL-03)");
+        }
 
         validateTransition(detail.getDeliveryStatus(), DeliveryStatus.DELIVERED);
 

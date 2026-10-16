@@ -17,7 +17,6 @@ import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.product.entity.Supply;
 import com.example.art_course.modules.product.repository.SupplyRepository;
 import jakarta.persistence.EntityManager;
-import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

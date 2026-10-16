@@ -6,8 +6,6 @@ import com.example.art_course.jobs.JobExecutionTracker;
 import com.example.art_course.jobs.entity.ScheduledJobLog;
 import com.example.art_course.jobs.repository.ScheduledJobLogRepository;
 import com.example.art_course.modules.finance.controller.AdminFinanceController;
-import com.example.art_course.modules.finance.service.LedgerService;
-import com.example.art_course.modules.moderation.dto.ModerationReviewRequest;
 import com.example.art_course.modules.moderation.entity.ModerationReview;
 import com.example.art_course.modules.moderation.repository.ModerationReviewRepository;
 import com.example.art_course.modules.moderation.service.ModerationService;
@@ -19,22 +17,18 @@ import com.example.art_course.modules.product.repository.SupplyRepository;
 import com.example.art_course.modules.refund.repository.RefundRepository;
 import com.example.art_course.modules.staff.service.StaffService;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
-import com.example.art_course.modules.withdrawal.dto.RejectWithdrawalRequest;
+import com.example.art_course.modules.withdrawal.dto.MarkPaidRequest;
 import com.example.art_course.modules.withdrawal.dto.WithdrawalResponseDto;
+import com.example.art_course.common.statemachine.WithdrawalStatus;
 import com.example.art_course.modules.withdrawal.service.WithdrawalService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -77,6 +71,52 @@ public class StaffAdminJobTests {
         boolean adminAllowed = adminAuth.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
         assertTrue(adminAllowed, "Admin có đầy đủ quyền ROLE_ADMIN");
+    }
+
+    @Test
+    @DisplayName("1b. Phân quyền hai chiều FIN-06: STAFF gọi paid thành công kèm mã GD và ảnh chứng từ (staffId lấy từ token); STAFF bị từ chối approve/reject (chỉ ADMIN)")
+    void testRoleAuthorization_StaffPaidAndAdminExclusiveApprove() {
+        WithdrawalService withdrawalService = mock(WithdrawalService.class);
+        ConfigService configService = mock(ConfigService.class);
+        AdminFinanceController controller = new AdminFinanceController(withdrawalService, configService);
+
+        UUID staffId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+
+        // 1. Staff gọi markPaid thành công
+        UsernamePasswordAuthenticationToken staffAuth = new UsernamePasswordAuthenticationToken(
+                staffId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_STAFF"))
+        );
+        MarkPaidRequest paidReq = new MarkPaidRequest("FT_TEST_123456", "https://img.com/receipt.jpg");
+
+        WithdrawalResponseDto mockResponse = WithdrawalResponseDto.builder()
+                .id(requestId)
+                .status(WithdrawalStatus.PAID)
+                .paidBy(staffId)
+                .transactionCode("FT_TEST_123456")
+                .proofImageUrl("https://img.com/receipt.jpg")
+                .build();
+
+        when(withdrawalService.markPaidWithdrawal(eq(requestId), eq(staffId), any())).thenReturn(mockResponse);
+
+        ApiResponse<WithdrawalResponseDto> response = controller.markPaid(requestId, paidReq, staffAuth);
+        assertNotNull(response.getData());
+        assertEquals(staffId, response.getData().getPaidBy(), "staffId phải được trích xuất từ Authentication token");
+        assertEquals("FT_TEST_123456", response.getData().getTransactionCode());
+        assertEquals("https://img.com/receipt.jpg", response.getData().getProofImageUrl());
+        verify(withdrawalService, times(1)).markPaidWithdrawal(eq(requestId), eq(staffId), eq(paidReq));
+
+        // 2. Kiểm tra phân quyền: Staff không thể có quyền Admin approve/reject
+        boolean staffCanApprove = staffAuth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        assertFalse(staffCanApprove, "Staff tuyệt đối không thể có quyền ROLE_ADMIN");
+
+        // 3. Admin có thể gọi approve
+        UsernamePasswordAuthenticationToken adminAuth = new UsernamePasswordAuthenticationToken(
+                adminId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
+        boolean adminCanApprove = adminAuth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        assertTrue(adminCanApprove, "Admin có quyền ROLE_ADMIN");
     }
 
     // =========================================================================

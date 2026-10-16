@@ -24,7 +24,7 @@ public class FulfillmentController {
     private final FulfillmentService fulfillmentService;
 
     /**
-     * Giáo viên xác nhận hoặc từ chối dòng dụng cụ (FUL-01).
+     * Giáo viên xác nhận hoặc từ chối dòng dụng cụ (FUL-02/FUL-07).
      */
     @PostMapping("/teacher/items/{orderDetailId}/confirm-or-reject")
     @PreAuthorize("hasRole('TEACHER')")
@@ -39,7 +39,7 @@ public class FulfillmentController {
     }
 
     /**
-     * Giáo viên cập nhật thông tin vận chuyển và chuyển sang SHIPPING (FUL-02).
+     * Giáo viên cập nhật thông tin vận chuyển và chuyển sang SHIPPING (FUL-03).
      */
     @PostMapping("/teacher/items/{orderDetailId}/shipping")
     @PreAuthorize("hasRole('TEACHER')")
@@ -54,21 +54,21 @@ public class FulfillmentController {
     }
 
     /**
-     * Báo đã giao tới nơi (DELIVERED).
+     * Giáo viên báo hàng đã tới nơi (FUL-03: DELIVERED - chỉ Teacher chủ đơn gọi được).
      */
     @PostMapping("/delivered/{orderDetailId}")
-    @PreAuthorize("hasAnyRole('TEACHER', 'STAFF', 'ADMIN')")
+    @PreAuthorize("hasRole('TEACHER')")
     public ApiResponse<DeliveryStatusResponseDto> markDelivered(
             @PathVariable UUID orderDetailId,
             Authentication auth
     ) {
-        UUID actorId = UUID.fromString(auth.getName());
-        DeliveryStatusResponseDto dto = fulfillmentService.markDelivered(orderDetailId, actorId);
+        UUID teacherId = UUID.fromString(auth.getName());
+        DeliveryStatusResponseDto dto = fulfillmentService.markDelivered(orderDetailId, teacherId);
         return ApiResponse.success(dto);
     }
 
     /**
-     * Phụ huynh xác nhận đã nhận hàng (FUL-03: COMPLETED).
+     * Phụ huynh xác nhận đã nhận hàng (FUL-05: COMPLETED).
      */
     @PostMapping("/parent/items/{orderDetailId}/confirm-received")
     @PreAuthorize("hasRole('PARENT')")

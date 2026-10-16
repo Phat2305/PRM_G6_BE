@@ -30,6 +30,9 @@ public class CartController {
         return ApiResponse.ok("Đã thêm vào giỏ hàng", cartService.addToCart(parentId, input));
     }
 
+    /**
+     * Cập nhật số lượng mục trong giỏ (SHOP-02/03).
+     */
     @PatchMapping("/items/{itemId}")
     public ApiResponse<CartItem> updateItemQuantity(
             @AuthenticationPrincipal UUID parentId,

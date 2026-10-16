@@ -251,7 +251,7 @@ paths:
   /api/v1/cart/items/{itemId}:
     patch:
       tags: [Cart]
-      summary: Cập nhật số lượng mục trong giỏ (SHOP-08)
+      summary: Cập nhật số lượng mục trong giỏ (SHOP-02/03)
       security:
         - BearerAuth: []
       parameters:
@@ -385,7 +385,7 @@ paths:
   /api/v1/orders/{orderId}/cancel:
     post:
       tags: [Orders]
-      summary: Hủy đơn hàng đang chờ thanh toán
+      summary: Hủy đơn hàng đang chờ thanh toán (không mã riêng, BR-11)
       description: Hoàn trả tồn kho giữ chỗ. Chỉ cho phép khi đơn ở trạng thái PENDING_PAYMENT.
       security:
         - BearerAuth: []
@@ -516,8 +516,8 @@ paths:
   /api/v1/fulfillment/teacher/items/{orderDetailId}/confirm-or-reject:
     post:
       tags: [Fulfillment]
-      summary: Giáo viên xác nhận hoặc từ chối đơn dụng cụ (FUL-01)
-      description: CONFIRM -> Chuyển sang CONFIRMED. REJECT -> Chuyển sang CANCELLED, hoàn kho và tạo Refund PENDING.
+      summary: Giáo viên xác nhận hoặc từ chối đơn dụng cụ (FUL-02/FUL-07)
+      description: CONFIRM -> Chuyển sang CONFIRMED (FUL-02). REJECT -> Chuyển sang CANCELLED, hoàn kho và tạo Refund PENDING (FUL-07).
       security:
         - BearerAuth: []
       parameters:
@@ -544,7 +544,7 @@ paths:
   /api/v1/fulfillment/teacher/items/{orderDetailId}/shipping:
     post:
       tags: [Fulfillment]
-      summary: Giáo viên giao hàng và cập nhật mã vận đơn (FUL-02)
+      summary: Giáo viên giao hàng và cập nhật mã vận đơn (FUL-03)
       security:
         - BearerAuth: []
       parameters:
@@ -571,7 +571,7 @@ paths:
   /api/v1/fulfillment/delivered/{orderDetailId}:
     post:
       tags: [Fulfillment]
-      summary: Đơn vị vận chuyển / Giáo viên báo hàng đã tới nơi (DELIVERED)
+      summary: Giáo viên báo hàng đã tới nơi (FUL-03, chỉ Teacher chủ đơn gọi được)
       security:
         - BearerAuth: []
       parameters:
@@ -592,7 +592,7 @@ paths:
   /api/v1/fulfillment/parent/items/{orderDetailId}/confirm-received:
     post:
       tags: [Fulfillment]
-      summary: "Phụ huynh xác nhận đã nhận hàng (FUL-03: COMPLETED)"
+      summary: "Phụ huynh xác nhận đã nhận hàng (FUL-05: COMPLETED)"
       description: Chuyển trạng thái sang COMPLETED và kích hoạt kiểm tra giải phóng ký quỹ nếu tất cả dòng hoàn tất.
       security:
         - BearerAuth: []
@@ -643,7 +643,7 @@ paths:
   /api/v1/fulfillment/staff/items/{orderDetailId}/handle-failure:
     post:
       tags: [Fulfillment]
-      summary: Nhân viên xử lý giao hàng thất bại (FUL-07, FUL-08)
+      summary: Nhân viên xử lý sự cố giao hàng thất bại (FUL-08)
       description: Hành động RE_SHIP (giao lại) hoặc REFUND (hoàn tiền).
       security:
         - BearerAuth: []
@@ -954,7 +954,7 @@ paths:
   /api/v1/staff/supplies/{supplyId}/moderate:
     post:
       tags: [Staff]
-      summary: Nhân viên kiểm duyệt dụng cụ vẽ vi phạm (STF-01)
+      summary: Nhân viên kiểm duyệt dụng cụ vẽ vi phạm (STF-02/STF-07)
       description: Hành động FLAGGED (cảnh báo vi phạm), HIDE (tạm ẩn khỏi shop), hoặc UNHIDE (mở lại). Tự động ghi nhật ký moderation_reviews.
       security:
         - BearerAuth: []
@@ -989,7 +989,7 @@ paths:
   /api/v1/staff/complaints:
     get:
       tags: [Staff]
-      summary: Danh sách đơn hàng có khiếu nại (STF-02)
+      summary: Danh sách đơn hàng có khiếu nại (STF-04)
       security:
         - BearerAuth: []
       responses:
@@ -1003,7 +1003,7 @@ paths:
   /api/v1/staff/complaints/{orderId}/conversations:
     get:
       tags: [Staff]
-      summary: Xem trao đổi tin nhắn giải quyết khiếu nại (MSG-06)
+      summary: Xem trao đổi tin nhắn giải quyết khiếu nại (STF-04/MSG-06)
       description: Bảo mật MSG-06 - Nhân viên CHỈ được xem tin nhắn khi đơn hàng có khiếu nại hợp lệ.
       security:
         - BearerAuth: []
