@@ -5,6 +5,8 @@ import com.example.art_course.supply.dto.CreateSupplyRequest;
 import com.example.art_course.supply.dto.UpdateSupplyRequest;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
+import com.example.art_course.user.entity.User;
+import com.example.art_course.user.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,9 +20,13 @@ import java.util.UUID;
 public class SupplyService {
 
     private final SupplyRepository supplyRepository;
+    private final UserRepository userRepository;
 
-    public SupplyService(SupplyRepository supplyRepository) {
+    public SupplyService(
+            SupplyRepository supplyRepository,
+            UserRepository userRepository) {
         this.supplyRepository = supplyRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -46,11 +52,21 @@ public class SupplyService {
 
     @Transactional(readOnly = true)
     public List<Supply> getSuppliesByTeacher(UUID teacherId) {
+        if (teacherId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Teacher ID is required"
+            );
+        }
+
         return supplyRepository.findAllByTeacherId(teacherId);
     }
 
     @Transactional
-    public Supply createSupply(CreateSupplyRequest request) {
+    public Supply createSupply(
+            CreateSupplyRequest request,
+            String username) {
+
         if (request.getName() == null
                 || request.getName().isBlank()) {
             throw new ResponseStatusException(
@@ -59,8 +75,11 @@ public class SupplyService {
             );
         }
 
+        User user = getUserByUsername(username);
+
         Supply supply = Supply.builder()
-                .teacherId(request.getTeacherId())
+                // Use the authenticated user's ID.
+                .teacherId(user.getId())
                 .name(request.getName().trim())
                 .description(request.getDescription())
                 .imageUrl(request.getImageUrl())
@@ -75,9 +94,13 @@ public class SupplyService {
     @Transactional
     public Supply updateSupply(
             UUID id,
-            UpdateSupplyRequest request
-    ) {
+            UpdateSupplyRequest request,
+            String username) {
+
         Supply supply = getSupplyById(id);
+        User user = getUserByUsername(username);
+
+        checkOwnership(supply, user);
 
         if (request.getName() != null) {
             if (request.getName().isBlank()) {
@@ -86,6 +109,7 @@ public class SupplyService {
                         "Supply name cannot be blank"
                 );
             }
+
             supply.setName(request.getName().trim());
         }
 
@@ -113,8 +137,30 @@ public class SupplyService {
     }
 
     @Transactional
-    public void deleteSupply(UUID id) {
+    public void deleteSupply(UUID id, String username) {
         Supply supply = getSupplyById(id);
+        User user = getUserByUsername(username);
+
+        checkOwnership(supply, user);
+
         supplyRepository.delete(supply);
+    }
+
+    private User getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "User not found"
+                ));
+    }
+
+    private void checkOwnership(Supply supply, User user) {
+        if (supply.getTeacherId() == null
+                || !supply.getTeacherId().equals(user.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You are not allowed to manage this supply"
+            );
+        }
     }
 }

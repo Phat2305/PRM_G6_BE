@@ -1,22 +1,31 @@
+
 package com.example.art_course.auth.service;
 
-import com.example.art_course.user.entity.User;
-import com.example.art_course.user.repository.UserRepository;
 import com.example.art_course.auth.dto.AuthResponse;
 import com.example.art_course.auth.dto.LoginRequest;
 import com.example.art_course.auth.dto.RegisterRequest;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import com.example.art_course.auth.security.JwtTokenProvider;
+import com.example.art_course.user.entity.User;
+import com.example.art_course.user.repository.UserRepository;
+
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthService(UserRepository userRepository) {
+    public AuthService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider) {
+
         this.userRepository = userRepository;
-        this.passwordEncoder = new BCryptPasswordEncoder();
+        this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     // Register
@@ -29,7 +38,9 @@ public class AuthService {
         User user = new User();
 
         user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPassword(
+                passwordEncoder.encode(request.getPassword())
+        );
         user.setRole("USER");
         user.setStatus("ACTIVE");
 
@@ -55,14 +66,22 @@ public class AuthService {
         if (!passwordEncoder.matches(
                 request.getPassword(),
                 user.getPassword())) {
+
             throw new RuntimeException("Invalid password");
         }
+
+        // Generate JWT containing username and role
+        String token = jwtTokenProvider.generateToken(
+                user.getUsername(),
+                user.getRole()
+        );
 
         AuthResponse response = new AuthResponse();
         response.setId(user.getId());
         response.setUsername(user.getUsername());
         response.setRole(user.getRole());
         response.setStatus(user.getStatus());
+        response.setToken(token);
 
         return response;
     }

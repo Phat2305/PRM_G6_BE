@@ -1,8 +1,13 @@
 
 package com.example.art_course.lesson.service;
 
+import com.example.art_course.course.entity.Course;
+import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.lesson.dto.UpdateLessonRequest;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
+import com.example.art_course.user.entity.User;
+import com.example.art_course.user.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -16,9 +21,17 @@ import java.util.UUID;
 public class LessonService {
 
     private final LessonRepository lessonRepository;
+    private final CourseRepository courseRepository;
+    private final UserRepository userRepository;
 
-    public LessonService(LessonRepository lessonRepository) {
+    public LessonService(
+            LessonRepository lessonRepository,
+            CourseRepository courseRepository,
+            UserRepository userRepository) {
+
         this.lessonRepository = lessonRepository;
+        this.courseRepository = courseRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -50,7 +63,7 @@ public class LessonService {
     }
 
     @Transactional
-    public Lesson createLesson(Lesson lesson) {
+    public Lesson createLesson(Lesson lesson, String username) {
         if (lesson == null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -73,6 +86,11 @@ public class LessonService {
             );
         }
 
+        Course course = getCourseById(lesson.getCourseId());
+        User user = getUserByUsername(username);
+
+        checkCourseOwnership(course, user);
+
         lesson.setId(null);
 
         return lessonRepository.save(lesson);
@@ -81,9 +99,15 @@ public class LessonService {
     @Transactional
     public Lesson updateLesson(
             UUID lessonId,
-            com.example.art_course.lesson.dto.UpdateLessonRequest request
-    ) {
+            UpdateLessonRequest request,
+            String username) {
+
         Lesson lesson = getLessonById(lessonId);
+
+        Course course = getCourseById(lesson.getCourseId());
+        User user = getUserByUsername(username);
+
+        checkCourseOwnership(course, user);
 
         if (request.getTitle() != null) {
             if (request.getTitle().isBlank()) {
@@ -92,7 +116,8 @@ public class LessonService {
                         "Lesson title cannot be blank"
                 );
             }
-            lesson.setTitle(request.getTitle());
+
+            lesson.setTitle(request.getTitle().trim());
         }
 
         if (request.getVideoUrl() != null) {
@@ -115,9 +140,40 @@ public class LessonService {
     }
 
     @Transactional
-    public void deleteLesson(UUID lessonId) {
+    public void deleteLesson(UUID lessonId, String username) {
         Lesson lesson = getLessonById(lessonId);
+
+        Course course = getCourseById(lesson.getCourseId());
+        User user = getUserByUsername(username);
+
+        checkCourseOwnership(course, user);
+
         lessonRepository.delete(lesson);
     }
 
+    private Course getCourseById(UUID courseId) {
+        return courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Course not found: " + courseId
+                ));
+    }
+
+    private User getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "User not found"
+                ));
+    }
+
+    private void checkCourseOwnership(Course course, User user) {
+        if (course.getTeacherId() == null
+                || !course.getTeacherId().equals(user.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You are not allowed to manage lessons in this course"
+            );
+        }
+    }
 }

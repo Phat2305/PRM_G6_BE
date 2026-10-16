@@ -10,6 +10,7 @@ import com.example.art_course.supply.service.SupplyService;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,16 +35,14 @@ public class SupplyController {
     }
 
     @GetMapping("/{id}")
-    public SupplyResponse getSupplyById(
-            @PathVariable UUID id
-    ) {
+    public SupplyResponse getSupplyById(@PathVariable UUID id) {
         return toResponse(supplyService.getSupplyById(id));
     }
 
     @GetMapping("/teacher/{teacherId}")
     public List<SupplyResponse> getSuppliesByTeacher(
-            @PathVariable UUID teacherId
-    ) {
+            @PathVariable UUID teacherId) {
+
         return supplyService.getSuppliesByTeacher(teacherId)
                 .stream()
                 .map(this::toResponse)
@@ -53,25 +52,39 @@ public class SupplyController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public SupplyResponse createSupply(
-            @Valid @RequestBody CreateSupplyRequest request
-    ) {
-        return toResponse(supplyService.createSupply(request));
+            @Valid @RequestBody CreateSupplyRequest request,
+            Authentication authentication) {
+
+        return toResponse(
+                supplyService.createSupply(
+                        request,
+                        authentication.getName()
+                )
+        );
     }
 
     @PutMapping("/{id}")
     public SupplyResponse updateSupply(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdateSupplyRequest request
-    ) {
+            @Valid @RequestBody UpdateSupplyRequest request,
+            Authentication authentication) {
+
         return toResponse(
-                supplyService.updateSupply(id, request)
+                supplyService.updateSupply(
+                        id,
+                        request,
+                        authentication.getName()
+                )
         );
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteSupply(@PathVariable UUID id) {
-        supplyService.deleteSupply(id);
+    public void deleteSupply(
+            @PathVariable UUID id,
+            Authentication authentication) {
+
+        supplyService.deleteSupply(id, authentication.getName());
     }
 
     private SupplyResponse toResponse(Supply supply) {

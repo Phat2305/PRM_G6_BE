@@ -5,6 +5,8 @@ import com.example.art_course.course.dto.CreateCourseRequest;
 import com.example.art_course.course.dto.UpdateCourseRequest;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.user.entity.User;
+import com.example.art_course.user.repository.UserRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,9 +20,14 @@ import java.util.UUID;
 public class CourseService {
 
     private final CourseRepository courseRepository;
+    private final UserRepository userRepository;
 
-    public CourseService(CourseRepository courseRepository) {
+    public CourseService(
+            CourseRepository courseRepository,
+            UserRepository userRepository
+    ) {
         this.courseRepository = courseRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -46,11 +53,21 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public List<Course> getCoursesByTeacher(UUID teacherId) {
+        if (teacherId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Teacher ID is required"
+            );
+        }
+
         return courseRepository.findAllByTeacherId(teacherId);
     }
 
     @Transactional
-    public Course createCourse(CreateCourseRequest request) {
+    public Course createCourse(
+            CreateCourseRequest request,
+            String username
+    ) {
         if (request.getName() == null
                 || request.getName().isBlank()) {
             throw new ResponseStatusException(
@@ -59,8 +76,11 @@ public class CourseService {
             );
         }
 
+        User currentUser = getUserByUsername(username);
+
         Course course = Course.builder()
-                .teacherId(request.getTeacherId())
+                // Never trust teacherId from the request body.
+                .teacherId(currentUser.getId())
                 .customizeRequestId(request.getCustomizeRequestId())
                 .name(request.getName().trim())
                 .description(request.getDescription())
@@ -76,9 +96,13 @@ public class CourseService {
     @Transactional
     public Course updateCourse(
             UUID id,
-            UpdateCourseRequest request
+            UpdateCourseRequest request,
+            String username
     ) {
         Course course = getCourseById(id);
+        User currentUser = getUserByUsername(username);
+
+        checkOwnership(course, currentUser);
 
         if (request.getName() != null) {
             if (request.getName().isBlank()) {
@@ -121,8 +145,30 @@ public class CourseService {
     }
 
     @Transactional
-    public void deleteCourse(UUID id) {
+    public void deleteCourse(UUID id, String username) {
         Course course = getCourseById(id);
+        User currentUser = getUserByUsername(username);
+
+        checkOwnership(course, currentUser);
+
         courseRepository.delete(course);
+    }
+
+    private User getUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "User not found"
+                ));
+    }
+
+    private void checkOwnership(Course course, User user) {
+        if (course.getTeacherId() == null
+                || !course.getTeacherId().equals(user.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You are not allowed to modify this course"
+            );
+        }
     }
 }

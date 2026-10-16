@@ -10,6 +10,7 @@ import com.example.art_course.lesson.service.LessonService;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -47,7 +48,8 @@ public class LessonController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public LessonResponse createLesson(
-            @Valid @RequestBody CreateLessonRequest request) {
+            @Valid @RequestBody CreateLessonRequest request,
+            Authentication authentication) {
 
         Lesson lesson = Lesson.builder()
                 .courseId(request.getCourseId())
@@ -59,9 +61,39 @@ public class LessonController {
                 .status(request.getStatus())
                 .build();
 
-        Lesson savedLesson = lessonService.createLesson(lesson);
+        Lesson savedLesson = lessonService.createLesson(
+                lesson,
+                authentication.getName()
+        );
 
         return toResponse(savedLesson);
+    }
+
+    @PutMapping("/{lessonId}")
+    public LessonResponse updateLesson(
+            @PathVariable UUID lessonId,
+            @Valid @RequestBody UpdateLessonRequest request,
+            Authentication authentication) {
+
+        return toResponse(
+                lessonService.updateLesson(
+                        lessonId,
+                        request,
+                        authentication.getName()
+                )
+        );
+    }
+
+    @DeleteMapping("/{lessonId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteLesson(
+            @PathVariable UUID lessonId,
+            Authentication authentication) {
+
+        lessonService.deleteLesson(
+                lessonId,
+                authentication.getName()
+        );
     }
 
     private LessonResponse toResponse(Lesson lesson) {
@@ -76,23 +108,4 @@ public class LessonController {
                 lesson.getStatus()
         );
     }
-
-    @PutMapping("/{lessonId}")
-    public LessonResponse updateLesson(
-            @PathVariable UUID lessonId,
-            @Valid @RequestBody UpdateLessonRequest request
-    ) {
-        return toResponse(
-                lessonService.updateLesson(lessonId, request)
-        );
-    }
-
-    @DeleteMapping("/{lessonId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteLesson(
-            @PathVariable UUID lessonId
-    ) {
-        lessonService.deleteLesson(lessonId);
-    }
-
 }
