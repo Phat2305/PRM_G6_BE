@@ -1,4 +1,3 @@
-
 package com.example.art_course.auth.security;
 
 import io.jsonwebtoken.Claims;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
@@ -28,23 +28,33 @@ public class JwtTokenProvider {
         this.expiration = expiration;
     }
 
-    public String generateToken(String username, String role) {
+    public String generateToken(UUID userId, String username, String role) {
         Date now = new Date();
         Date expiryDate = new Date(
                 now.getTime() + expiration
         );
 
-        return Jwts.builder()
-                .subject(username)
+        var builder = Jwts.builder()
+                .subject(userId != null ? userId.toString() : username)
+                .claim("userId", userId != null ? userId.toString() : null)
+                .claim("username", username)
                 .claim("role", role)
+                .claim("type", "ACCESS")
                 .issuedAt(now)
                 .expiration(expiryDate)
-                .signWith(key)
-                .compact();
+                .signWith(key);
+
+        return builder.compact();
+    }
+
+    public String generateToken(String username, String role) {
+        return generateToken(null, username, role);
     }
 
     public String getUsernameFromToken(String token) {
-        return getClaims(token).getSubject();
+        Claims claims = getClaims(token);
+        String username = claims.get("username", String.class);
+        return username != null ? username : claims.getSubject();
     }
 
     public String getRoleFromToken(String token) {

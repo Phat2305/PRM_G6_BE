@@ -70,8 +70,9 @@ public class AuthService {
             throw new RuntimeException("Invalid password");
         }
 
-        // Generate JWT containing username and role
+        // Generate JWT containing userId, username and role
         String token = jwtTokenProvider.generateToken(
+                user.getId(),
                 user.getUsername(),
                 user.getRole()
         );
