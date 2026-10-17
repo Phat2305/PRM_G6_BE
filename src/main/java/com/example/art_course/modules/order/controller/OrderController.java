@@ -18,6 +18,7 @@ public class OrderController {
     private final OrderService orderService;
     private final com.example.art_course.user.repository.UserRepository userRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public OrderController(OrderService orderService, com.example.art_course.user.repository.UserRepository userRepository) {
         this.orderService = orderService;
         this.userRepository = userRepository;
