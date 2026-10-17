@@ -19,9 +19,13 @@ import java.util.UUID;
 public class CourseReviewService {
 
     private final CourseReviewRepository repository;
+    private final com.example.art_course.child.repository.ChildRepository childRepository;
 
-    public CourseReviewService(CourseReviewRepository repository) {
+    public CourseReviewService(
+            CourseReviewRepository repository,
+            com.example.art_course.child.repository.ChildRepository childRepository) {
         this.repository = repository;
+        this.childRepository = childRepository;
     }
 
     @Transactional
@@ -38,10 +42,17 @@ public class CourseReviewService {
                     "This child already has a review for the course");
         }
 
+        UUID parentId = request.getParentId();
+        if (parentId == null && request.getChildId() != null) {
+            parentId = childRepository.findById(request.getChildId())
+                    .map(com.example.art_course.child.entity.Child::getParentId)
+                    .orElse(null);
+        }
+
         CourseReview review = CourseReview.builder()
                 .courseId(request.getCourseId())
                 .childId(request.getChildId())
-                .parentId(request.getParentId())
+                .parentId(parentId)
                 .rating(request.getRating())
                 .comment(request.getComment())
                 .build();

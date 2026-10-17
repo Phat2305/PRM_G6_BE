@@ -15,7 +15,6 @@ import java.util.UUID;
 @NoArgsConstructor
 public class CreateModerationReviewRequest {
 
-    @NotNull
     private UUID staffId;
 
     @NotBlank

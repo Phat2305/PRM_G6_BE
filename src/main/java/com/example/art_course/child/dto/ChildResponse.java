@@ -18,4 +18,8 @@ public class ChildResponse {
     private String displayName;
 
     private Short birthYear;
+
+    public String getName() {
+        return displayName;
+    }
 }

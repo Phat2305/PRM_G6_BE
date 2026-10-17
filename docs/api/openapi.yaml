@@ -156,12 +156,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, birthDate]
               properties:
-                name: { type: string, example: "Bé Bo" }
-                birthDate: { type: string, format: date, example: "2018-05-20" }
+                displayName: { type: string, example: "Bé Bo", description: "Tên hiển thị của trẻ (hoặc truyền name)" }
+                birthYear: { type: integer, example: 2018, description: "Năm sinh (1900-2100) (hoặc truyền birthDate)" }
+                username: { type: string, example: "be_bo_01", description: "Tên đăng nhập (tùy chọn, tự động sinh nếu để trống)" }
+                password: { type: string, example: "Password123!", description: "Mật khẩu cho tài khoản trẻ (tùy chọn, mặc định Password123!)" }
+                name: { type: string, example: "Bé Bo", description: "Alias của displayName" }
+                birthDate: { type: string, format: date, example: "2018-05-20", description: "Alias của birthYear (hệ thống tự trích xuất năm)" }
                 gender: { type: string, enum: [MALE, FEMALE, OTHER], example: "MALE" }
                 avatarUrl: { type: string, example: "https://example.com/avatar.jpg" }
+            example:
+              displayName: "Bé Bo"
+              birthYear: 2018
+              username: "be_bo_01"
+              password: "Password123!"
       responses:
         '201':
           description: Tạo hồ sơ thành công
@@ -803,6 +811,7 @@ paths:
               properties:
                 lessonId: { type: string, format: uuid }
                 supplyId: { type: string, format: uuid }
+                quantity: { type: number, example: 1, description: "Số lượng dụng cụ (mặc định là 1)" }
       responses:
         '201':
           description: Gán dụng cụ thành công
@@ -1034,10 +1043,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [score, feedback]
               properties:
-                score: { type: number, example: 9.5 }
-                feedback: { type: string, example: "Bé vẽ màu sắc rất tươi sáng và đường nét rõ ràng!" }
+                status: { type: string, enum: [passed, not_passed], example: "passed", description: "Trạng thái đạt hoặc chưa đạt (tự động suy ra từ score nếu để trống)" }
+                teacherFeedback: { type: string, example: "Bé vẽ màu sắc rất tươi sáng và đường nét rõ ràng!" }
+                feedback: { type: string, example: "Bé vẽ màu sắc rất tươi sáng và đường nét rõ ràng!", description: "Alias của teacherFeedback" }
+                score: { type: number, example: 9.5, description: "Điểm số chấm (>= 5.0 là passed)" }
+                badge: { type: string, example: "Họa sĩ nhí tài năng", description: "Huy hiệu khen thưởng cho bé" }
+            example:
+              status: "passed"
+              teacherFeedback: "Bé vẽ màu sắc rất tươi sáng và đường nét rõ ràng!"
+              badge: "Họa sĩ nhí tài năng"
+              score: 9.5
       responses:
         '200':
           description: Chấm điểm thành công
@@ -1204,10 +1220,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [courseId, rating]
+              required: [courseId, childId, rating]
               properties:
                 courseId: { type: string, format: uuid }
                 childId: { type: string, format: uuid }
+                parentId: { type: string, format: uuid, description: "ID phụ huynh (tùy chọn, tự động lấy từ hồ sơ bé nếu để trống)" }
                 rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
                 comment: { type: string, example: "Khóa học rất bổ ích, bé rất thích!" }
       responses:
@@ -1309,10 +1326,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [paymentId, totalAmount, bankInfo]
+              required: [paymentId, totalAmount]
               properties:
                 paymentId: { type: string, format: uuid }
                 totalAmount: { type: number, example: 350000 }
+                parentId: { type: string, format: uuid, description: "ID phụ huynh (tùy chọn, tự động lấy từ token nếu để trống)" }
                 bankInfo: { type: string, example: "Vietcombank - 0123456789 - NGUYEN VAN A" }
       responses:
         '201':

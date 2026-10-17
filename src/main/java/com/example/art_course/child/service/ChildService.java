@@ -51,17 +51,60 @@ public class ChildService {
             );
         }
 
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Username already exists"
-            );
+        // 1. Resolve Display Name (required in DB)
+        String displayName = request.getDisplayName();
+        if (displayName == null || displayName.trim().isEmpty()) {
+            if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
+                displayName = request.getUsername().trim();
+            } else {
+                displayName = "Bé yêu";
+            }
+        } else {
+            displayName = displayName.trim();
+        }
+
+        // 2. Resolve Birth Year
+        Short birthYear = request.getBirthYear();
+        if (birthYear == null && request.getBirthDate() != null && !request.getBirthDate().trim().isEmpty()) {
+            try {
+                String bd = request.getBirthDate().trim();
+                if (bd.length() >= 4) {
+                    short parsedYear = Short.parseShort(bd.substring(0, 4));
+                    if (parsedYear >= 1900 && parsedYear <= 2100) {
+                        birthYear = parsedYear;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 3. Resolve Username
+        String username = request.getUsername();
+        if (username == null || username.trim().isEmpty()) {
+            username = "child_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            while (userRepository.existsByUsername(username)) {
+                username = "child_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            }
+        } else {
+            username = username.trim();
+            if (userRepository.existsByUsername(username)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Username already exists: " + username
+                );
+            }
+        }
+
+        // 4. Resolve Password
+        String password = request.getPassword();
+        if (password == null || password.trim().isEmpty()) {
+            password = "Password123!";
         }
 
         User childUser = new User();
-        childUser.setUsername(request.getUsername());
+        childUser.setUsername(username);
         childUser.setPassword(
-                passwordEncoder.encode(request.getPassword())
+                passwordEncoder.encode(password)
         );
         childUser.setRole("CHILD");
         childUser.setStatus("ACTIVE");
@@ -71,8 +114,8 @@ public class ChildService {
         Child child = Child.builder()
                 .userId(savedUser.getId())
                 .parentId(parent.getId())
-                .displayName(request.getDisplayName())
-                .birthYear(request.getBirthYear())
+                .displayName(displayName)
+                .birthYear(birthYear)
                 .build();
 
         return childRepository.save(child);
@@ -100,12 +143,26 @@ public class ChildService {
     ) {
         Child child = getChild(parentId, userId);
 
-        if (request.getDisplayName() != null) {
-            child.setDisplayName(request.getDisplayName());
+        if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
+            child.setDisplayName(request.getDisplayName().trim());
         }
 
-        if (request.getBirthYear() != null) {
-            child.setBirthYear(request.getBirthYear());
+        Short birthYear = request.getBirthYear();
+        if (birthYear == null && request.getBirthDate() != null && !request.getBirthDate().trim().isEmpty()) {
+            try {
+                String bd = request.getBirthDate().trim();
+                if (bd.length() >= 4) {
+                    short parsedYear = Short.parseShort(bd.substring(0, 4));
+                    if (parsedYear >= 1900 && parsedYear <= 2100) {
+                        birthYear = parsedYear;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (birthYear != null) {
+            child.setBirthYear(birthYear);
         }
 
         return childRepository.save(child);
