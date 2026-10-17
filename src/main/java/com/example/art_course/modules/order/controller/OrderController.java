@@ -13,10 +13,19 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/orders")
-@RequiredArgsConstructor
 public class OrderController {
 
     private final OrderService orderService;
+    private final com.example.art_course.user.repository.UserRepository userRepository;
+
+    public OrderController(OrderService orderService, com.example.art_course.user.repository.UserRepository userRepository) {
+        this.orderService = orderService;
+        this.userRepository = userRepository;
+    }
+
+    public OrderController(OrderService orderService) {
+        this(orderService, null);
+    }
 
     @PostMapping("/checkout")
     @PreAuthorize("hasRole('PARENT')")
@@ -73,9 +82,15 @@ public class OrderController {
         if (authentication == null) return null;
         Object principal = authentication.getPrincipal();
         if (principal instanceof UUID u) return u;
+        String name = authentication.getName();
         try {
-            return UUID.fromString(authentication.getName());
+            return UUID.fromString(name);
         } catch (Exception e) {
+            if (userRepository != null) {
+                return userRepository.findByUsername(name)
+                        .map(com.example.art_course.user.entity.User::getId)
+                        .orElse(null);
+            }
             return null;
         }
     }

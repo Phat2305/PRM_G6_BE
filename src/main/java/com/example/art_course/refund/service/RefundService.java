@@ -34,6 +34,7 @@ public class RefundService {
                 .parentId(request.getParentId())
                 .paymentId(request.getPaymentId())
                 .totalAmount(request.getTotalAmount())
+                .bankInfo(request.getBankInfo())
                 .status("pending")
                 .build();
 

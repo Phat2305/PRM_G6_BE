@@ -106,13 +106,22 @@ public class ChildController {
             );
         }
 
+        String principalName = authentication.getName();
+        try {
+            UUID userId = UUID.fromString(principalName);
+            if (userRepository.existsById(userId)) {
+                return userId;
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+
         User user = userRepository
-                .findByUsername(authentication.getName())
+                .findByUsername(principalName)
                 .orElseThrow(() ->
                         new org.springframework.web.server
                                 .ResponseStatusException(
                                 HttpStatus.UNAUTHORIZED,
-                                "User not found"
+                                "User not found: " + principalName
                         )
                 );
 

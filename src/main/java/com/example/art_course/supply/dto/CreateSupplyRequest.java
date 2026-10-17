@@ -16,21 +16,24 @@ import java.util.UUID;
 @Setter
 public class CreateSupplyRequest {
 
-    @NotNull
+    @com.fasterxml.jackson.annotation.JsonAlias({"teacher_id"})
     private UUID teacherId;
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"title", "supplyName", "supply_name"})
     @NotBlank
     @Size(max = 255)
     private String name;
 
     private String description;
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"image_url", "image", "thumbnail"})
     private String imageUrl;
 
     @NotNull
     @DecimalMin("0.0")
     private BigDecimal price;
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"stock_quantity", "stock", "quantity"})
     @NotNull
     @Min(0)
     private Integer stockQuantity;

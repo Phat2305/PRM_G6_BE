@@ -19,14 +19,39 @@ import java.util.UUID;
 public class RefundController {
 
     private final RefundService refundService;
+    private final com.example.art_course.user.repository.UserRepository userRepository;
 
-    public RefundController(RefundService refundService) {
+    public RefundController(
+            RefundService refundService,
+            com.example.art_course.user.repository.UserRepository userRepository) {
         this.refundService = refundService;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
     public ResponseEntity<RefundResponse> create(
-            @Valid @RequestBody CreateRefundRequest request) {
+            @Valid @RequestBody CreateRefundRequest request,
+            org.springframework.security.core.Authentication authentication) {
+
+        if (request.getParentId() == null && authentication != null && authentication.isAuthenticated()) {
+            String name = authentication.getName();
+            try {
+                UUID uid = UUID.fromString(name);
+                if (userRepository.existsById(uid)) {
+                    request.setParentId(uid);
+                }
+            } catch (IllegalArgumentException ignored) {
+            }
+            if (request.getParentId() == null) {
+                userRepository.findByUsername(name).ifPresent(u -> request.setParentId(u.getId()));
+            }
+        }
+
+        if (request.getParentId() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "parentId is required"
+            );
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(refundService.create(request));

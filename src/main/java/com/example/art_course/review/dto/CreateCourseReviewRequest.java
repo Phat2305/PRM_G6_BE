@@ -21,7 +21,6 @@ public class CreateCourseReviewRequest {
     @NotNull
     private UUID childId;
 
-    @NotNull
     private UUID parentId;
 
     @NotNull

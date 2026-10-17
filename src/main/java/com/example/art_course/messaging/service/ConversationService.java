@@ -38,6 +38,13 @@ public class ConversationService {
         UUID userId = user.getId();
         String role = user.getRole();
 
+        if (request.getParentId() == null && "PARENT".equalsIgnoreCase(role)) {
+            request.setParentId(userId);
+        }
+        if (request.getTeacherId() == null && "TEACHER".equalsIgnoreCase(role)) {
+            request.setTeacherId(userId);
+        }
+
         boolean isParent = "PARENT".equalsIgnoreCase(role)
                 && userId.equals(request.getParentId());
 

@@ -1,12 +1,15 @@
 package com.example.art_course.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
 public class LoginRequest {
+    @JsonAlias({"username", "user_name", "email", "phone"})
     private String username;
-    private String password;
 
+    @JsonAlias({"password", "pass"})
+    private String password;
 }

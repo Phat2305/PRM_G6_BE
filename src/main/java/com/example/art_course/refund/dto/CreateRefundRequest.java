@@ -1,6 +1,7 @@
 
-        package com.example.art_course.refund.dto;
+package com.example.art_course.refund.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -15,7 +16,6 @@ import java.util.UUID;
 @NoArgsConstructor
 public class CreateRefundRequest {
 
-    @NotNull
     private UUID parentId;
 
     @NotNull
@@ -24,4 +24,7 @@ public class CreateRefundRequest {
     @NotNull
     @DecimalMin(value = "0.0", inclusive = false)
     private BigDecimal totalAmount;
+
+    @JsonAlias({"bank_info", "bankAccount"})
+    private String bankInfo;
 }
