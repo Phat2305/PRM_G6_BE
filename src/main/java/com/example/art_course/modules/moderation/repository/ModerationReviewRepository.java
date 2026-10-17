@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.UUID;
 
-@Repository
+@Repository("be2ModerationReviewRepository")
 public interface ModerationReviewRepository extends JpaRepository<ModerationReview, UUID> {
     List<ModerationReview> findByTargetTypeAndTargetIdOrderByCreatedAtDesc(String targetType, UUID targetId);
     List<ModerationReview> findByStaffIdOrderByCreatedAtDesc(UUID staffId);

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.UUID;
 
-@Repository
+@Repository("be2RefundRepository")
 public interface RefundRepository extends JpaRepository<Refund, UUID> {
     List<Refund> findByOrderId(UUID orderId);
     List<Refund> findByParentIdOrderByCreatedAtDesc(UUID parentId);

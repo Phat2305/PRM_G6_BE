@@ -7,7 +7,7 @@ import java.util.UUID;
 
 import org.hibernate.annotations.Immutable;
 
-@Entity
+@Entity(name = "Be2Lesson")
 @Table(name = "lessons")
 @Immutable
 @Getter

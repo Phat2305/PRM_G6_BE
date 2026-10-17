@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Art Course & Supplies Platform - Backend 2 (BE2) API
+  title: Art Course & Supplies Platform - Unified API (BE1 + BE2)
   description: |
-    Tài liệu đặc tả API chuẩn OpenAPI 3.0 cho phân hệ Backend 2 (BE2).
+    Tài liệu đặc tả API chuẩn OpenAPI 3.0 hợp nhất toàn diện hệ thống (Backend 1: Đào tạo, Trẻ em, Tin nhắn, Video + Backend 2: Thương mại, Thanh toán, Vận chuyển, Tài chính).
     Hệ thống bao gồm: Thương mại, Giỏ hàng, Đơn hàng, Thanh toán, Vận chuyển, Tài chính & Sổ cái, Kiểm duyệt & Quản trị.
     
     ### Cơ chế Xác thực:
@@ -30,6 +30,38 @@ servers:
     description: Máy chủ Localhost phát triển
 
 tags:
+  - name: Auth (BE1)
+    description: Đăng ký, đăng nhập và cấp phát JWT token (BE1)
+  - name: Children (BE1)
+    description: Quản lý hồ sơ trẻ em của phụ huynh (BE1)
+  - name: Child Progress (BE1)
+    description: Theo dõi và cập nhật tiến độ học tập của trẻ (BE1)
+  - name: Courses Management (BE1)
+    description: Tạo, cập nhật và quản lý khóa học của giáo viên (BE1)
+  - name: Customize Requests (BE1)
+    description: Quản lý yêu cầu mở lớp / khóa học vẽ theo yêu cầu (BE1)
+  - name: Offers (BE1)
+    description: Báo giá và đề xuất của giáo viên cho yêu cầu customize (BE1)
+  - name: Enrollments (BE1)
+    description: Ghi danh khóa học và quản lý quyền học (BE1)
+  - name: Lessons (BE1)
+    description: Quản lý giáo trình và bài học chi tiết (BE1)
+  - name: Lesson Supplies (BE1)
+    description: Liên kết dụng cụ cần thiết cho từng bài học (BE1)
+  - name: Conversations & Messages (BE1)
+    description: Trò chuyện và trao đổi tin nhắn giữa phụ huynh và giáo viên (BE1)
+  - name: Submissions & Grading (BE1)
+    description: Nộp bài vẽ thực hành và giáo viên chấm điểm nhận xét (BE1)
+  - name: Supplies Management (BE1)
+    description: Quản lý đăng tải và cập nhật dụng cụ vẽ (BE1)
+  - name: Course Reviews Management (BE1)
+    description: Quản lý và tra cứu đánh giá khóa học (BE1)
+  - name: Refunds Management (BE1)
+    description: Tra cứu và quản lý hoàn tiền (BE1)
+  - name: Moderation Reviews (BE1)
+    description: Lịch sử và tra cứu nhật ký kiểm duyệt (BE1)
+  - name: Video & HLS Streaming (BE1)
+    description: Upload video bài học và phát luồng HLS trực tuyến (BE1)
   - name: Shop & Courses
     description: Duyệt danh mục khóa học, xem chi tiết (an toàn không lộ video thô), xem thử bài học và đánh giá (SHOP-01, SHOP-09, SHOP-10)
   - name: Supplies
@@ -58,6 +90,1374 @@ tags:
     description: Hộp thư thông báo người dùng và cập nhật trạng thái đã đọc (NFR-08)
 
 paths:
+
+  # =========================================================================
+  # BE1 - AUTHENTICATION
+  # =========================================================================
+  /auth/register:
+    post:
+      tags: [Auth (BE1)]
+      summary: Đăng ký tài khoản mới (Phụ huynh / Giáo viên)
+      description: Đăng ký tài khoản mới vào hệ thống và nhận JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName, role]
+              properties:
+                email: { type: string, example: "parent_test@gmail.com" }
+                password: { type: string, example: "Password123@" }
+                fullName: { type: string, example: "Nguyễn Văn A" }
+                role: { type: string, enum: [PARENT, TEACHER], example: "PARENT" }
+                phone: { type: string, example: "0901234567" }
+      responses:
+        '200':
+          description: Đăng ký thành công, trả về JWT Access Token
+        '400':
+          description: Email đã tồn tại hoặc dữ liệu không hợp lệ
+
+  /auth/login:
+    post:
+      tags: [Auth (BE1)]
+      summary: Đăng nhập tài khoản
+      description: Xác thực người dùng bằng email và mật khẩu, trả về JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: "parent_test@gmail.com" }
+                password: { type: string, example: "Password123@" }
+      responses:
+        '200':
+          description: Đăng nhập thành công, trả về Access Token
+        '401':
+          description: Sai thông tin đăng nhập
+
+  # =========================================================================
+  # BE1 - CHILDREN MANAGEMENT
+  # =========================================================================
+  /api/children:
+    post:
+      tags: [Children (BE1)]
+      summary: Tạo mới hồ sơ trẻ em
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, birthDate]
+              properties:
+                name: { type: string, example: "Bé Bo" }
+                birthDate: { type: string, format: date, example: "2018-05-20" }
+                gender: { type: string, enum: [MALE, FEMALE, OTHER], example: "MALE" }
+                avatarUrl: { type: string, example: "https://example.com/avatar.jpg" }
+      responses:
+        '201':
+          description: Tạo hồ sơ thành công
+
+  /api/children/{id}:
+    get:
+      tags: [Children (BE1)]
+      summary: Xem chi tiết hồ sơ trẻ em
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Thông tin hồ sơ trẻ em
+    put:
+      tags: [Children (BE1)]
+      summary: Cập nhật hồ sơ trẻ em
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                birthDate: { type: string, format: date }
+                gender: { type: string }
+                avatarUrl: { type: string }
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      tags: [Children (BE1)]
+      summary: Xóa hồ sơ trẻ em
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Xóa thành công
+
+  /api/children/parent/{parentId}:
+    get:
+      tags: [Children (BE1)]
+      summary: Danh sách tất cả hồ sơ trẻ em của phụ huynh
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách trẻ em
+
+  # =========================================================================
+  # BE1 - CHILD PROGRESS
+  # =========================================================================
+  /api/child-progress:
+    post:
+      tags: [Child Progress (BE1)]
+      summary: Khởi tạo tiến độ học cho trẻ
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childId, courseId]
+              properties:
+                childId: { type: string, format: uuid }
+                courseId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Đã tạo tiến độ
+    put:
+      tags: [Child Progress (BE1)]
+      summary: Cập nhật tiến độ học của trẻ
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childId, courseId, completedLessons]
+              properties:
+                childId: { type: string, format: uuid }
+                courseId: { type: string, format: uuid }
+                completedLessons: { type: integer, example: 5 }
+      responses:
+        '200':
+          description: Cập nhật thành công
+
+  /api/child-progress/{childId}/{courseId}:
+    get:
+      tags: [Child Progress (BE1)]
+      summary: Xem chi tiết tiến độ của trẻ theo khóa học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: courseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết tiến độ học tập
+
+  /api/child-progress/child/{childId}:
+    get:
+      tags: [Child Progress (BE1)]
+      summary: Danh sách tất cả khóa học và tiến độ của trẻ
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách tiến độ học
+
+  # =========================================================================
+  # BE1 - COURSES CRUD
+  # =========================================================================
+  /api/courses:
+    get:
+      tags: [Courses Management (BE1)]
+      summary: Danh sách tất cả khóa học trong hệ thống
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Danh sách khóa học
+    post:
+      tags: [Courses Management (BE1)]
+      summary: Giáo viên tạo khóa học mới
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price, category]
+              properties:
+                name: { type: string, example: "Học Vẽ Màu Nước Cơ Bản" }
+                description: { type: string, example: "Khóa học màu nước cho người mới bắt đầu" }
+                price: { type: number, example: 350000 }
+                category: { type: string, example: "Màu Nước" }
+                coverImageUrl: { type: string, example: "https://example.com/cover.jpg" }
+      responses:
+        '201':
+          description: Tạo khóa học thành công
+
+  /api/courses/{id}:
+    get:
+      tags: [Courses Management (BE1)]
+      summary: Chi tiết khóa học theo ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết khóa học
+    put:
+      tags: [Courses Management (BE1)]
+      summary: Cập nhật khóa học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                price: { type: number }
+                category: { type: string }
+                coverImageUrl: { type: string }
+                status: { type: string, enum: [DRAFT, PENDING, APPROVED, REJECTED] }
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      tags: [Courses Management (BE1)]
+      summary: Xóa khóa học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Xóa thành công
+
+  /api/courses/teacher/{teacherId}:
+    get:
+      tags: [Courses Management (BE1)]
+      summary: Danh sách khóa học của giáo viên
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách khóa học của giáo viên
+
+  # =========================================================================
+  # BE1 - CUSTOMIZE REQUESTS & OFFERS
+  # =========================================================================
+  /api/customize-requests:
+    post:
+      tags: [Customize Requests (BE1)]
+      summary: Phụ huynh gửi yêu cầu khóa học vẽ theo yêu cầu
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, childId]
+              properties:
+                title: { type: string, example: "Học vẽ tranh sơn dầu cho bé 8 tuổi" }
+                description: { type: string, example: "Bé muốn vẽ tĩnh vật và phong cảnh" }
+                childId: { type: string, format: uuid }
+                budget: { type: number, example: 500000 }
+      responses:
+        '201':
+          description: Đã tạo yêu cầu customize
+
+  /api/customize-requests/{id}:
+    get:
+      tags: [Customize Requests (BE1)]
+      summary: Chi tiết yêu cầu customize
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết yêu cầu
+    put:
+      tags: [Customize Requests (BE1)]
+      summary: Cập nhật yêu cầu customize
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                budget: { type: number }
+                status: { type: string }
+      responses:
+        '200':
+          description: Cập nhật thành công
+
+  /api/customize-requests/parent/{parentId}:
+    get:
+      tags: [Customize Requests (BE1)]
+      summary: Danh sách yêu cầu customize của phụ huynh
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách yêu cầu
+
+  /api/customize-requests/teacher/{teacherId}:
+    get:
+      tags: [Customize Requests (BE1)]
+      summary: Danh sách yêu cầu customize gửi tới giáo viên
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách yêu cầu
+
+  /api/customize-requests/status/{status}:
+    get:
+      tags: [Customize Requests (BE1)]
+      summary: Lọc yêu cầu customize theo trạng thái
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Danh sách yêu cầu
+
+  /api/offers:
+    post:
+      tags: [Offers (BE1)]
+      summary: Giáo viên tạo báo giá / đề xuất cho yêu cầu customize
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, price, durationDays]
+              properties:
+                requestId: { type: string, format: uuid }
+                price: { type: number, example: 450000 }
+                message: { type: string, example: "Tôi sẽ hoàn thành giáo trình trong 7 ngày" }
+                durationDays: { type: integer, example: 7 }
+      responses:
+        '201':
+          description: Báo giá tạo thành công
+
+  /api/offers/{id}:
+    get:
+      tags: [Offers (BE1)]
+      summary: Chi tiết báo giá offer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết báo giá
+    delete:
+      tags: [Offers (BE1)]
+      summary: Hủy báo giá offer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Đã hủy báo giá
+
+  /api/offers/{id}/status:
+    patch:
+      tags: [Offers (BE1)]
+      summary: Phụ huynh chấp nhận hoặc từ chối báo giá (ACCEPT / REJECT)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ACCEPTED, REJECTED] }
+      responses:
+        '200':
+          description: Trạng thái báo giá đã được cập nhật
+
+  /api/offers/request/{requestId}:
+    get:
+      tags: [Offers (BE1)]
+      summary: Danh sách tất cả báo giá cho một yêu cầu customize
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách báo giá
+
+  /api/offers/teacher/{teacherId}:
+    get:
+      tags: [Offers (BE1)]
+      summary: Danh sách báo giá đã gửi của giáo viên
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách báo giá
+
+  # =========================================================================
+  # BE1 - ENROLLMENTS & LESSONS
+  # =========================================================================
+  /api/enrollments:
+    post:
+      tags: [Enrollments (BE1)]
+      summary: Ghi danh khóa học cho trẻ
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childId, courseId]
+              properties:
+                childId: { type: string, format: uuid }
+                courseId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Ghi danh thành công
+
+  /api/enrollments/{childId}/{courseId}:
+    get:
+      tags: [Enrollments (BE1)]
+      summary: Kiểm tra thông tin ghi danh của trẻ theo khóa học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: courseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết ghi danh
+
+  /api/enrollments/child/{childId}:
+    get:
+      tags: [Enrollments (BE1)]
+      summary: Danh sách tất cả khóa học trẻ đã được cấp quyền học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách ghi danh
+
+  /api/enrollments/course/{courseId}:
+    get:
+      tags: [Enrollments (BE1)]
+      summary: Danh sách tất cả học viên ghi danh vào một khóa học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách học viên
+
+  /api/lessons:
+    post:
+      tags: [Lessons (BE1)]
+      summary: Giáo viên thêm bài học mới vào khóa học
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [courseId, title, orderIndex]
+              properties:
+                courseId: { type: string, format: uuid }
+                title: { type: string, example: "Bài 1: Phối màu và cọ vẽ" }
+                content: { type: string, example: "Hướng dẫn chọn màu nước và kỹ thuật blend màu" }
+                orderIndex: { type: integer, example: 1 }
+                videoUrl: { type: string, example: "uploads/videos/lesson1.mp4" }
+      responses:
+        '201':
+          description: Tạo bài học thành công
+
+  /api/lessons/{id}:
+    get:
+      tags: [Lessons (BE1)]
+      summary: Chi tiết bài học theo ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết bài học
+    put:
+      tags: [Lessons (BE1)]
+      summary: Cập nhật bài học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                content: { type: string }
+                orderIndex: { type: integer }
+                videoUrl: { type: string }
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      tags: [Lessons (BE1)]
+      summary: Xóa bài học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Xóa thành công
+
+  /api/lessons/course/{courseId}:
+    get:
+      tags: [Lessons (BE1)]
+      summary: Danh sách bài học của khóa học (sắp xếp theo thứ tự)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách bài học
+
+  /api/lesson-supplies:
+    post:
+      tags: [Lesson Supplies (BE1)]
+      summary: Gán dụng cụ vẽ cho bài học
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lessonId, supplyId]
+              properties:
+                lessonId: { type: string, format: uuid }
+                supplyId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Gán dụng cụ thành công
+
+  /api/lesson-supplies/lesson/{lessonId}:
+    get:
+      tags: [Lesson Supplies (BE1)]
+      summary: Danh sách dụng cụ cần dùng trong một bài học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách dụng cụ
+
+  /api/lesson-supplies/{lessonId}/{supplyId}:
+    delete:
+      tags: [Lesson Supplies (BE1)]
+      summary: Gỡ dụng cụ khỏi bài học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: supplyId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Đã gỡ dụng cụ
+
+  # =========================================================================
+  # BE1 - MESSAGING & CONVERSATIONS
+  # =========================================================================
+  /api/conversations:
+    post:
+      tags: [Conversations & Messages (BE1)]
+      summary: Tạo cuộc trò chuyện mới
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parentId, teacherId]
+              properties:
+                parentId: { type: string, format: uuid }
+                teacherId: { type: string, format: uuid }
+                contextType: { type: string, example: "COURSE" }
+                contextId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Tạo cuộc trò chuyện thành công
+
+  /api/conversations/{id}:
+    get:
+      tags: [Conversations & Messages (BE1)]
+      summary: Chi tiết cuộc trò chuyện
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Thông tin hội thoại
+
+  /api/conversations/parent/{parentId}:
+    get:
+      tags: [Conversations & Messages (BE1)]
+      summary: Danh sách hội thoại của phụ huynh
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách cuộc trò chuyện
+
+  /api/conversations/teacher/{teacherId}:
+    get:
+      tags: [Conversations & Messages (BE1)]
+      summary: Danh sách hội thoại của giáo viên
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách cuộc trò chuyện
+
+  /api/messages:
+    post:
+      tags: [Conversations & Messages (BE1)]
+      summary: Gửi tin nhắn trong hội thoại
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversationId, content]
+              properties:
+                conversationId: { type: string, format: uuid }
+                content: { type: string, example: "Chào cô, bé vẽ xong bài 1 rồi ạ!" }
+                attachmentUrl: { type: string }
+      responses:
+        '201':
+          description: Tin nhắn gửi thành công
+
+  /api/messages/conversation/{conversationId}:
+    get:
+      tags: [Conversations & Messages (BE1)]
+      summary: Lịch sử tin nhắn theo cuộc trò chuyện
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách tin nhắn
+
+  # =========================================================================
+  # BE1 - SUBMISSIONS & GRADING
+  # =========================================================================
+  /api/submissions:
+    post:
+      tags: [Submissions & Grading (BE1)]
+      summary: Học viên nộp bài vẽ thực hành
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childId, lessonId, imageUrl]
+              properties:
+                childId: { type: string, format: uuid }
+                lessonId: { type: string, format: uuid }
+                imageUrl: { type: string, example: "https://example.com/drawing.jpg" }
+                comment: { type: string, example: "Bài vẽ hoa quả của bé" }
+      responses:
+        '201':
+          description: Nộp bài thành công
+
+  /api/submissions/{id}:
+    get:
+      tags: [Submissions & Grading (BE1)]
+      summary: Chi tiết bài nộp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết bài nộp
+
+  /api/submissions/child/{childId}:
+    get:
+      tags: [Submissions & Grading (BE1)]
+      summary: Lịch sử nộp bài vẽ của trẻ
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: childId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách bài nộp
+
+  /api/submissions/lesson/{lessonId}:
+    get:
+      tags: [Submissions & Grading (BE1)]
+      summary: Danh sách tất cả bài nộp cho một bài học
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách bài nộp
+
+  /api/submissions/{id}/grade:
+    put:
+      tags: [Submissions & Grading (BE1)]
+      summary: Giáo viên chấm điểm và nhận xét bài nộp
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score, feedback]
+              properties:
+                score: { type: number, example: 9.5 }
+                feedback: { type: string, example: "Bé vẽ màu sắc rất tươi sáng và đường nét rõ ràng!" }
+      responses:
+        '200':
+          description: Chấm điểm thành công
+
+  # =========================================================================
+  # BE1 - VIDEO & HLS STREAMING
+  # =========================================================================
+  /api/videos:
+    post:
+      tags: [Video & HLS Streaming (BE1)]
+      summary: Upload video bài học (xử lý chuyển đổi định dạng HLS m3u8)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File video mp4/mov (tối đa 500MB)
+      responses:
+        '200':
+          description: Upload video thành công, trả về HLS URL
+
+  /api/videos/hls/{hlsId}/{fileName}:
+    get:
+      tags: [Video & HLS Streaming (BE1)]
+      summary: Xem video trực tuyến định dạng HLS (Stream file .m3u8 và các phân đoạn .ts)
+      security: []
+      parameters:
+        - name: hlsId
+          in: path
+          required: true
+          schema: { type: string }
+          description: Mã định danh thư mục HLS của video
+        - name: fileName
+          in: path
+          required: true
+          schema: { type: string }
+          description: Tên file playlist (master.m3u8) hoặc segment video (.ts)
+      responses:
+        '200':
+          description: Phân đoạn video hoặc playlist stream thành công
+
+  # =========================================================================
+  # BE1 - SUPPLIES MANAGEMENT CRUD
+  # =========================================================================
+  /api/supplies:
+    get:
+      tags: [Supplies Management (BE1)]
+      summary: Danh sách tất cả dụng cụ vẽ (BE1 CRUD)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Danh sách dụng cụ
+    post:
+      tags: [Supplies Management (BE1)]
+      summary: Giáo viên đăng bán dụng cụ vẽ mới
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price, stockQuantity]
+              properties:
+                name: { type: string, example: "Bộ cọ vẽ màu nước chuyên nghiệp 12 cây" }
+                description: { type: string, example: "Lông mềm tự nhiên, đủ kích cỡ" }
+                price: { type: number, example: 120000 }
+                stockQuantity: { type: integer, example: 50 }
+                imageUrl: { type: string, example: "https://example.com/brush.jpg" }
+      responses:
+        '201':
+          description: Tạo dụng cụ thành công
+
+  /api/supplies/{id}:
+    get:
+      tags: [Supplies Management (BE1)]
+      summary: Chi tiết dụng cụ theo ID (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Thông tin dụng cụ
+    put:
+      tags: [Supplies Management (BE1)]
+      summary: Cập nhật thông tin dụng cụ vẽ (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                price: { type: number }
+                stockQuantity: { type: integer }
+                imageUrl: { type: string }
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      tags: [Supplies Management (BE1)]
+      summary: Xóa dụng cụ vẽ (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Xóa thành công
+
+  /api/supplies/teacher/{teacherId}:
+    get:
+      tags: [Supplies Management (BE1)]
+      summary: Danh sách dụng cụ vẽ do giáo viên đăng tải
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: teacherId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách dụng cụ của giáo viên
+
+  # =========================================================================
+  # BE1 - COURSE REVIEWS CRUD
+  # =========================================================================
+  /api/course-reviews:
+    post:
+      tags: [Course Reviews Management (BE1)]
+      summary: Đăng đánh giá khóa học (BE1 CRUD)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [courseId, rating]
+              properties:
+                courseId: { type: string, format: uuid }
+                childId: { type: string, format: uuid }
+                rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
+                comment: { type: string, example: "Khóa học rất bổ ích, bé rất thích!" }
+      responses:
+        '201':
+          description: Đánh giá thành công
+
+  /api/course-reviews/{id}:
+    get:
+      tags: [Course Reviews Management (BE1)]
+      summary: Chi tiết đánh giá theo ID (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết đánh giá
+    put:
+      tags: [Course Reviews Management (BE1)]
+      summary: Cập nhật đánh giá (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      tags: [Course Reviews Management (BE1)]
+      summary: Xóa đánh giá (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Xóa thành công
+
+  /api/course-reviews/course/{courseId}:
+    get:
+      tags: [Course Reviews Management (BE1)]
+      summary: Danh sách tất cả đánh giá của một khóa học (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách đánh giá
+
+  /api/course-reviews/parent/{parentId}:
+    get:
+      tags: [Course Reviews Management (BE1)]
+      summary: Danh sách đánh giá do phụ huynh đã viết (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách đánh giá
+
+  # =========================================================================
+  # BE1 - REFUNDS MANAGEMENT CRUD
+  # =========================================================================
+  /api/refunds:
+    post:
+      tags: [Refunds Management (BE1)]
+      summary: Tạo yêu cầu hoàn tiền (BE1 CRUD)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId, totalAmount, bankInfo]
+              properties:
+                paymentId: { type: string, format: uuid }
+                totalAmount: { type: number, example: 350000 }
+                bankInfo: { type: string, example: "Vietcombank - 0123456789 - NGUYEN VAN A" }
+      responses:
+        '201':
+          description: Tạo yêu cầu hoàn tiền thành công
+
+  /api/refunds/{id}:
+    get:
+      tags: [Refunds Management (BE1)]
+      summary: Chi tiết hoàn tiền theo ID (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết hoàn tiền
+    patch:
+      tags: [Refunds Management (BE1)]
+      summary: Cập nhật trạng thái hoàn tiền (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [PENDING, APPROVED, COMPLETED, REJECTED] }
+      responses:
+        '200':
+          description: Cập nhật thành công
+
+  /api/refunds/parent/{parentId}:
+    get:
+      tags: [Refunds Management (BE1)]
+      summary: Danh sách yêu cầu hoàn tiền của phụ huynh (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách hoàn tiền
+
+  /api/refunds/payment/{paymentId}:
+    get:
+      tags: [Refunds Management (BE1)]
+      summary: Danh sách hoàn tiền theo giao dịch thanh toán (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách hoàn tiền
+
+  # =========================================================================
+  # BE1 - MODERATION REVIEWS CRUD
+  # =========================================================================
+  /api/moderation-reviews:
+    post:
+      tags: [Moderation Reviews (BE1)]
+      summary: Nhân viên ghi nhận đánh giá kiểm duyệt (BE1)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetType, targetId, decision]
+              properties:
+                targetType: { type: string, example: "COURSE" }
+                targetId: { type: string, format: uuid }
+                decision: { type: string, enum: [APPROVED, REJECTED] }
+                reason: { type: string, example: "Nội dung khóa học đạt chuẩn" }
+      responses:
+        '201':
+          description: Ghi nhận kiểm duyệt thành công
+
+  /api/moderation-reviews/{id}:
+    get:
+      tags: [Moderation Reviews (BE1)]
+      summary: Chi tiết đánh giá kiểm duyệt theo ID (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết kiểm duyệt
+
+  /api/moderation-reviews/staff/{staffId}:
+    get:
+      tags: [Moderation Reviews (BE1)]
+      summary: Lịch sử các quyết định kiểm duyệt do nhân viên thực hiện (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: staffId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Danh sách kiểm duyệt của nhân viên
+
+  /api/moderation-reviews/target:
+    get:
+      tags: [Moderation Reviews (BE1)]
+      summary: Tra cứu lịch sử kiểm duyệt theo đối tượng cụ thể (BE1)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: targetType
+          in: query
+          required: true
+          schema: { type: string }
+        - name: targetId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Lịch sử kiểm duyệt của đối tượng
   # =========================================================================
   # 1. SHOP & COURSES
   # =========================================================================

@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
+@Entity(name = "Be2ModerationReview")
 @Table(name = "moderation_reviews")
 @Getter
 @Setter

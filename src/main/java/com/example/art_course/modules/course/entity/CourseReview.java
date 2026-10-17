@@ -8,7 +8,7 @@ import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
+@Entity(name = "Be2CourseReview")
 @Table(name = "course_reviews")
 @Getter
 @Setter

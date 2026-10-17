@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 import java.util.UUID;
 
-@Repository
+@Repository("be2CourseReviewRepository")
 public interface CourseReviewRepository extends JpaRepository<CourseReview, UUID> {
     Optional<CourseReview> findByCourseIdAndParentId(UUID courseId, UUID parentId);
     java.util.List<CourseReview> findByCourseIdOrderByCreatedAtDesc(UUID courseId);

@@ -6,7 +6,7 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-@Entity
+@Entity(name = "Be2Supply")
 @Table(name = "supplies")
 @Getter
 @Setter

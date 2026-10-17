@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.UUID;
 
-@Repository
+@Repository("be2CourseRepository")
 public interface CourseRepository extends JpaRepository<Course, UUID> {
     List<Course> findByStatusIgnoreCase(String status);
 }

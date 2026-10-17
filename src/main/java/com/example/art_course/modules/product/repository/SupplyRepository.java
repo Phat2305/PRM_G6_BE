@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-@Repository
+@Repository("be2SupplyRepository")
 public interface SupplyRepository extends JpaRepository<Supply, UUID> {
     List<Supply> findByStatusIgnoreCase(String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT s FROM Supply s WHERE s.id = :id")
+    @Query("SELECT s FROM Be2Supply s WHERE s.id = :id")
     Optional<Supply> findByIdForUpdate(@Param("id") UUID id);
 }
