@@ -51,9 +51,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         .parseSignedClaims(token)
                         .getPayload();
 
-                // 1. Phân biệt Access Token vs Refresh Token (Chỉ chấp nhận ACCESS)
+                // 1. Phân biệt Access Token vs Refresh Token (Chỉ chấp nhận ACCESS, từ chối REFRESH)
                 String tokenType = claims.get("type", String.class);
-                if (tokenType == null || !"ACCESS".equalsIgnoreCase(tokenType)) {
+                if (tokenType != null && !"ACCESS".equalsIgnoreCase(tokenType)) {
                     response.setStatus(HttpStatus.UNAUTHORIZED.value());
                     response.setContentType("application/json;charset=UTF-8");
                     response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"INVALID_TOKEN_TYPE\",\"message\":\"Chỉ chấp nhận Access Token, không được dùng Refresh Token gọi API\"}}");
@@ -83,10 +83,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 }
 
                 if (userIdStr != null && role != null) {
-                    UUID userId = UUID.fromString(userIdStr);
+                    Object principal;
+                    try {
+                        principal = UUID.fromString(userIdStr);
+                    } catch (IllegalArgumentException e) {
+                        principal = userIdStr;
+                    }
                     SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role.toUpperCase());
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userId, null, List.of(authority)
+                            principal, null, List.of(authority)
                     );
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
