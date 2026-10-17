@@ -1,0 +1,140 @@
+
+package com.example.art_course.child.Controller;
+
+import com.example.art_course.child.dto.ChildResponse;
+import com.example.art_course.child.dto.CreateChildRequest;
+import com.example.art_course.child.dto.UpdateChildRequest;
+import com.example.art_course.child.entity.Child;
+import com.example.art_course.child.service.ChildService;
+import com.example.art_course.user.entity.User;
+import com.example.art_course.user.repository.UserRepository;
+
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/children")
+public class ChildController {
+
+    private final ChildService childService;
+    private final UserRepository userRepository;
+
+    public ChildController(
+            ChildService childService,
+            UserRepository userRepository
+    ) {
+        this.childService = childService;
+        this.userRepository = userRepository;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ChildResponse createChild(
+            @Valid @RequestBody CreateChildRequest request,
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        return toResponse(
+                childService.createChild(parentId, request)
+        );
+    }
+
+    @GetMapping
+    public List<ChildResponse> getChildren(
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        return childService.getChildren(parentId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @GetMapping("/{userId}")
+    public ChildResponse getChild(
+            @PathVariable UUID userId,
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        return toResponse(
+                childService.getChild(parentId, userId)
+        );
+    }
+
+    @PutMapping("/{userId}")
+    public ChildResponse updateChild(
+            @PathVariable UUID userId,
+            @Valid @RequestBody UpdateChildRequest request,
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        return toResponse(
+                childService.updateChild(
+                        parentId, userId, request
+                )
+        );
+    }
+
+    @DeleteMapping("/{userId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteChild(
+            @PathVariable UUID userId,
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        childService.deleteChild(parentId, userId);
+    }
+
+    private UUID getCurrentUserId(Authentication authentication) {
+        if (authentication == null
+                || !authentication.isAuthenticated()) {
+            throw new org.springframework.web.server
+                    .ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authentication required"
+            );
+        }
+
+        User user = userRepository
+                .findByUsername(authentication.getName())
+                .orElseThrow(() ->
+                        new org.springframework.web.server
+                                .ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "User not found"
+                        )
+                );
+
+        return user.getId();
+    }
+
+    private ChildResponse toResponse(Child child) {
+        User childUser = userRepository
+                .findById(child.getUserId())
+                .orElseThrow(() ->
+                        new org.springframework.web.server
+                                .ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Child user not found"
+                        )
+                );
+
+        return new ChildResponse(
+                child.getUserId(),
+                childUser.getUsername(),
+                child.getDisplayName(),
+                child.getBirthYear()
+        );
+    }
+}
