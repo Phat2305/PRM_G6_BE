@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @Slf4j
-@RestController
+@RestController("be2RefundController")
 @RequestMapping("/api/v1/refunds")
 @RequiredArgsConstructor
 public class RefundController {

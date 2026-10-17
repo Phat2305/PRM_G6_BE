@@ -15,7 +15,7 @@ import java.util.UUID;
  * Controller xử lý đánh giá khóa học (SHOP-09).
  * Đường dẫn riêng biệt /api/v1/course-reviews, không đụng tới route /api/v1/courses của BE1.
  */
-@RestController
+@RestController("be2CourseReviewController")
 @RequestMapping("/api/v1/course-reviews")
 @RequiredArgsConstructor
 public class CourseReviewController {

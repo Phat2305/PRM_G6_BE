@@ -24,7 +24,7 @@ import java.util.UUID;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    @Value("${JWT_SECRET:}")
+    @Value("${JWT_SECRET:${jwt.secret:FALL2026_ART_COURSE_PRM391_GROUP_6}}")
     private String jwtSecret;
 
     @PostConstruct

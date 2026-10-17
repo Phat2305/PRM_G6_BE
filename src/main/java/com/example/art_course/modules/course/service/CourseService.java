@@ -25,7 +25,7 @@ import com.example.art_course.modules.course.dto.TrialLessonDto;
 
 import java.util.Optional;
 
-@Service
+@Service("be2CourseService")
 @RequiredArgsConstructor
 public class CourseService {
 
