@@ -3,69 +3,179 @@ package com.example.art_course.modules.order;
 import com.example.art_course.common.AppError;
 import com.example.art_course.common.GlobalExceptionHandler;
 import com.example.art_course.common.statemachine.OrderStatus;
+import com.example.art_course.config.JwtAuthFilter;
+import com.example.art_course.config.SecurityConfig;
 import com.example.art_course.modules.order.controller.OrderController;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.service.OrderService;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.List;
+import java.util.Date;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("ORDER SECURITY TEST (MockMvc WebMvc, No JPA, No DB)")
+@ExtendWith(SpringExtension.class)
+@WebAppConfiguration
+@ContextConfiguration(classes = OrderSecurityWebMvcTest.TestSecurityConfig.class)
+@TestPropertySource(properties = {
+        "JWT_SECRET=real-spring-security-test-jwt-secret-key-at-least-32-bytes"
+})
+@DisplayName("ORDER SECURITY TEST (Real Spring Security FilterChain + JwtAuthFilter)")
 public class OrderSecurityWebMvcTest {
 
-    private MockMvc mockMvc;
+    private static final String TEST_JWT_SECRET = "real-spring-security-test-jwt-secret-key-at-least-32-bytes";
+
+    @Configuration
+    @EnableWebMvc
+    @Import({SecurityConfig.class, JwtAuthFilter.class, GlobalExceptionHandler.class})
+    static class TestSecurityConfig {
+        @Bean
+        public OrderService orderService() {
+            return mock(OrderService.class);
+        }
+
+        @Bean
+        public OrderController orderController(OrderService orderService) {
+            return new OrderController(orderService);
+        }
+    }
+
+    @Autowired
+    private WebApplicationContext context;
+
+    @Autowired
     private OrderService orderService;
 
+    private MockMvc mockMvc;
     private UUID parentAId;
     private UUID parentBId;
+    private UUID teacherId;
+    private UUID childId;
     private UUID orderBId;
-    private UsernamePasswordAuthenticationToken authParentA;
 
     @BeforeEach
     void setUp() {
-        orderService = mock(OrderService.class);
-        OrderController orderController = new OrderController(orderService);
-
-        mockMvc = MockMvcBuilders.standaloneSetup(orderController)
-                .setControllerAdvice(new GlobalExceptionHandler())
+        reset(orderService);
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(springSecurity())
                 .build();
 
         parentAId = UUID.randomUUID();
         parentBId = UUID.randomUUID();
+        teacherId = UUID.randomUUID();
+        childId = UUID.randomUUID();
         orderBId = UUID.randomUUID();
+    }
 
-        authParentA = new UsernamePasswordAuthenticationToken(
-                parentAId, null, List.of(new SimpleGrantedAuthority("ROLE_PARENT"))
-        );
+    private String createToken(UUID userId, String role, String type) {
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("userId", userId.toString())
+                .claim("role", role)
+                .claim("type", type)
+                .expiration(new Date(System.currentTimeMillis() + 3600_000))
+                .signWith(Keys.hmacShaKeyFor(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
     }
 
     @Test
-    @DisplayName("1. Parent A không được đọc chi tiết đơn của Parent B (403 Forbidden)")
+    @DisplayName("1. Không có JWT token gọi API đơn hàng bị Spring Security chặn (403 Forbidden)")
+    void testUnauthenticatedRequestBlocked() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/my-orders"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("2. Vai trò CHILD gọi API mua hàng bị JwtAuthFilter chặn 403 FORBIDDEN (BR-02, NFR-04)")
+    void testChildRoleBlockedBySpringSecurity() throws Exception {
+        String childToken = createToken(childId, "CHILD", "ACCESS");
+
+        mockMvc.perform(post("/api/v1/orders/checkout")
+                        .header("Authorization", "Bearer " + childToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"useCart\":true}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    @DisplayName("3. Dùng REFRESH token gọi API bị JwtAuthFilter chặn 401 UNAUTHORIZED")
+    void testRefreshTokenBlockedBySpringSecurity() throws Exception {
+        String refreshToken = createToken(parentAId, "PARENT", "REFRESH");
+
+        mockMvc.perform(get("/api/v1/orders/my-orders")
+                        .header("Authorization", "Bearer " + refreshToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("INVALID_TOKEN_TYPE"));
+    }
+
+    @Test
+    @DisplayName("4. Vai trò TEACHER gọi endpoint checkout của PARENT bị SecurityFilterChain chặn 403")
+    void testTeacherCannotCallParentCheckoutEndpoint() throws Exception {
+        String teacherToken = createToken(teacherId, "TEACHER", "ACCESS");
+
+        mockMvc.perform(post("/api/v1/orders/checkout")
+                        .header("Authorization", "Bearer " + teacherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"useCart\":true}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    @DisplayName("5. Vai trò PARENT gọi endpoint teacher-orders của TEACHER bị SecurityFilterChain chặn 403")
+    void testParentCannotCallTeacherOrdersEndpoint() throws Exception {
+        String parentToken = createToken(parentAId, "PARENT", "ACCESS");
+
+        mockMvc.perform(get("/api/v1/orders/teacher-orders")
+                        .header("Authorization", "Bearer " + parentToken))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    @DisplayName("6. Parent A không được đọc chi tiết đơn của Parent B (403 Forbidden)")
     void testParentACannotReadOrderOfParentB() throws Exception {
+        String parentAToken = createToken(parentAId, "PARENT", "ACCESS");
         when(orderService.getOrderDetail(eq(orderBId), eq(parentAId), eq("PARENT")))
                 .thenThrow(new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Đơn hàng này không thuộc về bạn"));
 
         mockMvc.perform(get("/api/v1/orders/" + orderBId)
-                        .principal(authParentA)
+                        .header("Authorization", "Bearer " + parentAToken)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
@@ -75,13 +185,14 @@ public class OrderSecurityWebMvcTest {
     }
 
     @Test
-    @DisplayName("2. Parent A không được hủy đơn hàng của Parent B (403 Forbidden)")
+    @DisplayName("7. Parent A không được hủy đơn hàng của Parent B (403 Forbidden)")
     void testParentACannotCancelOrderOfParentB() throws Exception {
+        String parentAToken = createToken(parentAId, "PARENT", "ACCESS");
         doThrow(new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền hủy đơn hàng này"))
                 .when(orderService).cancelOrder(eq(orderBId), eq(parentAId), eq("PARENT"));
 
         mockMvc.perform(post("/api/v1/orders/" + orderBId + "/cancel")
-                        .principal(authParentA)
+                        .header("Authorization", "Bearer " + parentAToken)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
@@ -91,13 +202,14 @@ public class OrderSecurityWebMvcTest {
     }
 
     @Test
-    @DisplayName("3. Parent A đọc đơn của chính mình thành công (200 OK)")
+    @DisplayName("8. Parent A đọc đơn của chính mình qua Spring Security thật thành công (200 OK)")
     void testParentACanReadOwnOrder() throws Exception {
+        String parentAToken = createToken(parentAId, "PARENT", "ACCESS");
         UUID orderAId = UUID.randomUUID();
         Order order = Order.builder()
                 .id(orderAId)
                 .parentId(parentAId)
-                .teacherId(UUID.randomUUID())
+                .teacherId(teacherId)
                 .totalAmount(BigDecimal.valueOf(250000))
                 .shippingFee(BigDecimal.ZERO)
                 .status(OrderStatus.PENDING_PAYMENT)
@@ -108,7 +220,7 @@ public class OrderSecurityWebMvcTest {
         when(orderService.getOrderDetail(eq(orderAId), eq(parentAId), eq("PARENT"))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/orders/" + orderAId)
-                        .principal(authParentA)
+                        .header("Authorization", "Bearer " + parentAToken)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))

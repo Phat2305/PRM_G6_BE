@@ -152,11 +152,13 @@ public class PaymentService {
             throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_SIGNATURE", "Chữ ký webhook không hợp lệ: " + callbackResult.message());
         }
 
-        // 2. Tìm payment theo ID từ params (VNPay: vnp_TxnRef; MoMo: orderId; Mock: paymentId)
+        // 2. Tìm payment theo ID từ params (có khóa PESSIMISTIC_WRITE để chống 2 luồng webhook đồng thời)
         UUID paymentId = resolvePaymentIdFromParams(gatewayCode, params);
         Payment payment = null;
         if (paymentId != null) {
-            payment = paymentRepository.findById(paymentId).orElse(null);
+            payment = paymentRepository.findByIdForUpdate(paymentId)
+                    .or(() -> paymentRepository.findById(paymentId))
+                    .orElse(null);
         }
 
         if (payment == null && callbackResult.gatewayTransactionId() != null) {
@@ -171,12 +173,24 @@ public class PaymentService {
             throw new AppError(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch thanh toán");
         }
 
-        // 3. Kiểm tra Idempotent (Nếu đã HELD hoặc RELEASED thì bỏ qua xử lý lặp)
+        // 3. Kiểm tra Idempotent (Nếu đã HELD hoặc RELEASED hoặc trùng gateway_transaction_id thì bỏ qua xử lý lặp)
         if (payment.getStatus() == PaymentStatus.HELD || payment.getStatus() == PaymentStatus.RELEASED) {
             webhookLog.setProcessedStatus("IGNORED");
             webhookLog.setResponseMessage("Idempotent: Giao dịch đã được thanh toán thành công trước đó (status=" + payment.getStatus() + ")");
             webhookLogRepository.save(webhookLog);
             return Map.of("status", "SUCCESS", "message", "Idempotent: Đã xử lý trước đó");
+        }
+
+        if (callbackResult.gatewayTransactionId() != null) {
+            Optional<Payment> dupTx = paymentRepository.findByGatewayAndGatewayTransactionId(
+                    gatewayCode.toUpperCase(), callbackResult.gatewayTransactionId()
+            );
+            if (dupTx.isPresent()) {
+                webhookLog.setProcessedStatus("IGNORED");
+                webhookLog.setResponseMessage("Idempotent: gateway_transaction_id đã tồn tại");
+                webhookLogRepository.save(webhookLog);
+                return Map.of("status", "SUCCESS", "message", "Idempotent: Đã xử lý trước đó");
+            }
         }
 
         // 4. Kiểm tra kết quả giao dịch từ cổng
@@ -224,7 +238,7 @@ public class PaymentService {
         payment.setStatus(PaymentStatus.HELD);
         payment.setGatewayTransactionId(gatewayTransactionId);
         payment.setPaidAt(Instant.now());
-        paymentRepository.save(payment);
+        paymentRepository.saveAndFlush(payment);
 
         List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
         List<OrderDetail> courseDetails = new ArrayList<>();

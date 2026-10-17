@@ -34,11 +34,9 @@ import com.example.art_course.modules.withdrawal.service.WithdrawalService;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -315,17 +313,39 @@ public class FinanceTests {
     }
 
     // =========================================================================
-    // TEST 6: SỔ CÁI MONEY_LEDGER KHÔNG UPDATE/DELETE ĐƯỢC (TRIGGER BẢO MẬT)
+    // TEST 6: SỔ CÁI MONEY_LEDGER KHÔNG UPDATE/DELETE/TRUNCATE ĐƯỢC (TRIGGER BẢO MẬT)
     // =========================================================================
     @Test
-    @Disabled("Cần môi trường PostgreSQL thật (DATABASE_URL_DEV hoặc Testcontainers) để kiểm tra trigger DB trg_prevent_money_ledger_modification")
-    @DisplayName("6. Sổ cái money_ledger không UPDATE/DELETE được (Trigger kiểm chứng trên PostgreSQL thật)")
+    @DisplayName("6. Sổ cái money_ledger không UPDATE/DELETE/TRUNCATE được (Trigger kiểm chứng trên PostgreSQL thật)")
     void testMoneyLedger_PreventUpdateAndDeleteOnRealDb() {
-        // Trigger PostgreSQL 'trg_prevent_money_ledger_modification' được cài đặt trong V1__be2_schema_init.sql:
-        // CREATE TRIGGER trg_prevent_money_ledger_modification
-        // BEFORE UPDATE OR DELETE ON public.money_ledger
-        // FOR EACH ROW EXECUTE FUNCTION public.fn_prevent_money_ledger_modification();
-        // Ném lỗi 'BẢO MẬT: Bảng money_ledger là sổ cái chỉ-ghi-thêm (append-only). Tuyệt đối cấm UPDATE hoặc DELETE!'
+        var ctx = com.example.art_course.common.PostgresTestcontainerEnv.getContext();
+        var jdbc = ctx.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+
+        UUID teacherId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
+                teacherId, "teacher_ledger_" + teacherId);
+        jdbc.update("INSERT INTO public.money_ledger (id, teacher_id, entry_type, amount, note) VALUES (?, ?, 'HOLD', 200000, 'Test append-only')",
+                ledgerId, teacherId);
+
+        // 1. UPDATE bị trigger chặn
+        Exception updateEx = assertThrows(Exception.class, () ->
+                jdbc.update("UPDATE public.money_ledger SET amount = 999999 WHERE id = ?", ledgerId)
+        );
+        assertTrue(updateEx.getMessage().contains("append-only"));
+
+        // 2. DELETE bị trigger chặn
+        Exception deleteEx = assertThrows(Exception.class, () ->
+                jdbc.update("DELETE FROM public.money_ledger WHERE id = ?", ledgerId)
+        );
+        assertTrue(deleteEx.getMessage().contains("append-only"));
+
+        // 3. TRUNCATE bị statement-level trigger V2 chặn
+        Exception truncEx = assertThrows(Exception.class, () ->
+                jdbc.execute("TRUNCATE TABLE public.money_ledger")
+        );
+        assertTrue(truncEx.getMessage().contains("append-only"));
     }
 
     // =========================================================================

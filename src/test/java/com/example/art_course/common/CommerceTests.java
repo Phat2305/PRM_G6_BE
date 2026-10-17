@@ -79,31 +79,27 @@ public class CommerceTests {
     }
 
     // =========================================================================
-    // TEST 2: BÁN VƯỢT TỒN KHI ĐỒNG THỜI (EXECUTORSERVICE + COUNTDOWNLATCH) (PAY-07)
+    // TEST 2: BÁN VƯỢT TỒN KHI ĐỒNG THỜI TRÊN POSTGRESQL THẬT (PAY-07)
     // =========================================================================
     @Test
-    @Disabled("Cần kết nối PostgreSQL thật (Testcontainers / DATABASE_URL_DEV) để kiểm chứng @Lock(PESSIMISTIC_WRITE) và trigger cơ sở dữ liệu, không dùng in-memory mock để tránh pass giả.")
-    @DisplayName("2. Bán vượt tồn khi đồng thời: 10 threads mua đồng thời nhưng tồn kho chỉ có 5 -> đúng 5 thành công")
+    @DisplayName("2. Bán vượt tồn khi đồng thời (PostgreSQL thật + PESSIMISTIC_WRITE): 10 threads mua đồng thời nhưng tồn kho chỉ có 5 -> đúng 5 thành công")
     void testConcurrentOversellingPrevention() throws InterruptedException {
-        // Mô phỏng kho hàng với synchronized atomic lock tương tự PESSIMISTIC_WRITE
-        class ConcurrentInventory {
-            private int stock = 5;
-            private int reserved = 0;
+        var ctx = PostgresTestcontainerEnv.getContext();
+        var jdbc = ctx.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+        var orderService = ctx.getBean(com.example.art_course.modules.order.service.OrderService.class);
+        var supplyRepo = ctx.getBean(com.example.art_course.modules.product.repository.SupplyRepository.class);
 
-            public synchronized boolean tryReserve(int quantity) {
-                if (stock - reserved >= quantity) {
-                    reserved += quantity;
-                    return true;
-                }
-                return false;
-            }
+        UUID parentId = UUID.randomUUID();
+        UUID teacherId = UUID.randomUUID();
+        UUID supplyId = UUID.randomUUID();
 
-            public int getReserved() {
-                return reserved;
-            }
-        }
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'PARENT', 'ACTIVE')",
+                parentId, "parent_oversell_" + parentId);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
+                teacherId, "teacher_oversell_" + teacherId);
+        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Co ve Test', 50000, 5, 0, 0, 'PUBLISHED')",
+                supplyId, teacherId);
 
-        ConcurrentInventory inventory = new ConcurrentInventory();
         int totalThreads = 10;
         ExecutorService executor = Executors.newFixedThreadPool(totalThreads);
         CountDownLatch startLatch = new CountDownLatch(1);
@@ -115,102 +111,143 @@ public class CommerceTests {
         for (int i = 0; i < totalThreads; i++) {
             executor.submit(() -> {
                 try {
-                    startLatch.await(); // Đợi tất cả thread sẵn sàng cùng xuất phát
-                    boolean success = inventory.tryReserve(1);
-                    if (success) {
-                        successCount.incrementAndGet();
-                    } else {
+                    startLatch.await();
+                    var item = new com.example.art_course.modules.order.service.OrderService.CheckoutItem();
+                    item.setItemType("SUPPLY");
+                    item.setSupplyId(supplyId);
+                    item.setQuantity(1);
+
+                    var req = new com.example.art_course.modules.order.service.OrderService.CheckoutRequest();
+                    req.setUseCart(false);
+                    req.setItems(List.of(item));
+
+                    orderService.createOrdersFromCheckout(parentId, req);
+                    successCount.incrementAndGet();
+                } catch (AppError ex) {
+                    if ("INSUFFICIENT_STOCK".equals(ex.getErrorCode())) {
                         failCount.incrementAndGet();
                     }
-                } catch (InterruptedException ignored) {
+                } catch (Exception ignored) {
                 } finally {
                     endLatch.countDown();
                 }
             });
         }
 
-        startLatch.countDown(); // Bắn tín hiệu chạy đồng thời
-        boolean completed = endLatch.await(5, TimeUnit.SECONDS);
+        startLatch.countDown();
+        boolean completed = endLatch.await(15, TimeUnit.SECONDS);
         executor.shutdown();
 
+        var updatedSupply = supplyRepo.findById(supplyId).orElseThrow();
         assertTrue(completed, "Các thread phải hoàn thành trong thời gian cho phép");
-        assertEquals(5, successCount.get(), "Chính xác 5 request đầu tiên được giữ chỗ thành công");
-        assertEquals(5, failCount.get(), "Chính xác 5 request vượt tồn bị từ chối với lỗi hết hàng (PAY-07)");
-        assertEquals(5, inventory.getReserved(), "Tồn kho giữ chỗ đạt mức 5");
+        assertEquals(5, successCount.get(), "Chính xác 5 request đầu tiên được giữ chỗ thành công trên PostgreSQL");
+        assertEquals(5, failCount.get(), "Chính xác 5 request vượt tồn bị từ chối với lỗi INSUFFICIENT_STOCK (PAY-07)");
+        assertEquals(5, updatedSupply.getReservedQuantity(), "Tồn kho giữ chỗ trong DB đạt mức 5");
     }
 
     // =========================================================================
-    // TEST 3: HẾT HẠN ĐƠN TRẢ TỒN ĐÚNG MỘT LẦN (IDEMPOTENT) (PAY-08)
+    // TEST 3: HẾT HẠN ĐƠN TRẢ TỒN ĐÚNG MỘT LẦN TRÊN POSTGRESQL THẬT (PAY-08)
     // =========================================================================
     @Test
-    @Disabled("Cần kết nối PostgreSQL thật để kiểm tra trigger DB và tính idempotent của job OrderExpirationJob.")
-    @DisplayName("3. Hết hạn đơn trả tồn đúng một lần: chạy lại không trả hai lần (idempotent)")
+    @DisplayName("3. Hết hạn đơn trả tồn đúng một lần trên PostgreSQL thật: chạy lại không trả hai lần (idempotent)")
     void testOrderExpirationIdempotency() {
-        class MockOrder {
-            OrderStatus status = OrderStatus.PENDING_PAYMENT;
-            final int quantity = 2;
-        }
+        var ctx = PostgresTestcontainerEnv.getContext();
+        var jdbc = ctx.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+        var orderService = ctx.getBean(com.example.art_course.modules.order.service.OrderService.class);
+        var orderRepo = ctx.getBean(com.example.art_course.modules.order.repository.OrderRepository.class);
+        var supplyRepo = ctx.getBean(com.example.art_course.modules.product.repository.SupplyRepository.class);
 
-        class MockStock {
-            int reserved = 2;
+        // Dọn các đơn PENDING_PAYMENT quá hạn cũ nếu có
+        orderService.expirePendingOrders();
 
-            public boolean expireOrder(MockOrder order) {
-                if (order.status == OrderStatus.PENDING_PAYMENT) {
-                    order.status = OrderStatus.EXPIRED;
-                    this.reserved = Math.max(0, this.reserved - order.quantity);
-                    return true;
-                }
-                return false;
-            }
-        }
+        UUID parentId = UUID.randomUUID();
+        UUID teacherId = UUID.randomUUID();
+        UUID supplyId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
 
-        MockStock stock = new MockStock();
-        MockOrder order = new MockOrder();
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'PARENT', 'ACTIVE')",
+                parentId, "parent_exp_" + parentId);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
+                teacherId, "teacher_exp_" + teacherId);
+        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Mau ve', 60000, 10, 2, 0, 'PUBLISHED')",
+                supplyId, teacherId);
+        jdbc.update("INSERT INTO public.orders (id, parent_id, teacher_id, total_amount, shipping_fee, status, expired_at) VALUES (?, ?, ?, 150000, 30000, 'PENDING_PAYMENT', CURRENT_TIMESTAMP - INTERVAL '5 minutes')",
+                orderId, parentId, teacherId);
+        jdbc.update("INSERT INTO public.order_details (order_id, product_type, supply_id, product_name, unit_price, quantity, sub_total, delivery_status) VALUES (?, 'SUPPLY', ?, 'Mau ve', 60000, 2, 120000, 'PENDING')",
+                orderId, supplyId);
 
         // Lần chạy 1: Hết hạn đơn -> trả lại 2 tồn kho
-        boolean run1 = stock.expireOrder(order);
-        assertTrue(run1);
-        assertEquals(0, stock.reserved, "Tồn kho giữ chỗ đã được hoàn trả về 0");
-        assertEquals(OrderStatus.EXPIRED, order.status);
+        int run1 = orderService.expirePendingOrders();
+        assertEquals(1, run1, "Lần 1 phải xử lý đúng 1 đơn quá hạn");
+        assertEquals(0, supplyRepo.findById(supplyId).orElseThrow().getReservedQuantity(), "Tồn kho giữ chỗ đã được hoàn trả về 0");
+        assertEquals(OrderStatus.EXPIRED, orderRepo.findById(orderId).orElseThrow().getStatus());
 
         // Lần chạy 2: Chạy lại trên đơn đã EXPIRED -> không hoàn trả thêm
-        boolean run2 = stock.expireOrder(order);
-        assertFalse(run2, "Không thực hiện trả tồn kho lần 2 (Idempotent)");
-        assertEquals(0, stock.reserved, "Tồn giữ chỗ không bị trừ âm");
+        int run2 = orderService.expirePendingOrders();
+        assertEquals(0, run2, "Không thực hiện trả tồn kho lần 2 (Idempotent)");
+        assertEquals(0, supplyRepo.findById(supplyId).orElseThrow().getReservedQuantity(), "Tồn giữ chỗ không bị trừ âm");
     }
 
     // =========================================================================
-    // TEST 4: CHẶN MUA TRÙNG KHÓA HỌC CHO CÙNG CHILD (SHOP-04)
+    // TEST 4: CHẶN MUA TRÙNG KHÓA HỌC CHO CÙNG CHILD TRÊN POSTGRESQL THẬT (SHOP-04)
     // =========================================================================
     @Test
-    @Disabled("Cần kết nối PostgreSQL thật để kiểm chứng truy vấn native bảng child_enroll.")
-    @DisplayName("4. Chặn mua trùng khóa học cho cùng một Child (SHOP-04)")
+    @DisplayName("4. Chặn mua trùng khóa học cho cùng một Child trên PostgreSQL thật (SHOP-04)")
     void testPreventDuplicateCourseForChild() {
-        Set<String> enrolledDatabase = new HashSet<>();
+        var ctx = PostgresTestcontainerEnv.getContext();
+        var jdbc = ctx.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+        var orderService = ctx.getBean(com.example.art_course.modules.order.service.OrderService.class);
+
+        UUID parentId = UUID.randomUUID();
+        UUID teacherId = UUID.randomUUID();
         UUID child1 = UUID.randomUUID();
         UUID child2 = UUID.randomUUID();
         UUID course1 = UUID.randomUUID();
-        UUID course2 = UUID.randomUUID();
 
-        // Giả lập Child 1 đã sở hữu Course 1
-        enrolledDatabase.add(child1 + ":" + course1);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'PARENT', 'ACTIVE')",
+                parentId, "parent_dup_" + parentId);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
+                teacherId, "teacher_dup_" + teacherId);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'CHILD', 'ACTIVE')",
+                child1, "child1_dup_" + child1);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'CHILD', 'ACTIVE')",
+                child2, "child2_dup_" + child2);
+        jdbc.update("INSERT INTO public.child_profiles (user_id, parent_id, display_name, birth_year) VALUES (?, ?, 'Be 1', 2017)",
+                child1, parentId);
+        jdbc.update("INSERT INTO public.child_profiles (user_id, parent_id, display_name, birth_year) VALUES (?, ?, 'Be 2', 2019)",
+                child2, parentId);
+        jdbc.update("INSERT INTO public.courses (id, teacher_id, name, price, status) VALUES (?, ?, 'Khoa ve', 250000, 'PUBLISHED')",
+                course1, teacherId);
 
-        java.util.function.BiConsumer<UUID, UUID> validateAddToCart = (cId, crsId) -> {
-            if (enrolledDatabase.contains(cId + ":" + crsId)) {
-                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
-            }
-        };
+        // Child 1 đã sở hữu Course 1 trong bảng child_enroll
+        jdbc.update("INSERT INTO public.child_enroll (child_id, course_id, status) VALUES (?, ?, 'ACTIVE')",
+                child1, course1);
 
-        // Bé 1 mua Course 1 (đã có) -> Phải ném lỗi 409 CONFLICT
-        AppError ex = assertThrows(AppError.class, () -> validateAddToCart.accept(child1, course1));
+        var item1 = new com.example.art_course.modules.order.service.OrderService.CheckoutItem();
+        item1.setItemType("COURSE");
+        item1.setCourseId(course1);
+        item1.setChildId(child1);
+        item1.setQuantity(1);
+        var req1 = new com.example.art_course.modules.order.service.OrderService.CheckoutRequest();
+        req1.setUseCart(false);
+        req1.setItems(List.of(item1));
+
+        // Bé 1 mua Course 1 (đã có ACTIVE trong child_enroll) -> Phải ném lỗi 409 CONFLICT
+        AppError ex = assertThrows(AppError.class, () -> orderService.createOrdersFromCheckout(parentId, req1));
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
         assertEquals("COURSE_ALREADY_OWNED", ex.getErrorCode());
 
-        // Bé 1 mua Course 2 (chưa có) -> Thành công không ném lỗi
-        assertDoesNotThrow(() -> validateAddToCart.accept(child1, course2));
-
         // Bé 2 mua Course 1 (chưa có) -> Thành công không ném lỗi
-        assertDoesNotThrow(() -> validateAddToCart.accept(child2, course1));
+        var item2 = new com.example.art_course.modules.order.service.OrderService.CheckoutItem();
+        item2.setItemType("COURSE");
+        item2.setCourseId(course1);
+        item2.setChildId(child2);
+        item2.setQuantity(1);
+        var req2 = new com.example.art_course.modules.order.service.OrderService.CheckoutRequest();
+        req2.setUseCart(false);
+        req2.setItems(List.of(item2));
+
+        assertDoesNotThrow(() -> orderService.createOrdersFromCheckout(parentId, req2));
     }
 
     // =========================================================================

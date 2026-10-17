@@ -40,11 +40,9 @@ public class FlywayConfig {
         }
 
         // BẢO VỆ AN TOÀN BẤT BIẾN: Kiểm tra tên database trong JDBC URL phải kết thúc bằng '_dev'
-        String cleanUrl = databaseUrlDev.contains("?") ? databaseUrlDev.substring(0, databaseUrlDev.indexOf("?")) : databaseUrlDev.trim();
-        int lastSlashIndex = cleanUrl.lastIndexOf("/");
-        String dbName = (lastSlashIndex >= 0) ? cleanUrl.substring(lastSlashIndex + 1).trim() : cleanUrl;
+        String dbName = extractDatabaseName(databaseUrlDev);
 
-        if (!dbName.toLowerCase().endsWith("_dev")) {
+        if (!isAllowedDevDatabaseUrl(databaseUrlDev)) {
             log.error("[FLYWAY-GUARD] LỖI NGUY HIỂM: Tên database '{}' trong DATABASE_URL_DEV không kết thúc bằng '_dev' (đặc biệt cấm chạy trên 'art_course' hay production)! Từ chối khởi chạy Flyway.", dbName);
             return null;
         }
@@ -60,5 +58,35 @@ public class FlywayConfig {
         flyway.migrate();
         log.info("[FLYWAY] Flyway migration cho '{}' đã hoàn tất.", dbName);
         return flyway;
+    }
+
+    public static String extractDatabaseName(String jdbcUrl) {
+        if (jdbcUrl == null || jdbcUrl.trim().isEmpty()) {
+            return "";
+        }
+        String cleanUrl = jdbcUrl.contains("?") ? jdbcUrl.substring(0, jdbcUrl.indexOf("?")) : jdbcUrl.trim();
+        int lastSlashIndex = cleanUrl.lastIndexOf("/");
+        return (lastSlashIndex >= 0) ? cleanUrl.substring(lastSlashIndex + 1).trim() : cleanUrl;
+    }
+
+    public static boolean isAllowedDevDatabaseUrl(String jdbcUrl) {
+        String dbName = extractDatabaseName(jdbcUrl);
+        if (dbName.isEmpty()) {
+            return false;
+        }
+        if ("art_course".equalsIgnoreCase(dbName) || "postgres".equalsIgnoreCase(dbName)) {
+            return false;
+        }
+        return dbName.toLowerCase().endsWith("_dev");
+    }
+
+    @Bean
+    public static org.springframework.beans.factory.config.BeanFactoryPostProcessor flywayEntityManagerDependencyPostProcessor() {
+        return beanFactory -> {
+            if (beanFactory.containsBeanDefinition("entityManagerFactory") && beanFactory.containsBeanDefinition("flyway")) {
+                org.springframework.beans.factory.config.BeanDefinition bd = beanFactory.getBeanDefinition("entityManagerFactory");
+                bd.setDependsOn("flyway");
+            }
+        };
     }
 }

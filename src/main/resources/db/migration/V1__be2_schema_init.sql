@@ -33,6 +33,7 @@ ALTER TABLE public.supplies ADD CONSTRAINT chk_supplies_available_stock
     CHECK (stock_quantity >= reserved_quantity);
 
 -- Course Reviews created_at
+ALTER TABLE public.course_reviews ALTER COLUMN id SET DEFAULT gen_random_uuid();
 ALTER TABLE public.course_reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- Carts
@@ -67,7 +68,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_cart_supply
     ON public.cart_items (cart_id, supply_id) 
     WHERE product_type = 'SUPPLY';
 
--- Orders
+-- Orders (bảng đã có trong schema nền ART_COUSE.sql -> bổ sung cột & ràng buộc bằng ALTER TABLE)
 CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     parent_id UUID NOT NULL REFERENCES public.users(id),
@@ -81,12 +82,28 @@ CREATE TABLE IF NOT EXISTS public.orders (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE public.orders ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.orders ALTER COLUMN shipping_fee SET DEFAULT 0;
+ALTER TABLE public.orders ALTER COLUMN status SET DEFAULT 'PENDING_PAYMENT';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS chk_orders_total_amount;
+ALTER TABLE public.orders ADD CONSTRAINT chk_orders_total_amount CHECK (total_amount >= 0);
+
+ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS chk_orders_shipping_fee;
+ALTER TABLE public.orders ADD CONSTRAINT chk_orders_shipping_fee CHECK (shipping_fee >= 0);
+
+ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS chk_orders_status;
+ALTER TABLE public.orders ADD CONSTRAINT chk_orders_status 
+    CHECK (status IN ('PENDING_PAYMENT', 'PAID', 'EXPIRED', 'CANCELLED'));
+
 CREATE INDEX IF NOT EXISTS idx_orders_parent_id ON public.orders(parent_id);
 CREATE INDEX IF NOT EXISTS idx_orders_teacher_id ON public.orders(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at);
 
--- Order Details
+-- Order Details (giữ nguyên bảng cũ orders_detail của nền, tạo bảng chuẩn order_details cho BE2)
 CREATE TABLE IF NOT EXISTS public.order_details (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
@@ -125,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_order_details_course_id ON public.order_details(c
 CREATE INDEX IF NOT EXISTS idx_order_details_supply_id ON public.order_details(supply_id);
 CREATE INDEX IF NOT EXISTS idx_order_details_child_id ON public.order_details(child_id);
 
--- Payments
+-- Payments (giữ nguyên bảng cũ "Payment" của nền, tạo bảng chuẩn payments cho BE2)
 CREATE TABLE IF NOT EXISTS public.payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL UNIQUE REFERENCES public.orders(id),
@@ -158,7 +175,7 @@ CREATE TABLE IF NOT EXISTS public.webhook_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     gateway VARCHAR(20) NOT NULL,
     event_type VARCHAR(50),
-    payload JSONB NOT NULL,
+    payload TEXT NOT NULL,
     signature_valid BOOLEAN NOT NULL,
     processed_status VARCHAR(20) NOT NULL 
         CHECK (processed_status IN ('SUCCESS', 'FAILED', 'IGNORED', 'WARNING')),
@@ -169,7 +186,7 @@ CREATE TABLE IF NOT EXISTS public.webhook_logs (
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_gateway ON public.webhook_logs(gateway);
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_created_at ON public.webhook_logs(created_at);
 
--- Refunds
+-- Refunds (bảng đã có trong schema nền ART_COUSE.sql -> bổ sung cột & cập nhật FK bằng ALTER TABLE)
 CREATE TABLE IF NOT EXISTS public.refunds (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     payment_id UUID NOT NULL REFERENCES public.payments(id),
@@ -187,6 +204,27 @@ CREATE TABLE IF NOT EXISTS public.refunds (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE public.refunds ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.refunds ALTER COLUMN status SET DEFAULT 'PENDING';
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES public.orders(id);
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS reason TEXT;
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS refund_transaction_code VARCHAR(100);
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS proof_image_url TEXT;
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS handled_by UUID REFERENCES public.users(id);
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.refunds ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.refunds ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE public.refunds DROP CONSTRAINT IF EXISTS fk_refunds_payment;
+ALTER TABLE public.refunds ADD CONSTRAINT fk_refunds_payment FOREIGN KEY (payment_id) REFERENCES public.payments(id);
+
+ALTER TABLE public.refunds DROP CONSTRAINT IF EXISTS chk_refunds_total_amount;
+ALTER TABLE public.refunds ADD CONSTRAINT chk_refunds_total_amount CHECK (total_amount > 0);
+
+ALTER TABLE public.refunds DROP CONSTRAINT IF EXISTS chk_refunds_status;
+ALTER TABLE public.refunds ADD CONSTRAINT chk_refunds_status 
+    CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED'));
+
 CREATE TABLE IF NOT EXISTS public.refund_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     refund_id UUID NOT NULL REFERENCES public.refunds(id) ON DELETE CASCADE,
@@ -201,7 +239,7 @@ CREATE INDEX IF NOT EXISTS idx_refunds_order_id ON public.refunds(order_id);
 CREATE INDEX IF NOT EXISTS idx_refund_items_refund_id ON public.refund_items(refund_id);
 CREATE INDEX IF NOT EXISTS idx_refund_items_detail_id ON public.refund_items(order_detail_id);
 
--- Withdrawal Requests
+-- Withdrawal Requests (bảng đã có trong schema nền ART_COUSE.sql -> ALTER TABLE & đổi kiểu status BOOLEAN sang VARCHAR(20) bằng USING)
 CREATE TABLE IF NOT EXISTS public.withdrawal_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID NOT NULL REFERENCES public.users(id),
@@ -217,6 +255,37 @@ CREATE TABLE IF NOT EXISTS public.withdrawal_requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public.withdrawal_requests ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.withdrawal_requests ALTER COLUMN approved_by DROP NOT NULL;
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS bank_info TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS paid_by UUID REFERENCES public.users(id);
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS rejected_reason TEXT;
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS transaction_code VARCHAR(100);
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS proof_image_url TEXT;
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.withdrawal_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+DROP INDEX IF EXISTS public.uq_teacher_active_withdrawal;
+DROP INDEX IF EXISTS public.idx_withdrawal_requests_status;
+ALTER TABLE public.withdrawal_requests DROP CONSTRAINT IF EXISTS chk_withdrawal_requests_status;
+ALTER TABLE public.withdrawal_requests ALTER COLUMN status DROP DEFAULT;
+ALTER TABLE public.withdrawal_requests 
+    ALTER COLUMN status TYPE VARCHAR(20) 
+    USING (
+        CASE 
+            WHEN status::text IN ('true', 't', '1') THEN 'PAID'
+            WHEN status::text IN ('false', 'f', '0') THEN 'PENDING'
+            ELSE status::text
+        END
+    );
+ALTER TABLE public.withdrawal_requests ALTER COLUMN status SET DEFAULT 'PENDING';
+ALTER TABLE public.withdrawal_requests ALTER COLUMN status SET NOT NULL;
+
+ALTER TABLE public.withdrawal_requests DROP CONSTRAINT IF EXISTS chk_withdrawal_requests_total_amount;
+ALTER TABLE public.withdrawal_requests ADD CONSTRAINT chk_withdrawal_requests_total_amount CHECK (total_amount > 0);
+ALTER TABLE public.withdrawal_requests ADD CONSTRAINT chk_withdrawal_requests_status 
+    CHECK (status IN ('PENDING', 'APPROVED', 'PAID', 'REJECTED'));
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_teacher_active_withdrawal 
     ON public.withdrawal_requests (teacher_id) 
@@ -256,7 +325,7 @@ CREATE TRIGGER trg_prevent_money_ledger_modification
 BEFORE UPDATE OR DELETE ON public.money_ledger
 FOR EACH ROW EXECUTE FUNCTION public.fn_prevent_money_ledger_modification();
 
--- System Config
+-- System Config (bảng đã có trong schema nền ART_COUSE.sql -> ALTER TABLE bổ sung cột & bỏ cột thừa)
 CREATE TABLE IF NOT EXISTS public.system_config (
     key VARCHAR(100) PRIMARY KEY,
     value TEXT NOT NULL,
@@ -265,22 +334,11 @@ CREATE TABLE IF NOT EXISTS public.system_config (
     updated_by UUID REFERENCES public.users(id)
 );
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'system_config' AND column_name = 'total_amount'
-    ) THEN
-        ALTER TABLE public.system_config DROP COLUMN total_amount;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'system_config' AND column_name = 'status'
-    ) THEN
-        ALTER TABLE public.system_config DROP COLUMN status;
-    END IF;
-END $$;
+ALTER TABLE public.system_config ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.system_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.system_config ADD COLUMN IF NOT EXISTS updated_by UUID REFERENCES public.users(id);
+ALTER TABLE public.system_config DROP COLUMN IF EXISTS total_amount;
+ALTER TABLE public.system_config DROP COLUMN IF EXISTS status;
 
 INSERT INTO public.system_config (key, value, description)
 VALUES 
@@ -295,7 +353,7 @@ VALUES
 ON CONFLICT (key) DO UPDATE 
 SET description = EXCLUDED.description;
 
--- Moderation Reviews
+-- Moderation Reviews (bảng đã có trong schema nền ART_COUSE.sql -> ALTER TABLE đồng bộ kiểu & ràng buộc)
 CREATE TABLE IF NOT EXISTS public.moderation_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     staff_id UUID NOT NULL REFERENCES public.users(id),
@@ -307,6 +365,19 @@ CREATE TABLE IF NOT EXISTS public.moderation_reviews (
     reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public.moderation_reviews ALTER COLUMN id SET DEFAULT gen_random_uuid();
+ALTER TABLE public.moderation_reviews ALTER COLUMN decision TYPE VARCHAR(50) USING decision::varchar(50);
+ALTER TABLE public.moderation_reviews ALTER COLUMN decision SET NOT NULL;
+ALTER TABLE public.moderation_reviews ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE public.moderation_reviews DROP CONSTRAINT IF EXISTS chk_moderation_reviews_target_type;
+ALTER TABLE public.moderation_reviews ADD CONSTRAINT chk_moderation_reviews_target_type 
+    CHECK (target_type IN ('TEACHER_PROFILE', 'COURSE', 'SUPPLY', 'CUSTOMIZE_REQUEST', 'REFUND'));
+
+ALTER TABLE public.moderation_reviews DROP CONSTRAINT IF EXISTS chk_moderation_reviews_decision;
+ALTER TABLE public.moderation_reviews ADD CONSTRAINT chk_moderation_reviews_decision 
+    CHECK (decision IN ('APPROVED', 'REJECTED', 'FLAGGED', 'RESOLVED'));
 
 CREATE INDEX IF NOT EXISTS idx_moderation_reviews_staff ON public.moderation_reviews(staff_id);
 CREATE INDEX IF NOT EXISTS idx_moderation_reviews_target ON public.moderation_reviews(target_type, target_id);

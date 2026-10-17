@@ -51,6 +51,9 @@ BE2 cung cấp package contracts để đồng bộ giữa hai bên:
   - Thuộc quyền sở hữu của BE1. Staff chỉ được đọc nội dung cuộc trao đổi khi cần giải quyết khiếu nại liên quan (MSG-06).
 - **Bảng `child_profiles`**:
   - Child tuyệt đối không có quyền gọi các endpoint giỏ hàng, đặt hàng, thanh toán, ví tiền (BR-02, NFR-04). Security filter của BE2 sẽ từ chối token của vai trò Child.
+- **Bảng cũ `"Payment"` và `orders_detail` (từ schema nền `ART_COUSE.sql`)**:
+  - BE2 giữ nguyên không xóa hai bảng cũ `"Payment"` và `orders_detail` để không làm gãy code/script cũ của BE1 nếu còn tham chiếu.
+  - Toàn bộ nghiệp vụ BE2 sử dụng hai bảng chuẩn hóa theo SRS và Quyết định đã chốt: `payments` và `order_details`. Đề nghị BE1 nếu có truy vấn sang chi tiết đơn hoặc thanh toán thì chuyển sang đọc từ `order_details` và `payments`.
 
 ---
 

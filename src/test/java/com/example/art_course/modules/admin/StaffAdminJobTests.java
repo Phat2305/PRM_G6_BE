@@ -277,4 +277,21 @@ public class StaffAdminJobTests {
         assertEquals("NO_COMPLAINT_RELATED", error.getErrorCode());
         assertTrue(error.getMessage().contains("MSG-06"));
     }
+
+    // =========================================================================
+    // TEST 5: UNIT TEST TÊN DATABASE TRONG FLYWAYCONFIG (SAFETY GUARD)
+    // =========================================================================
+    @Test
+    @DisplayName("5. FlywayConfig Guard: chỉ chấp nhận tên database kết thúc bằng _dev, từ chối art_course / postgres / Supabase")
+    void testFlywayConfigDatabaseNameValidation() {
+        assertTrue(com.example.art_course.config.FlywayConfig.isAllowedDevDatabaseUrl("jdbc:postgresql://localhost:5432/art_course_dev"));
+        assertTrue(com.example.art_course.config.FlywayConfig.isAllowedDevDatabaseUrl("jdbc:postgresql://127.0.0.1:55001/test_art_course_dev?loggerLevel=OFF"));
+        assertEquals("art_course_dev", com.example.art_course.config.FlywayConfig.extractDatabaseName("jdbc:postgresql://localhost:5432/art_course_dev?sslmode=disable"));
+
+        // Từ chối tuyệt đối art_course, postgres, rỗng
+        assertFalse(com.example.art_course.config.FlywayConfig.isAllowedDevDatabaseUrl("jdbc:postgresql://localhost:5432/art_course"));
+        assertFalse(com.example.art_course.config.FlywayConfig.isAllowedDevDatabaseUrl("jdbc:postgresql://aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"));
+        assertFalse(com.example.art_course.config.FlywayConfig.isAllowedDevDatabaseUrl(""));
+        assertFalse(com.example.art_course.config.FlywayConfig.isAllowedDevDatabaseUrl(null));
+    }
 }
