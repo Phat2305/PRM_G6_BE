@@ -36,7 +36,7 @@ public class VNPayPaymentGateway implements PaymentGateway {
     public String createPaymentUrl(Order order, Payment payment, String returnUrl) {
         String vnp_Version = "2.1.0";
         String vnp_Command = "pay";
-        String vnp_TxnRef = payment.getId().toString();
+        String vnp_TxnRef = payment.getId() != null ? payment.getId().toString() : order.getId().toString();
         String vnp_IpAddr = "127.0.0.1";
         String vnp_TmnCode = tmnCode != null && !tmnCode.isBlank() ? tmnCode : "DEMO_TMN";
 
@@ -57,6 +57,7 @@ public class VNPayPaymentGateway implements PaymentGateway {
 
         Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
+        formatter.setTimeZone(TimeZone.getTimeZone("Etc/GMT+7"));
         String vnp_CreateDate = formatter.format(cld.getTime());
         vnp_Params.put("vnp_CreateDate", vnp_CreateDate);
 
@@ -93,26 +94,31 @@ public class VNPayPaymentGateway implements PaymentGateway {
             return new GatewayCallbackResult(false, false, null, BigDecimal.ZERO, "Thiếu chữ ký vnp_SecureHash");
         }
 
-        Map<String, String> cleanParams = new HashMap<>(params);
-        cleanParams.remove("vnp_SecureHash");
-        cleanParams.remove("vnp_SecureHashType");
-
-        List<String> fieldNames = new ArrayList<>(cleanParams.keySet());
+        List<String> fieldNames = new ArrayList<>();
+        for (String key : params.keySet()) {
+            if (key.startsWith("vnp_") && !"vnp_SecureHash".equals(key) && !"vnp_SecureHashType".equals(key)) {
+                fieldNames.add(key);
+            }
+        }
         Collections.sort(fieldNames);
 
         StringBuilder hashData = new StringBuilder();
+        StringBuilder rawHashData = new StringBuilder();
         for (String fieldName : fieldNames) {
-            String value = cleanParams.get(fieldName);
+            String value = params.get(fieldName);
             if (value != null && !value.isEmpty()) {
                 hashData.append(fieldName).append('=').append(URLEncoder.encode(value, StandardCharsets.US_ASCII)).append('&');
+                rawHashData.append(fieldName).append('=').append(value).append('&');
             }
         }
         if (hashData.length() > 0) hashData.setLength(hashData.length() - 1);
+        if (rawHashData.length() > 0) rawHashData.setLength(rawHashData.length() - 1);
 
         String secret = hashSecret != null && !hashSecret.isBlank() ? hashSecret : "DEMO_SECRET_KEY";
         String calculatedHash = hmacSHA512(secret, hashData.toString());
+        String rawCalculatedHash = hmacSHA512(secret, rawHashData.toString());
 
-        boolean validSignature = secureHash.equalsIgnoreCase(calculatedHash);
+        boolean validSignature = secureHash.equalsIgnoreCase(calculatedHash) || secureHash.equalsIgnoreCase(rawCalculatedHash);
         String responseCode = params.get("vnp_ResponseCode");
         boolean success = "00".equals(responseCode);
 
@@ -130,7 +136,8 @@ public class VNPayPaymentGateway implements PaymentGateway {
 
     @Override
     public GatewayQueryResult queryTransaction(Payment payment) {
-        return new GatewayQueryResult(true, true, payment.getGatewayTransactionId(), payment.getAmount());
+        boolean isPaid = payment.getGatewayTransactionId() != null;
+        return new GatewayQueryResult(true, isPaid, payment.getGatewayTransactionId(), payment.getAmount());
     }
 
     public static String hmacSHA512(String key, String data) {

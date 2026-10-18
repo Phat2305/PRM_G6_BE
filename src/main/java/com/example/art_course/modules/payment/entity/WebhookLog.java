@@ -25,7 +25,8 @@ public class WebhookLog {
     @Column(name = "event_type", length = 50)
     private String eventType;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
     private String payload;
 
     @Column(name = "signature_valid", nullable = false)
