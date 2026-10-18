@@ -41,7 +41,10 @@ public class AuthService {
         user.setPassword(
                 passwordEncoder.encode(request.getPassword())
         );
-        user.setRole("USER");
+        String role = (request.getRole() != null && !request.getRole().isBlank()) 
+                ? request.getRole().trim().toUpperCase() 
+                : "USER";
+        user.setRole(role);
         user.setStatus("ACTIVE");
 
         userRepository.save(user);

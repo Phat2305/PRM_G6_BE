@@ -10,8 +10,10 @@ import com.example.art_course.modules.course.repository.CourseRepository;
 import com.example.art_course.modules.product.entity.Supply;
 import com.example.art_course.modules.product.repository.SupplyRepository;
 import jakarta.persistence.EntityManager;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -199,16 +201,30 @@ public class CartService {
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class AddToCartInput {
+        @com.fasterxml.jackson.annotation.JsonAlias({"itemType", "productType", "item_type", "product_type", "type"})
         private String itemType;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"courseId", "course_id"})
         private UUID courseId;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"supplyId", "supply_id"})
         private UUID supplyId;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"childId", "child_id"})
         private UUID childId;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"quantity", "qty", "amount"})
         private int quantity;
     }
 
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class UpdateQuantityInput {
+        @com.fasterxml.jackson.annotation.JsonAlias({"quantity", "qty", "amount"})
         private int quantity;
     }
 }
