@@ -8,8 +8,10 @@ import com.example.art_course.auth.security.JwtTokenProvider;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AuthService {
@@ -31,21 +33,75 @@ public class AuthService {
     // Register
     public AuthResponse register(RegisterRequest request) {
 
+        if (request.getUsername() == null
+                || request.getUsername().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Username is required"
+            );
+        }
+
+        if (request.getPassword() == null
+                || request.getPassword().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Password is required"
+            );
+        }
+
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new RuntimeException("Username already exists");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Username already exists"
+            );
+        }
+
+        if (request.getRole() == null
+                || request.getRole().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Role is required"
+            );
+        }
+
+        String requestedRole = request.getRole()
+                .trim()
+                .toUpperCase();
+
+        String role;
+        String status;
+
+        switch (requestedRole) {
+            case "PARENT" -> {
+                role = "PARENT";
+                status = "ACTIVE";
+            }
+            case "TEACHER" -> {
+                // Chưa cấp quyền giáo viên khi tự đăng ký
+                role = "USER";
+                status = "PENDING";
+            }
+            default -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Role must be PARENT or TEACHER"
+            );
         }
 
         User user = new User();
-
-        user.setUsername(request.getUsername());
+        user.setUsername(request.getUsername().trim());
         user.setPassword(
                 passwordEncoder.encode(request.getPassword())
         );
+<<<<<<< HEAD
         String role = (request.getRole() != null && !request.getRole().isBlank()) 
                 ? request.getRole().trim().toUpperCase() 
                 : "USER";
         user.setRole(role);
         user.setStatus("ACTIVE");
+=======
+        user.setRole(role);
+        user.setStatus(status);
+>>>>>>> e008ab0718e385c7bcf5de37661cee7b57128fce
 
         userRepository.save(user);
 
