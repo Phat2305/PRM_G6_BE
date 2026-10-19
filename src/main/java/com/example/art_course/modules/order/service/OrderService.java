@@ -17,7 +17,9 @@ import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.product.entity.Supply;
 import com.example.art_course.modules.product.repository.SupplyRepository;
 import jakarta.persistence.EntityManager;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -307,20 +309,45 @@ public class OrderService {
     public record OrderDetailResponse(Order order, List<OrderDetail> details) {}
 
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class CheckoutRequest {
-        private boolean useCart = true;
+        @com.fasterxml.jackson.annotation.JsonAlias({"useCart", "use_cart"})
+        private Boolean useCart = true;
+
+        public boolean isUseCart() {
+            return useCart == null || useCart;
+        }
+
         private List<CheckoutItem> items;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"recipientName", "recipient_name"})
         private String recipientName;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"recipientPhone", "recipient_phone", "phone"})
         private String recipientPhone;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"shippingAddress", "shipping_address", "address"})
         private String shippingAddress;
     }
 
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class CheckoutItem {
+        @com.fasterxml.jackson.annotation.JsonAlias({"itemType", "productType", "item_type", "product_type", "type"})
         private String itemType;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"courseId", "course_id"})
         private UUID courseId;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"supplyId", "supply_id"})
         private UUID supplyId;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"childId", "child_id"})
         private UUID childId;
+
+        @com.fasterxml.jackson.annotation.JsonAlias({"quantity", "qty", "amount"})
         private int quantity;
     }
 }

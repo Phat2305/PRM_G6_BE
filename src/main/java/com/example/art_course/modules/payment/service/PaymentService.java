@@ -113,6 +113,8 @@ public class PaymentService {
         payment.setNetAmount(teacherNet);
         payment.setStatus(PaymentStatus.PENDING);
 
+        payment = paymentRepository.saveAndFlush(payment);
+
         PaymentGateway gateway = paymentGatewayFactory.getGateway(payment.getGateway());
         String url = gateway.createPaymentUrl(order, payment, request.getReturnUrl());
         payment.setPaymentUrl(url);
@@ -138,9 +140,11 @@ public class PaymentService {
         PaymentGateway gateway = paymentGatewayFactory.getGateway(gatewayCode);
         PaymentGateway.GatewayCallbackResult callbackResult = gateway.verifyCallback(params);
 
+        String payloadJson = toJson(params);
+
         WebhookLog webhookLog = WebhookLog.builder()
                 .gateway(gatewayCode.toUpperCase())
-                .payload(params.toString())
+                .payload(payloadJson)
                 .signatureValid(callbackResult.validSignature())
                 .build();
 
@@ -178,7 +182,7 @@ public class PaymentService {
             webhookLog.setProcessedStatus("IGNORED");
             webhookLog.setResponseMessage("Idempotent: Giao dịch đã được thanh toán thành công trước đó (status=" + payment.getStatus() + ")");
             webhookLogRepository.save(webhookLog);
-            return Map.of("status", "SUCCESS", "message", "Idempotent: Đã xử lý trước đó");
+            return Map.of("RspCode", "02", "Message", "Order already confirmed", "status", "SUCCESS", "message", "Idempotent: Đã xử lý trước đó");
         }
 
         if (callbackResult.gatewayTransactionId() != null) {
@@ -189,7 +193,7 @@ public class PaymentService {
                 webhookLog.setProcessedStatus("IGNORED");
                 webhookLog.setResponseMessage("Idempotent: gateway_transaction_id đã tồn tại");
                 webhookLogRepository.save(webhookLog);
-                return Map.of("status", "SUCCESS", "message", "Idempotent: Đã xử lý trước đó");
+                return Map.of("RspCode", "02", "Message", "Order already confirmed", "status", "SUCCESS", "message", "Idempotent: Đã xử lý trước đó");
             }
         }
 
@@ -201,7 +205,7 @@ public class PaymentService {
             webhookLog.setProcessedStatus("FAILED");
             webhookLog.setResponseMessage("Giao dịch thất bại từ cổng: " + callbackResult.message());
             webhookLogRepository.save(webhookLog);
-            return Map.of("status", "FAILED", "message", callbackResult.message());
+            return Map.of("RspCode", "00", "Message", "Confirm Success", "status", "FAILED", "message", callbackResult.message());
         }
 
         // 5. Kiểm tra số tiền thanh toán (PAY-02)
@@ -221,7 +225,7 @@ public class PaymentService {
         webhookLog.setResponseMessage("Xử lý webhook thanh toán thành công");
         webhookLogRepository.save(webhookLog);
 
-        return Map.of("status", "SUCCESS", "message", "Thanh toán thành công");
+        return Map.of("RspCode", "00", "Message", "Confirm Success", "status", "SUCCESS", "message", "Thanh toán thành công");
     }
 
     /**
@@ -382,5 +386,24 @@ public class PaymentService {
             } catch (Exception ignored) {}
         }
         return null;
+    }
+
+    private String toJson(Map<String, String> map) {
+        if (map == null || map.isEmpty()) return "{}";
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            if (!first) sb.append(",");
+            first = false;
+            sb.append("\"").append(escapeJson(entry.getKey())).append("\":\"")
+              .append(escapeJson(entry.getValue())).append("\"");
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
     }
 }

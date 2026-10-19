@@ -29,6 +29,7 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final UserRepository userRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PaymentController(PaymentService paymentService, UserRepository userRepository) {
         this.paymentService = paymentService;
         this.userRepository = userRepository;
