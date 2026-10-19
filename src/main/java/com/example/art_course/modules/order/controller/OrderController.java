@@ -3,7 +3,6 @@ package com.example.art_course.modules.order.controller;
 import com.example.art_course.common.ApiResponse;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.service.OrderService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -23,9 +22,6 @@ public class OrderController {
         this.userRepository = userRepository;
     }
 
-    public OrderController(OrderService orderService) {
-        this(orderService, null);
-    }
 
     @PostMapping("/checkout")
     @PreAuthorize("hasRole('PARENT')")

@@ -9,7 +9,6 @@ import com.example.art_course.modules.payment.service.PaymentService;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,9 +34,6 @@ public class PaymentController {
         this.userRepository = userRepository;
     }
 
-    public PaymentController(PaymentService paymentService) {
-        this(paymentService, null);
-    }
 
     /**
      * Tạo payment request và link thanh toán cổng VNPay/MoMo (PAY-01).
