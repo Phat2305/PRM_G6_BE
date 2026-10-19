@@ -78,7 +78,7 @@ public class AuthService {
             }
             case "TEACHER" -> {
                 // Chưa cấp quyền giáo viên khi tự đăng ký
-                role = "USER";
+                role = "TEACHER";
                 status = "PENDING";
             }
             default -> throw new ResponseStatusException(
