@@ -1,15 +1,15 @@
 package com.example.art_course.auth.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
 @Getter
 @Setter
 public class LoginRequest {
-    @JsonAlias({"username", "user_name", "email", "phone"})
+    @NotBlank(message = "Username là bắt buộc")
     private String username;
 
-    @JsonAlias({"password", "pass"})
+    @NotBlank(message = "Password là bắt buộc")
     private String password;
 }

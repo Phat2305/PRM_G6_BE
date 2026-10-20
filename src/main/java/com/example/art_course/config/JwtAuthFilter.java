@@ -37,6 +37,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
     }
 
+    // Token cũ/hết hạn không được chặn đăng nhập lại
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/auth/") || path.startsWith("/api/auth/");
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -74,14 +81,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     role = claims.get("roleName", String.class);
                 }
 
-                // 3. BR-02, NFR-04: Vai trò CHILD bị chặn tuyệt đối không được gọi API thương mại
-                if ("CHILD".equalsIgnoreCase(role)) {
-                    response.setStatus(HttpStatus.FORBIDDEN.value());
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"FORBIDDEN\",\"message\":\"Tài khoản con không có quyền truy cập chức năng này (BR-02, NFR-04)\"}}");
-                    return;
-                }
-
+                // 3. BR-02, NFR-04: CHILD bị chặn ở API thương mại trong SecurityConfig, không chặn ở đây
                 if (userIdStr != null && role != null) {
                     Object principal;
                     try {

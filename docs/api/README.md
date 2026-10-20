@@ -1,35 +1,18 @@
-# Hướng Dẫn Sử Dụng OpenAPI / Swagger BE2 (Art Course & Supplies)
+# Hướng Dẫn Sử Dụng Swagger BE2 (Art Course & Supplies)
 
-Tài liệu đặc tả toàn bộ API của phân hệ **Backend 2 (BE2)** theo chuẩn **OpenAPI 3.0.3**.
+Tài liệu API được **tự sinh từ code** (springdoc-openapi) nên luôn khớp controller và DTO.
 
----
+## 1. Xem tài liệu
 
-## 1. Các Tệp Đặc Tả Có Sẵn
+Khi ứng dụng chạy:
+- Giao diện Swagger UI: **`http://localhost:8080/swagger-ui.html`**
+- Đặc tả OpenAPI dạng JSON: `http://localhost:8080/v3/api-docs`
 
-- **File đặc tả OpenAPI 3.0 YAML**: [`docs/api/openapi.yaml`](./openapi.yaml)
-- **Tài nguyên Web tĩnh trong Spring Boot**:
-  - `src/main/resources/static/swagger/openapi.yaml`
-  - `src/main/resources/static/swagger/index.html`
+Cả hai đường dẫn được `permitAll()` trong `SecurityConfig.java`.
 
----
+Muốn import vào Postman/Insomnia: nhập đường dẫn `http://localhost:8080/v3/api-docs`.
 
-## 2. Cách Xem Giao Diện Swagger UI
-
-### Cách 1: Truy cập trực tiếp khi ứng dụng chạy (Localhost)
-Khi ứng dụng Spring Boot chạy, truy cập vào đường dẫn:
-👉 **`http://localhost:8080/swagger/index.html`**
-
-*(Đường dẫn này đã được cấu hình công khai `permitAll()` trong `SecurityConfig.java`, không yêu cầu Bearer token để xem tài liệu).*
-
-### Cách 2: Xem trực tuyến qua Swagger Editor
-1. Truy cập [Swagger Editor Online](https://editor.swagger.io/).
-2. Chọn **File** -> **Import file** -> Chọn tệp [`docs/api/openapi.yaml`](./openapi.yaml).
-3. Giao diện trực quan và chức năng "Try it out" sẽ hiển thị đầy đủ ngay lập tức.
-
-### Cách 3: Import vào Postman / Insomnia
-1. Mở Postman -> Bấm **Import**.
-2. Kéo thả file [`docs/api/openapi.yaml`](./openapi.yaml) vào.
-3. Postman sẽ tự động sinh Collection hoàn chỉnh với hơn 30 endpoint, đầy đủ request body mẫu, tham số URL và security scheme.
+Đổi code xong chỉ cần chạy lại ứng dụng là tài liệu cập nhật.
 
 ---
 

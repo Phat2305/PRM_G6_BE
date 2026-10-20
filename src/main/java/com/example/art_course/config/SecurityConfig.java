@@ -2,6 +2,7 @@ package com.example.art_course.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -36,12 +37,26 @@ public class SecurityConfig {
                                 "/api/v1/supplies/**",
                                 "/api/v1/payments/webhook/**",
                                 "/api/v1/payments/return/**",
-                                "/swagger/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
                                 "/health"
                         ).permitAll()
                         .requestMatchers("/api/v1/cart/**", "/api/v1/orders/checkout", "/api/v1/orders/my-orders").hasRole("PARENT")
                         .requestMatchers("/api/v1/orders/teacher-orders").hasRole("TEACHER")
                         .requestMatchers("/api/v1/course-reviews/**").hasRole("PARENT")
+                        // BR-02, NFR-04: CHILD không được gọi API mua hàng/thanh toán/tiền
+                        .requestMatchers(
+                                "/api/v1/orders/**",
+                                "/api/v1/payments/**",
+                                "/api/v1/refunds/**",
+                                "/api/refunds/**",
+                                "/api/v1/fulfillment/**",
+                                "/api/v1/teacher/finance/**"
+                        ).access((authentication, context) -> new AuthorizationDecision(
+                                authentication.get().isAuthenticated()
+                                        && authentication.get().getAuthorities().stream()
+                                        .noneMatch(a -> "ROLE_CHILD".equals(a.getAuthority()))))
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

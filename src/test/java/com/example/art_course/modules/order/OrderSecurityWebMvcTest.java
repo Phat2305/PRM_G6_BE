@@ -8,6 +8,7 @@ import com.example.art_course.config.SecurityConfig;
 import com.example.art_course.modules.order.controller.OrderController;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.service.OrderService;
+import com.example.art_course.user.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,8 +66,13 @@ public class OrderSecurityWebMvcTest {
         }
 
         @Bean
-        public OrderController orderController(OrderService orderService) {
-            return new OrderController(orderService);
+        public UserRepository userRepository() {
+            return mock(UserRepository.class);
+        }
+
+        @Bean
+        public OrderController orderController(OrderService orderService, UserRepository userRepository) {
+            return new OrderController(orderService, userRepository);
         }
     }
 
