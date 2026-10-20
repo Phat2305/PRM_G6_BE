@@ -57,7 +57,8 @@ public class AuthService {
         user.setRole(request.getRole().name());
         user.setStatus(request.getRole().initialStatus());
 
-        userRepository.save(user);
+        // Flush trước JDBC: GenerationType.UUID đã có id nhưng dòng users chưa vào DB, FK profile sẽ lỗi.
+        userRepository.saveAndFlush(user);
 
         // Họ tên nằm ở bảng profile theo role; teacher chưa có thông tin ngân hàng khi đăng ký
         String fullName = request.getFullName().trim();
