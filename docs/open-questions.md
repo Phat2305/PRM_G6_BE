@@ -124,5 +124,9 @@ Nguồn sự thật ưu tiên:
   - Khi duyệt hoàn tiền dụng cụ: Trả lại tồn kho khả dụng cho giáo viên nếu hàng chưa giao thành công.
   - Khi Staff hoàn tất chuyển khoản hoàn: Ghi sổ cái `REFUND` để trừ số dư tương ứng.
 
+## 8. Đăng ký: phone và email
+
+`RegisterRequest` bắt buộc `phone` và `email`, nhưng bảng `users`, `parent_profiles`, `teacher_profiles` không có hai cột này. `AuthService.register` chỉ lưu username, mật khẩu, role, status và `full_name` (giáo viên thêm `bank_account_info` rỗng). Frontend vẫn gửi phone và email để qua validation. Chưa thêm cột vì bảng thuộc BE1.
+
 
 

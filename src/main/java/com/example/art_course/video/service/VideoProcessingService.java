@@ -20,16 +20,18 @@ public class VideoProcessingService {
 
     private final String ffmpegPath;
     private final Path hlsDirectory;
+    private final R2StorageService r2StorageService;
 
     public VideoProcessingService(
             @Value("${app.video.ffmpeg-path}") String ffmpegPath,
-            @Value("${app.video.hls-dir}") String hlsDir) {
+            @Value("${app.video.hls-dir}") String hlsDir,
+            R2StorageService r2StorageService) {
 
         this.ffmpegPath = ffmpegPath;
-
         this.hlsDirectory = Paths.get(hlsDir)
                 .toAbsolutePath()
                 .normalize();
+        this.r2StorageService = r2StorageService;
     }
 
     public String convertToHls(String inputPath) {
@@ -43,8 +45,7 @@ public class VideoProcessingService {
                 .toAbsolutePath()
                 .normalize();
 
-        if (!Files.isRegularFile(input)
-                || !Files.isReadable(input)) {
+        if (!Files.isRegularFile(input) || !Files.isReadable(input)) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "Source video not found or unreadable");
@@ -52,8 +53,7 @@ public class VideoProcessingService {
 
         String outputId = UUID.randomUUID().toString();
 
-        Path outputDirectory = hlsDirectory.resolve(outputId)
-                .normalize();
+        Path outputDirectory = hlsDirectory.resolve(outputId).normalize();
 
         if (!outputDirectory.startsWith(hlsDirectory)) {
             throw new ResponseStatusException(
@@ -90,18 +90,11 @@ public class VideoProcessingService {
             boolean completed;
 
             try {
-                completed = process.waitFor(
-                        30, TimeUnit.MINUTES);
+                completed = process.waitFor(30, TimeUnit.MINUTES);
             } catch (InterruptedException e) {
                 process.destroyForcibly();
-
-                try {
-                    process.waitFor();
-                } catch (InterruptedException ignored) {
-                    // Preserve the interrupted state below.
-                }
-
                 Thread.currentThread().interrupt();
+
                 throw new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR,
                         "Video processing was interrupted",
@@ -110,12 +103,6 @@ public class VideoProcessingService {
 
             if (!completed) {
                 process.destroyForcibly();
-
-                try {
-                    process.waitFor();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
 
                 throw new ResponseStatusException(
                         HttpStatus.GATEWAY_TIMEOUT,
@@ -129,12 +116,31 @@ public class VideoProcessingService {
                         "Video conversion failed. Check ffmpeg.log");
             }
 
+            // Upload playlist and segments to R2.
+            String objectPrefix = "hls/" + outputId + "/";
+
+            r2StorageService.uploadFile(
+                    objectPrefix + "master.m3u8",
+                    playlist,
+                    "application/vnd.apple.mpegurl");
+
+            try (Stream<Path> files = Files.list(outputDirectory)) {
+                files.filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName()
+                                .toString()
+                                .matches("segment_\\d+\\.ts"))
+                        .forEach(path -> r2StorageService.uploadFile(
+                                objectPrefix + path.getFileName(),
+                                path,
+                                "video/mp2t"));
+            }
+
             return outputId;
 
         } catch (IOException e) {
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Cannot execute FFmpeg. Check its installation and path",
+                    "Cannot execute FFmpeg or access HLS files",
                     e);
 
         } catch (RuntimeException e) {

@@ -28,7 +28,7 @@ public class ArtCourseApplication {
         try (BufferedReader reader = new BufferedReader(new FileReader(envFile, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                line = line.trim();
+                line = line. trim();
                 if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }

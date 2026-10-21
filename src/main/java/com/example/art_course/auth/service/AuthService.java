@@ -59,7 +59,8 @@ public class AuthService {
         );
         user.setRole(request.getRole().name());
         user.setStatus(request.getRole().initialStatus());
-        // saveAndFlush để lỗi UNIQUE (đăng ký trùng username cùng lúc) trả 409 thay vì 500
+        // Flush trước JDBC: GenerationType.UUID đã có id nhưng dòng users chưa vào DB, FK profile sẽ lỗi.
+        // UNIQUE trùng lúc đăng ký trả 409 thay vì 500.
         try {
             user = userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {

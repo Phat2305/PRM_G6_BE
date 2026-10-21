@@ -8,21 +8,19 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+// Flutter web chạy ở localhost gọi API 8080. Chỉ mở cho origin local.
 @Configuration
 public class CorsConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration config = new CorsConfiguration();
 
-        // Cho phép Flutter Web chạy trên localhost
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:*",
                 "http://127.0.0.1:*"
         ));
 
-        // Cho phép các HTTP Method
         config.setAllowedMethods(List.of(
                 "GET",
                 "POST",
@@ -32,13 +30,11 @@ public class CorsConfig {
                 "OPTIONS"
         ));
 
-        // Cho phép frontend gửi JWT
         config.setAllowedHeaders(List.of(
                 "Authorization",
                 "Content-Type",
                 "Accept",
                 "Origin",
-                // Flutter Web gửi header này để bỏ trang cảnh báo của ngrok
                 "ngrok-skip-browser-warning"
         ));
 
@@ -48,15 +44,10 @@ public class CorsConfig {
 
         // JWT qua Authorization header, không dùng cookie
         config.setAllowCredentials(false);
-
-        // Cache preflight 1 giờ
         config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-
         return source;
     }
 }

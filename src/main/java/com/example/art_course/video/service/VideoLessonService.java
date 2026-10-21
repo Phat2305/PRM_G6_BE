@@ -43,7 +43,7 @@ public class VideoLessonService {
     public String uploadLessonVideo(
             UUID lessonId,
             MultipartFile file,
-            String username) {
+            String userId) {
 
         if (lessonId == null) {
             throw new ResponseStatusException(
@@ -67,7 +67,17 @@ public class VideoLessonService {
                         HttpStatus.NOT_FOUND,
                         "Course not found"));
 
-        User user = userRepository.findByUsername(username)
+        UUID parsedUserId;
+
+        try {
+            parsedUserId = UUID.fromString(userId);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid authenticated user ID");
+        }
+
+        User user = userRepository.findById(parsedUserId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "User not found"));

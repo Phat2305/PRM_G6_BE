@@ -1,8 +1,9 @@
 
 package com.example.art_course.video.controller;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
+import com.example.art_course.video.service.R2StorageService;
+
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -11,22 +12,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/videos/hls")
 public class VideoHlsController {
 
-    private final Path hlsDirectory;
+    private final R2StorageService r2StorageService;
 
-    public VideoHlsController(
-            @Value("${app.video.hls-dir}") String hlsDir) {
-        this.hlsDirectory = Paths.get(hlsDir)
-                .toAbsolutePath()
-                .normalize();
+    public VideoHlsController(R2StorageService r2StorageService) {
+        this.r2StorageService = r2StorageService;
     }
 
     @GetMapping("/{hlsId}/{fileName}")
@@ -34,55 +34,58 @@ public class VideoHlsController {
             @PathVariable String hlsId,
             @PathVariable String fileName) {
 
-        // Only allow UUID-based HLS directories.
-        if (hlsId == null
-                || !hlsId.matches(
-                "(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
+        // Validate video ID.
+        try {
+            UUID.fromString(hlsId);
+        } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Invalid video ID");
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid video ID");
         }
 
-        // Only serve playlists and generated MPEG-TS segments.
+        // Only allow the playlist and generated MPEG-TS segments.
         if (fileName == null
                 || !(fileName.equals("master.m3u8")
                 || fileName.matches("segment_\\d+\\.ts"))) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Invalid HLS file name");
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid HLS file name");
         }
 
-        Path videoDirectory = hlsDirectory.resolve(hlsId).normalize();
-        Path file = videoDirectory.resolve(fileName).normalize();
+        String objectKey = "hls/" + hlsId + "/" + fileName;
 
-        if (!videoDirectory.startsWith(hlsDirectory)
-                || !file.startsWith(videoDirectory)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Invalid file path");
+        ResponseInputStream<GetObjectResponse> object =
+                r2StorageService.getObject(objectKey);
+
+        MediaType mediaType = fileName.endsWith(".m3u8")
+                ? MediaType.parseMediaType(
+                "application/vnd.apple.mpegurl")
+                : MediaType.parseMediaType("video/mp2t");
+
+        Resource resource;
+
+        if (fileName.endsWith(".m3u8")) {
+            try (object) {
+                String playlist = new String(
+                        object.readAllBytes(),
+                        StandardCharsets.UTF_8);
+
+                // Keep segment URLs relative to this playlist endpoint.
+                resource = new org.springframework.core.io.ByteArrayResource(
+                        playlist.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Cannot read HLS playlist from R2",
+                        e);
+            }
+        } else {
+            resource = new InputStreamResource(object);
         }
 
-        if (!Files.isRegularFile(file) || !Files.isReadable(file)) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "HLS file not found");
-        }
-
-        try {
-            MediaType mediaType = fileName.endsWith(".m3u8")
-                    ? MediaType.parseMediaType("application/vnd.apple.mpegurl")
-                    : MediaType.parseMediaType("video/mp2t");
-
-            Resource resource = new FileSystemResource(file);
-
-            return ResponseEntity.ok()
-                    .contentType(mediaType)
-                    .header(
-                            HttpHeaders.CACHE_CONTROL,
-                            "private, no-cache")
-                    .body(resource);
-
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Unable to serve HLS file",
-                    e);
-        }
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-cache")
+                .body(resource);
     }
 }

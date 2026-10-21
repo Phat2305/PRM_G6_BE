@@ -66,7 +66,7 @@ public class CourseService {
     @Transactional
     public Course createCourse(
             CreateCourseRequest request,
-            String username
+            String userId
     ) {
         if (request.getName() == null
                 || request.getName().isBlank()) {
@@ -76,8 +76,7 @@ public class CourseService {
             );
         }
 
-        User currentUser = getUserByUsername(username);
-
+        User currentUser = getUserById(userId);
         Course course = Course.builder()
                 // Never trust teacherId from the request body.
                 .teacherId(currentUser.getId())
@@ -97,11 +96,10 @@ public class CourseService {
     public Course updateCourse(
             UUID id,
             UpdateCourseRequest request,
-            String username
+            String userId
     ) {
         Course course = getCourseById(id);
-        User currentUser = getUserByUsername(username);
-
+        User currentUser = getUserById(userId);
         checkOwnership(course, currentUser);
 
         if (request.getName() != null) {
@@ -145,23 +143,32 @@ public class CourseService {
     }
 
     @Transactional
-    public void deleteCourse(UUID id, String username) {
+    public void deleteCourse(UUID id, String userId) {
         Course course = getCourseById(id);
-        User currentUser = getUserByUsername(username);
-
+        User currentUser = getUserById(userId);
         checkOwnership(course, currentUser);
 
         courseRepository.delete(course);
     }
 
-    private User getUserByUsername(String username) {
-        return userRepository.findByUsername(username)
+    private User getUserById(String userId) {
+        UUID id;
+
+        try {
+            id = UUID.fromString(userId);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid user ID in authentication"
+            );
+        }
+
+        return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "User not found"
                 ));
     }
-
     private void checkOwnership(Course course, User user) {
         if (course.getTeacherId() == null
                 || !course.getTeacherId().equals(user.getId())) {
