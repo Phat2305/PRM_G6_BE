@@ -25,19 +25,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-<<<<<<< Updated upstream
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-=======
-                .cors(org.springframework.security.config.Customizer.withDefaults())
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
->>>>>>> Stashed changes
                         .requestMatchers(
                                 "/",
                                 "/index.html",
@@ -75,16 +67,4 @@ public class SecurityConfig {
 
         return http.build();
     }
-
-    @Bean
-    public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
-        org.springframework.web.cors.CorsConfiguration c = new org.springframework.web.cors.CorsConfiguration();
-        c.setAllowedOriginPatterns(java.util.List.of("*"));
-        c.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
-        c.setAllowedHeaders(java.util.List.of("*"));
-        c.setExposedHeaders(java.util.List.of("*"));
-        c.setAllowCredentials(true);
-        org.springframework.web.cors.UrlBasedCorsConfigurationSource s = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
-        s.registerCorsConfiguration("/**", c);
-        return s;
-    }}
+}
