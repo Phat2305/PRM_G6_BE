@@ -1,8 +1,9 @@
 
 package com.example.art_course.video.controller;
 
+import com.example.art_course.video.dto.VideoProcessingMessage;
+import com.example.art_course.video.messaging.VideoProcessingPublisher;
 import com.example.art_course.video.service.VideoLessonService;
-import com.example.art_course.video.service.VideoProcessingService;
 import com.example.art_course.video.service.VideoStorageService;
 import com.example.art_course.video.service.VideoStorageService.StoredVideo;
 
@@ -21,42 +22,56 @@ import java.util.UUID;
 public class VideoController {
 
     private final VideoStorageService storageService;
-    private final VideoProcessingService processingService;
+    private final VideoProcessingPublisher videoProcessingPublisher;
     private final VideoLessonService videoLessonService;
 
     public VideoController(
             VideoStorageService storageService,
-            VideoProcessingService processingService,
+            VideoProcessingPublisher videoProcessingPublisher,
             VideoLessonService videoLessonService
     ) {
         this.storageService = storageService;
-        this.processingService = processingService;
+        this.videoProcessingPublisher = videoProcessingPublisher;
         this.videoLessonService = videoLessonService;
     }
 
-    // Upload MP4 and convert it to HLS
+    /**
+     * Upload a video and enqueue HLS processing through RabbitMQ.
+     */
     @PostMapping(
             value = "/upload",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    @ResponseStatus(HttpStatus.CREATED)
-    public UploadVideoResponse upload(
+    public ResponseEntity<UploadVideoResponse> upload(
             @RequestParam("file") MultipartFile file
     ) {
         StoredVideo storedVideo = storageService.store(file);
 
-        String hlsId = processingService.convertToHls(
+        String videoId = UUID.randomUUID().toString();
+
+        VideoProcessingMessage message = new VideoProcessingMessage(
+                videoId,
                 storedVideo.absolutePath()
         );
 
-        return new UploadVideoResponse(
+        videoProcessingPublisher.publish(message);
+
+        UploadVideoResponse response = new UploadVideoResponse(
+                videoId,
                 storedVideo.fileName(),
-                hlsId,
-                "READY"
+                "QUEUED",
+                null
         );
+
+        return ResponseEntity
+                .status(HttpStatus.ACCEPTED)
+                .body(response);
     }
 
-
+    /**
+     * Upload a video directly to a lesson.
+     * This endpoint remains synchronous.
+     */
     @PostMapping(
             value = "/lessons/{lessonId}/upload",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
@@ -79,11 +94,11 @@ public class VideoController {
         ));
     }
 
-
     public record UploadVideoResponse(
+            String videoId,
             String originalFileName,
-            String hlsId,
-            String status
+            String status,
+            String hlsId
     ) {
     }
 }

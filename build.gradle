@@ -21,6 +21,7 @@ repositories {
 }
 
 dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
     // Cloudflare R2
     implementation platform('software.amazon.awssdk:bom:2.31.0')
     implementation 'software.amazon.awssdk:s3'

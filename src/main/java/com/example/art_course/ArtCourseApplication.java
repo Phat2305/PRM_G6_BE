@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableAsync;
-
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 @SpringBootApplication
 @EnableRetry
 @EnableAsync
+@EnableRabbit
 public class ArtCourseApplication {
 
     public static void main(String[] args) {
