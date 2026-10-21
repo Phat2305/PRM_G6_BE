@@ -59,6 +59,7 @@ public class AuthService {
         );
         user.setRole(request.getRole().name());
         user.setStatus(request.getRole().initialStatus());
+<<<<<<< Updated upstream
         // saveAndFlush để lỗi UNIQUE (đăng ký trùng username cùng lúc) trả 409 thay vì 500
         try {
             userRepository.saveAndFlush(user);
@@ -67,6 +68,12 @@ public class AuthService {
         }
          
         // Họ tên nằm ở bảng profile theo role
+=======
+
+        user = userRepository.saveAndFlush(user);
+
+        // Họ tên nằm ở bảng profile theo role; teacher chưa có thông tin ngân hàng khi đăng ký
+>>>>>>> Stashed changes
         String fullName = request.getFullName().trim();
         if (request.getRole() == RegisterRole.TEACHER) {
             authRepository.insertTeacherProfile(user.getId(), fullName);
