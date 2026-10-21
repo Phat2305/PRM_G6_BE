@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/users")
@@ -63,5 +64,50 @@ public class AdminUserController {
                 .stream()
                 .filter(user -> "STAFF".equals(user.getRole()))
                 .toList();
+    }
+    @GetMapping("/teachers/pending")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<Map<String, Object>> getPendingTeachers() {
+        return userRepository.findAll().stream()
+                .filter(user ->
+                        "TEACHER".equals(user.getRole())
+                                && "PENDING".equals(user.getStatus()))
+                .map(user -> Map.<String, Object>of(
+                        "id", user.getId(),
+                        "username", user.getUsername(),
+                        "role", user.getRole(),
+                        "status", user.getStatus()
+                ))
+                .toList();
+    }
+
+    @PatchMapping("/teachers/{userId}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Map<String, Object> approveTeacher(
+            @PathVariable UUID userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "User not found"
+                ));
+
+        if (!"TEACHER".equals(user.getRole())
+                || !"PENDING".equals(user.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "User is not a pending teacher"
+            );
+        }
+
+        user.setStatus("ACTIVE");
+        userRepository.save(user);
+
+        return Map.of(
+                "id", user.getId(),
+                "username", user.getUsername(),
+                "role", user.getRole(),
+                "status", user.getStatus()
+        );
     }
 }

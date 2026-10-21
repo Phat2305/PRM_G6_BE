@@ -65,7 +65,7 @@ public class SupplyService {
     @Transactional
     public Supply createSupply(
             CreateSupplyRequest request,
-            String username) {
+            String userId) {
 
         if (request.getName() == null
                 || request.getName().isBlank()) {
@@ -75,8 +75,7 @@ public class SupplyService {
             );
         }
 
-        User user = getUserByUsername(username);
-
+        User user = getUserById(userId);
         Supply supply = Supply.builder()
                 // Use the authenticated user's ID.
                 .teacherId(user.getId())
@@ -95,11 +94,10 @@ public class SupplyService {
     public Supply updateSupply(
             UUID id,
             UpdateSupplyRequest request,
-            String username) {
+            String userId) {
 
         Supply supply = getSupplyById(id);
-        User user = getUserByUsername(username);
-
+        User user = getUserById(userId);
         checkOwnership(supply, user);
 
         if (request.getName() != null) {
@@ -137,21 +135,29 @@ public class SupplyService {
     }
 
     @Transactional
-    public void deleteSupply(UUID id, String username) {
+    public void deleteSupply(UUID id, String userId) {
         Supply supply = getSupplyById(id);
-        User user = getUserByUsername(username);
-
+        User user = getUserById(userId);
         checkOwnership(supply, user);
 
         supplyRepository.delete(supply);
     }
 
-    private User getUserByUsername(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "User not found"
-                ));
+    private User getUserById(String userId) {
+        try {
+            UUID id = UUID.fromString(userId);
+
+            return userRepository.findById(id)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED,
+                            "User not found"
+                    ));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid user ID"
+            );
+        }
     }
 
     private void checkOwnership(Supply supply, User user) {

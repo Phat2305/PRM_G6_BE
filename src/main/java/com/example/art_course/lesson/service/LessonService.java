@@ -63,7 +63,7 @@ public class LessonService {
     }
 
     @Transactional
-    public Lesson createLesson(Lesson lesson, String username) {
+    public Lesson createLesson(Lesson lesson, String userId) {
         if (lesson == null) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -87,8 +87,7 @@ public class LessonService {
         }
 
         Course course = getCourseById(lesson.getCourseId());
-        User user = getUserByUsername(username);
-
+        User user = getUserById(userId);
         checkCourseOwnership(course, user);
 
         lesson.setId(null);
@@ -100,13 +99,12 @@ public class LessonService {
     public Lesson updateLesson(
             UUID lessonId,
             UpdateLessonRequest request,
-            String username) {
+            String userId) {
 
         Lesson lesson = getLessonById(lessonId);
 
         Course course = getCourseById(lesson.getCourseId());
-        User user = getUserByUsername(username);
-
+        User user = getUserById(userId);
         checkCourseOwnership(course, user);
 
         if (request.getTitle() != null) {
@@ -140,12 +138,11 @@ public class LessonService {
     }
 
     @Transactional
-    public void deleteLesson(UUID lessonId, String username) {
+    public void deleteLesson(UUID lessonId, String userId) {
         Lesson lesson = getLessonById(lessonId);
 
         Course course = getCourseById(lesson.getCourseId());
-        User user = getUserByUsername(username);
-
+        User user = getUserById(userId);
         checkCourseOwnership(course, user);
 
         lessonRepository.delete(lesson);
@@ -159,8 +156,19 @@ public class LessonService {
                 ));
     }
 
-    private User getUserByUsername(String username) {
-        return userRepository.findByUsername(username)
+    private User getUserById(String userId) {
+        UUID id;
+
+        try {
+            id = UUID.fromString(userId);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid user ID in authentication"
+            );
+        }
+
+        return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "User not found"
