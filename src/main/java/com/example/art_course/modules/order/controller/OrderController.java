@@ -2,6 +2,7 @@ package com.example.art_course.modules.order.controller;
 
 import com.example.art_course.common.ApiResponse;
 import com.example.art_course.modules.order.entity.Order;
+import com.example.art_course.modules.order.entity.OrderDetail;
 import com.example.art_course.modules.order.service.OrderService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -59,6 +60,24 @@ public class OrderController {
         String role = resolveRole(authentication);
         return ApiResponse.ok(orderService.getOrderDetail(orderId, userId, role));
     }
+
+    /**
+     * Chọn bé cho khóa học đã mua mà chưa gán bé (sau thanh toán, không ràng buộc thời điểm).
+     */
+    @PostMapping("/{orderId}/details/{detailId}/assign-child")
+    @PreAuthorize("hasRole('PARENT')")
+    public ApiResponse<OrderDetail> assignChild(
+            @PathVariable UUID orderId,
+            @PathVariable UUID detailId,
+            @RequestBody AssignChildRequest request,
+            Authentication authentication
+    ) {
+        UUID parentId = resolveUserId(authentication);
+        return ApiResponse.ok("Đã chọn bé cho khóa học",
+                orderService.assignChild(orderId, detailId, parentId, request.childId()));
+    }
+
+    public record AssignChildRequest(UUID childId) {}
 
     /**
      * Hủy đơn hàng chưa thanh toán (không có mã riêng, BR-11).

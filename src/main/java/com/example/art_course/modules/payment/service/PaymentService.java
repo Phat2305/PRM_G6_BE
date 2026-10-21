@@ -17,6 +17,7 @@ import com.example.art_course.modules.payment.entity.Payment;
 import com.example.art_course.modules.payment.entity.WebhookLog;
 import com.example.art_course.modules.payment.gateway.PaymentGateway;
 import com.example.art_course.modules.payment.gateway.PaymentGatewayFactory;
+import com.example.art_course.modules.payment.gateway.PayOSPaymentGateway;
 import com.example.art_course.modules.payment.repository.MoneyLedgerRepository;
 import com.example.art_course.modules.payment.repository.PaymentRepository;
 import com.example.art_course.modules.payment.repository.WebhookLogRepository;
@@ -58,6 +59,9 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponseDto createPaymentUrl(UUID parentId, CreatePaymentRequest request) {
+        if (!PayOSPaymentGateway.GATEWAY_CODE.equalsIgnoreCase(request.getGateway())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "UNSUPPORTED_GATEWAY", "Chỉ hỗ trợ thanh toán qua PAYOS");
+        }
         Order order = orderRepository.findById(request.getOrderId())
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng: " + request.getOrderId()));
 
@@ -168,6 +172,14 @@ public class PaymentService {
         if (payment == null && callbackResult.gatewayTransactionId() != null) {
             payment = paymentRepository.findByGatewayAndGatewayTransactionId(gatewayCode.toUpperCase(), callbackResult.gatewayTransactionId())
                     .orElse(null);
+        }
+
+        if (payment == null && PayOSPaymentGateway.GATEWAY_CODE.equalsIgnoreCase(gatewayCode)) {
+            // PayOS gửi webhook mẫu (orderCode không có thật) khi đăng ký URL; phải trả 200
+            webhookLog.setProcessedStatus("IGNORED");
+            webhookLog.setResponseMessage("PayOS: không có payment khớp orderCode");
+            webhookLogRepository.save(webhookLog);
+            return Map.of("status", "IGNORED", "message", "Không có giao dịch khớp");
         }
 
         if (payment == null) {
@@ -375,6 +387,13 @@ public class PaymentService {
             idStr = params.get("vnp_TxnRef");
         } else if ("MOMO".equalsIgnoreCase(gatewayCode)) {
             idStr = params.get("orderId");
+        } else if ("PAYOS".equalsIgnoreCase(gatewayCode)) {
+            try {
+                return paymentRepository.findByGatewayOrderCode(Long.valueOf(params.get(PayOSPaymentGateway.DATA_PREFIX + "orderCode")))
+                        .map(Payment::getId).orElse(null);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
         } else {
             idStr = params.get("paymentId");
             if (idStr == null) idStr = params.get("orderId");

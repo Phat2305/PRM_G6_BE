@@ -3,6 +3,7 @@ package com.example.art_course.modules.payment.controller;
 import com.example.art_course.common.ApiResponse;
 import com.example.art_course.common.AppError;
 import com.example.art_course.modules.payment.dto.CreatePaymentRequest;
+import com.example.art_course.modules.payment.gateway.PayOSPaymentGateway;
 import com.example.art_course.modules.payment.dto.PaymentResponseDto;
 import com.example.art_course.modules.payment.dto.PaymentStatusResponseDto;
 import com.example.art_course.modules.payment.service.PaymentService;
@@ -68,6 +69,26 @@ public class PaymentController {
 
         PaymentStatusResponseDto status = paymentService.queryPaymentStatus(paymentId, userId, role);
         return ApiResponse.success(status);
+    }
+
+    /**
+     * Webhook PayOS: body JSON lồng {code, desc, success, data{...}, signature}.
+     * Làm phẳng thành params; các trường của data mang tiền tố "data." (PAY-01, PAY-09).
+     */
+    @PostMapping("/webhook/PAYOS")
+    public ResponseEntity<Map<String, Object>> handlePayOSWebhook(@RequestBody Map<String, Object> body) {
+        Map<String, String> params = new HashMap<>();
+        params.put("signature", str(body.get("signature")));
+        params.put("success", str(body.get("success")));
+        params.put("desc", str(body.get("desc")));
+        if (body.get("data") instanceof Map<?, ?> data) {
+            data.forEach((k, v) -> params.put(PayOSPaymentGateway.DATA_PREFIX + k, str(v)));
+        }
+        return ResponseEntity.ok(paymentService.handleWebhook(PayOSPaymentGateway.GATEWAY_CODE, params));
+    }
+
+    private static String str(Object o) {
+        return o == null ? "" : o.toString();
     }
 
     /**

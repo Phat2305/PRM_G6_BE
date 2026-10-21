@@ -39,7 +39,7 @@ public class CustomizeQuoteExpirationJob {
 
         for (Order order : pendingOrders) {
             if (order.getCreatedAt().isBefore(deadline)) {
-                List<OrderDetail> details = orderDetailRepository.findByOrderIdAndProductType(order.getId(), "CUSTOMIZE");
+                List<OrderDetail> details = orderDetailRepository.findByOrderIdAndCustomizeRequestIdIsNotNull(order.getId());
                 if (!details.isEmpty()) {
                     order.setStatus(OrderStatus.EXPIRED);
                     orderRepository.save(order);

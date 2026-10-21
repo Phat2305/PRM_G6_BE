@@ -41,6 +41,9 @@ public class OrderService {
     private final CourseRepository courseRepository;
     private final SupplyRepository supplyRepository;
     private final EntityManager entityManager;
+    private final com.example.art_course.common.TeacherNames teacherNames;
+    private final com.example.art_course.child.repository.ChildRepository childRepository;
+    private final com.example.art_course.modules.payment.service.EnrollmentGrantService enrollmentGrantService;
     private final com.example.art_course.modules.systemconfig.service.ConfigService configService;
 
     /**
@@ -84,19 +87,13 @@ public class OrderService {
 
         for (CartItem item : itemsToProcess) {
             if ("COURSE".equalsIgnoreCase(item.getProductType())) {
-                if (item.getCourseId() == null || item.getChildId() == null) {
-                    throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học phải có courseId và childId");
+                if (item.getCourseId() == null) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học phải có courseId");
                 }
 
-                // Chặn mua trùng khóa học cho cùng 1 Child (SHOP-04)
-                String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND status = 'ACTIVE'";
-                List<?> enrolled = entityManager.createNativeQuery(enrollSql)
-                        .setParameter("childId", item.getChildId())
-                        .setParameter("courseId", item.getCourseId())
-                        .getResultList();
-
-                if (!enrolled.isEmpty()) {
-                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+                // Bé có thể chọn sau khi thanh toán (assignChild); có chọn sẵn thì chặn mua trùng (SHOP-04)
+                if (item.getChildId() != null) {
+                    requireChildNotEnrolled(item.getChildId(), item.getCourseId());
                 }
 
                 Course course = courseRepository.findById(item.getCourseId())
@@ -177,7 +174,6 @@ public class OrderService {
 
                 OrderDetail detail = OrderDetail.builder()
                         .orderId(order.getId())
-                        .productType(it.productType)
                         .courseId(it.courseId)
                         .supplyId(it.supplyId)
                         .childId(it.childId)
@@ -201,7 +197,54 @@ public class OrderService {
             cartItemRepository.deleteByCartId(cartId);
         }
 
+        withTeacherNames(createdOrders);
         return createdOrders;
+    }
+
+    private void requireChildNotEnrolled(UUID childId, UUID courseId) {
+        String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND status = 'ACTIVE'";
+        List<?> enrolled = entityManager.createNativeQuery(enrollSql)
+                .setParameter("childId", childId)
+                .setParameter("courseId", courseId)
+                .getResultList();
+        if (!enrolled.isEmpty()) {
+            throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+        }
+    }
+
+    /**
+     * Chọn bé cho khóa học đã mua mà chưa gán bé; sau thanh toán, không ràng buộc thời điểm.
+     * Cấp quyền học cho bé ngay (SHOP-04, LRN).
+     */
+    @Transactional
+    public OrderDetail assignChild(UUID orderId, UUID detailId, UUID parentId, UUID childId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng"));
+        if (!order.getParentId().equals(parentId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Đơn hàng này không thuộc về bạn");
+        }
+        if (order.getStatus() == OrderStatus.PENDING_PAYMENT
+                || order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.EXPIRED) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "ORDER_NOT_PAID", "Đơn hàng chưa thanh toán");
+        }
+        OrderDetail detail = orderDetailRepository.findById(detailId)
+                .filter(d -> d.getOrderId().equals(orderId))
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_DETAIL_NOT_FOUND", "Không tìm thấy dòng đơn hàng"));
+        if (!"COURSE".equalsIgnoreCase(detail.getProductType())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "NOT_A_COURSE", "Chỉ khóa học mới gán cho bé");
+        }
+        if (detail.getChildId() != null) {
+            throw new AppError(HttpStatus.CONFLICT, "CHILD_ALREADY_ASSIGNED", "Khóa học đã được gán cho bé");
+        }
+        childRepository.findByUserIdAndParentId(childId, parentId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "CHILD_NOT_FOUND", "Không tìm thấy bé của bạn"));
+        requireChildNotEnrolled(childId, detail.getCourseId());
+
+        detail.setChildId(childId);
+        orderDetailRepository.save(detail);
+        enrollmentGrantService.grantAccessWithRetry(childId, detail.getCourseId(), orderId);
+        return detail;
     }
 
     /**
@@ -214,12 +257,18 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<Order> getParentOrders(UUID parentId) {
-        return orderRepository.findByParentIdOrderByCreatedAtDesc(parentId);
+        return withTeacherNames(orderRepository.findByParentIdOrderByCreatedAtDesc(parentId));
     }
 
     @Transactional(readOnly = true)
     public List<Order> getTeacherOrders(UUID teacherId) {
-        return orderRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId);
+        return withTeacherNames(orderRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId));
+    }
+
+    private List<Order> withTeacherNames(List<Order> orders) {
+        Map<UUID, String> names = teacherNames.byIds(orders.stream().map(Order::getTeacherId).distinct().toList());
+        orders.forEach(o -> o.setTeacherName(names.get(o.getTeacherId())));
+        return orders;
     }
 
     @Transactional(readOnly = true)
@@ -234,6 +283,7 @@ public class OrderService {
             throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Đơn hàng này không thuộc về bạn");
         }
 
+        order.setTeacherName(teacherNames.byId(order.getTeacherId()));
         List<OrderDetail> details = orderDetailRepository.findByOrderId(orderId);
         return new OrderDetailResponse(order, details);
     }
@@ -258,7 +308,7 @@ public class OrderService {
         }
 
         // Hoàn trả tồn giữ chỗ
-        List<OrderDetail> details = orderDetailRepository.findByOrderIdAndProductType(orderId, "SUPPLY");
+        List<OrderDetail> details = orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(orderId);
         for (OrderDetail d : details) {
             if (d.getSupplyId() != null) {
                 supplyRepository.findById(d.getSupplyId()).ifPresent(s -> {
@@ -284,7 +334,7 @@ public class OrderService {
 
         int count = 0;
         for (Order order : expiredOrders) {
-            List<OrderDetail> details = orderDetailRepository.findByOrderIdAndProductType(order.getId(), "SUPPLY");
+            List<OrderDetail> details = orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(order.getId());
             for (OrderDetail d : details) {
                 if (d.getSupplyId() != null) {
                     supplyRepository.findById(d.getSupplyId()).ifPresent(s -> {

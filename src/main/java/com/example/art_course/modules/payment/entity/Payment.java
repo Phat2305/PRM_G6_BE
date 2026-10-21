@@ -33,6 +33,10 @@ public class Payment {
     @Column(name = "gateway_transaction_id", length = 100)
     private String gatewayTransactionId;
 
+    // PayOS: orderCode số nguyên dùng để khớp webhook với payment
+    @Column(name = "gateway_order_code", unique = true)
+    private Long gatewayOrderCode;
+
     @Column(name = "payment_url", columnDefinition = "TEXT")
     private String paymentUrl;
 

@@ -19,6 +19,11 @@ public class ResetPasswordRequest {
     private String code;
 
     @NotBlank(message = "Mật khẩu mới là bắt buộc")
-    @Size(min = 8, max = 72, message = "Password gồm 8-72 ký tự")
+    @Size(min = 6, max = 72, message = "Password gồm 6-72 ký tự")
     private String newPassword;
+
+     @NotBlank(message = "Xác nhận mật khẩu mới là bắt buộc")
+    @Size(min = 6, max = 72, message = "Password gồm 6-72 ký tự")
+    private String confirmPassword;
+
 }

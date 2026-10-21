@@ -173,7 +173,7 @@ public class CommerceTests {
                 supplyId, teacherId);
         jdbc.update("INSERT INTO public.orders (id, parent_id, teacher_id, total_amount, shipping_fee, status, expired_at) VALUES (?, ?, ?, 150000, 30000, 'PENDING_PAYMENT', CURRENT_TIMESTAMP - INTERVAL '5 minutes')",
                 orderId, parentId, teacherId);
-        jdbc.update("INSERT INTO public.order_details (order_id, product_type, supply_id, product_name, unit_price, quantity, sub_total, delivery_status) VALUES (?, 'SUPPLY', ?, 'Mau ve', 60000, 2, 120000, 'PENDING')",
+        jdbc.update("INSERT INTO public.order_details (order_id, supply_id, product_name, unit_price, quantity, sub_total, delivery_status) VALUES (?, ?, 'Mau ve', 60000, 2, 120000, 'PENDING')",
                 orderId, supplyId);
 
         // Lần chạy 1: Hết hạn đơn -> trả lại 2 tồn kho
