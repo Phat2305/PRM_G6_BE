@@ -6,7 +6,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
+import java.time.Instant;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -29,10 +29,7 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(UUID userId, String username, String role) {
-        Date now = new Date();
-        Date expiryDate = new Date(
-                now.getTime() + expiration
-        );
+        Instant now = Instant.now();
 
         var builder = Jwts.builder()
                 .subject(userId != null ? userId.toString() : username)
@@ -40,8 +37,8 @@ public class JwtTokenProvider {
                 .claim("username", username)
                 .claim("role", role)
                 .claim("type", "ACCESS")
-                .issuedAt(now)
-                .expiration(expiryDate)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(expiration)))
                 .signWith(key);
 
         return builder.compact();

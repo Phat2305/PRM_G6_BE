@@ -30,7 +30,7 @@ public class RegisterRequest {
     private String fullName;
 
     @NotBlank(message = "Password là bắt buộc")
-    @Size(min = 8, max = 72, message = "Password gồm 8-72 ký tự")
+    @Size(min = 6, max = 12, message = "Password gồm 6-12 ký tự")
     private String password;
 
     @NotNull(message = "Role là bắt buộc (PARENT hoặc TEACHER)")

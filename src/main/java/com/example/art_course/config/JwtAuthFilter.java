@@ -1,5 +1,5 @@
 package com.example.art_course.config;
-
+import org.springframework.web.cors.CorsUtils;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -15,8 +15,10 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import com.example.art_course.user.repository.UserRepository;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +28,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Value("${JWT_SECRET:${jwt.secret:FALL2026_ART_COURSE_PRM391_GROUP_6}}")
     private String jwtSecret;
+
+    private final UserRepository userRepository;
+
+    public JwtAuthFilter(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @PostConstruct
     public void validateSecret() {
@@ -41,7 +49,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/auth/") || path.startsWith("/api/auth/");
+         return CorsUtils.isPreFlightRequest(request)
+            || path.startsWith("/auth/")
+            || path.startsWith("/api/auth/");
+    }
+
+    private void reject(HttpServletResponse response, HttpStatus status, String code, String message) throws IOException {
+        SecurityContextHolder.clearContext();
+        response.setStatus(status.value());
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}}");
     }
 
     @Override
@@ -88,6 +105,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         principal = UUID.fromString(userIdStr);
                     } catch (IllegalArgumentException e) {
                         principal = userIdStr;
+                    }
+                    // Khóa/xóa tài khoản và thu hồi token có hiệu lực ngay, không đợi token hết hạn
+                    if (principal instanceof UUID uid) {
+                        var state = userRepository.findAuthStateById(uid);
+                        if (state.isEmpty() || !"ACTIVE".equalsIgnoreCase(state.get().getStatus())) {
+                            reject(response, HttpStatus.FORBIDDEN, "ACCOUNT_NOT_ACTIVE",
+                                    "Tài khoản đã bị khóa hoặc không còn tồn tại");
+                            return;
+                        }
+                        Instant validAfter = state.get().getTokensValidAfter();
+                        // iat tính theo giây nên so theo giây; token không có iat thì không chứng minh được là mới
+                        if (validAfter != null && (claims.getIssuedAt() == null
+                                || claims.getIssuedAt().toInstant().getEpochSecond() <= validAfter.getEpochSecond())) {
+                            reject(response, HttpStatus.UNAUTHORIZED, "TOKEN_REVOKED",
+                                    "Phiên đăng nhập đã bị thu hồi, vui lòng đăng nhập lại");
+                            return;
+                        }
                     }
                     SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role.toUpperCase());
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
