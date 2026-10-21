@@ -82,6 +82,9 @@ public class OrderSecurityWebMvcTest {
     @Autowired
     private OrderService orderService;
 
+    @Autowired
+    private UserRepository userRepository;
+
     private MockMvc mockMvc;
     private UUID parentAId;
     private UUID parentBId;
@@ -91,7 +94,10 @@ public class OrderSecurityWebMvcTest {
 
     @BeforeEach
     void setUp() {
-        reset(orderService);
+        reset(orderService, userRepository);
+        // Mọi user trong test mặc định ACTIVE; JwtAuthFilter tra trạng thái ở mỗi request
+        var activeState = authState("ACTIVE", null);
+        when(userRepository.findAuthStateById(any())).thenReturn(java.util.Optional.of(activeState));
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
                 .build();
@@ -103,6 +109,24 @@ public class OrderSecurityWebMvcTest {
         orderBId = UUID.randomUUID();
     }
 
+    private UserRepository.AuthState authState(String status, java.time.Instant tokensValidAfter) {
+        UserRepository.AuthState s = mock(UserRepository.AuthState.class);
+        when(s.getStatus()).thenReturn(status);
+        when(s.getTokensValidAfter()).thenReturn(tokensValidAfter);
+        return s;
+    }
+
+    private String createTokenIssuedAt(UUID userId, java.time.Instant issuedAt) {
+        return Jwts.builder()
+                .subject(userId.toString())
+                .claim("role", "PARENT")
+                .claim("type", "ACCESS")
+                .issuedAt(Date.from(issuedAt))
+                .expiration(new Date(System.currentTimeMillis() + 3600_000))
+                .signWith(Keys.hmacShaKeyFor(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+    }
+
     private String createToken(UUID userId, String role, String type) {
         return Jwts.builder()
                 .subject(userId.toString())
@@ -112,6 +136,45 @@ public class OrderSecurityWebMvcTest {
                 .expiration(new Date(System.currentTimeMillis() + 3600_000))
                 .signWith(Keys.hmacShaKeyFor(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8)))
                 .compact();
+    }
+
+    @Test
+    @DisplayName("0. Tài khoản bị khóa hoặc đã xóa: token còn hạn vẫn bị chặn 403 ACCOUNT_NOT_ACTIVE")
+    void testLockedOrDeletedAccountBlockedImmediately() throws Exception {
+        String token = createToken(parentAId, "PARENT", "ACCESS");
+
+        var state1 = authState("LOCKED", null);
+        when(userRepository.findAuthStateById(parentAId)).thenReturn(java.util.Optional.of(state1));
+        mockMvc.perform(get("/api/v1/orders/my-orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("ACCOUNT_NOT_ACTIVE"));
+
+        when(userRepository.findAuthStateById(parentAId)).thenReturn(java.util.Optional.empty());
+        mockMvc.perform(get("/api/v1/orders/my-orders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("ACCOUNT_NOT_ACTIVE"));
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    @DisplayName("0b. Token cấp trước mốc thu hồi bị 401 TOKEN_REVOKED, token cấp sau mốc vẫn dùng được")
+    void testRevokedTokenRejectedButNewTokenAccepted() throws Exception {
+        java.time.Instant revokedAt = java.time.Instant.now().minusSeconds(60);
+        var state2 = authState("ACTIVE", revokedAt);
+        when(userRepository.findAuthStateById(parentAId)).thenReturn(java.util.Optional.of(state2));
+        String oldToken = createTokenIssuedAt(parentAId, revokedAt.minusSeconds(30));
+        String newToken = createTokenIssuedAt(parentAId, revokedAt.plusSeconds(30));
+
+        mockMvc.perform(get("/api/v1/orders/my-orders").header("Authorization", "Bearer " + oldToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("TOKEN_REVOKED"));
+
+        // Token mới đi qua bộ lọc (không bị thu hồi); controller trả dữ liệu hoặc lỗi nghiệp vụ, nhưng không phải 401/403 của bộ lọc
+        int code = mockMvc.perform(get("/api/v1/orders/my-orders").header("Authorization", "Bearer " + newToken))
+                .andReturn().getResponse().getStatus();
+        org.junit.jupiter.api.Assertions.assertNotEquals(401, code);
+        org.junit.jupiter.api.Assertions.assertNotEquals(403, code);
     }
 
     @Test

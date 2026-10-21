@@ -5,13 +5,14 @@ import com.example.art_course.auth.dto.AuthResponse;
 import com.example.art_course.auth.dto.LoginRequest;
 import com.example.art_course.auth.dto.RegisterRequest;
 import com.example.art_course.auth.dto.RegisterRole;
+import com.example.art_course.auth.repository.AuthRepository;
 import com.example.art_course.common.AppError;
 import com.example.art_course.auth.security.JwtTokenProvider;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
-
+import com.example.art_course.auth.security.JwtTokenProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,18 +24,18 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final JdbcTemplate jdbcTemplate;
+    private final AuthRepository authRepository;
 
     public AuthService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
-            JdbcTemplate jdbcTemplate) {
+            AuthRepository authRepository) {
 
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
-        this.jdbcTemplate = jdbcTemplate;
+        this.authRepository = authRepository;
     }
 
     // Register
@@ -42,43 +43,40 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
         String username = request.getUsername().trim();
 
-        if (userRepository.existsByUsername(username)) {
+        String email = PasswordResetService.normalize(request.getEmail());
+
+        if (userRepository.existsByUsername(username) || userRepository.existsByEmail(email)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Username already exists"
+                    "Username or email already exists"
             );
         }
-
         User user = new User();
+        user.setEmail(email);
         user.setUsername(username);
         user.setPassword(
                 passwordEncoder.encode(request.getPassword())
         );
         user.setRole(request.getRole().name());
         user.setStatus(request.getRole().initialStatus());
-
         // Flush trước JDBC: GenerationType.UUID đã có id nhưng dòng users chưa vào DB, FK profile sẽ lỗi.
-        userRepository.saveAndFlush(user);
-
-        // Họ tên nằm ở bảng profile theo role; teacher chưa có thông tin ngân hàng khi đăng ký
-        String fullName = request.getFullName().trim();
-        if (request.getRole() == RegisterRole.TEACHER) {
-            jdbcTemplate.update(
-                    "INSERT INTO teacher_profiles (user_id, full_name, bank_account_info) VALUES (?, ?, '')",
-                    user.getId(), fullName);
-        } else {
-            jdbcTemplate.update(
-                    "INSERT INTO parent_profiles (user_id, full_name) VALUES (?, ?)",
-                    user.getId(), fullName);
+        // UNIQUE trùng lúc đăng ký trả 409 thay vì 500.
+        try {
+            user = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username or email already exists");
         }
 
-        AuthResponse response = new AuthResponse();
-        response.setId(user.getId());
-        response.setUsername(user.getUsername());
-        response.setRole(user.getRole());
-        response.setStatus(user.getStatus());
+        // Họ tên nằm ở bảng profile theo role
+        String fullName = request.getFullName().trim();
+        if (request.getRole() == RegisterRole.TEACHER) {
+            authRepository.insertTeacherProfile(user.getId(), fullName);
+        } else {
+            authRepository.insertParentProfile(user.getId(), fullName);
+        }
 
-        return response;
+        String token = jwtTokenProvider.generateToken(user.getId(), user.getUsername(), user.getRole());
+        return toResponse(user, token);
     }
 
     // Login
@@ -110,13 +108,16 @@ public class AuthService {
                 user.getRole()
         );
 
+        return toResponse(user, token);
+    }
+
+    private AuthResponse toResponse(User user, String token) {
         AuthResponse response = new AuthResponse();
         response.setId(user.getId());
         response.setUsername(user.getUsername());
         response.setRole(user.getRole());
         response.setStatus(user.getStatus());
         response.setToken(token);
-
         return response;
     }
 

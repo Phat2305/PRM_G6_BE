@@ -414,7 +414,9 @@ CREATE TABLE public.users (
     username character varying(255) NOT NULL,
     password text NOT NULL,
     role character varying(20) NOT NULL,
-    status character varying(20) NOT NULL
+    status character varying(20) NOT NULL,
+    email character varying(255),
+    tokens_valid_after timestamp with time zone
 );
 
 
@@ -891,6 +893,10 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_username_key UNIQUE (username);
+
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
 
 
 --

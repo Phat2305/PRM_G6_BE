@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -37,4 +38,17 @@ public class User {
 
     @Column(name = "status")
     private String status;
+
+    // Lưu chữ thường; dùng cho quên mật khẩu. Tài khoản cũ có thể chưa có (null).
+    @Column(name = "email")
+    private String email;
+
+    // Token cấp trước mốc này (iat <= mốc) bị từ chối. null = chưa thu hồi lần nào.
+    @Column(name = "tokens_valid_after")
+    private Instant tokensValidAfter;
+
+    // Thu hồi mọi token đã cấp tới giờ; chỗ duy nhất đặt mốc này
+    public void revokeTokens() {
+        this.tokensValidAfter = Instant.now();
+    }
 }
