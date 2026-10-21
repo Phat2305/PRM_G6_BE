@@ -5,12 +5,17 @@ import com.example.art_course.admin.dto.StaffResponse;
 import com.example.art_course.admin.dto.StaffStatusRequest;
 import com.example.art_course.admin.dto.UpdateStaffRequest;
 import com.example.art_course.admin.service.AdminUserService;
+import com.example.art_course.user.entity.User;
+import com.example.art_course.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -20,6 +25,7 @@ import java.util.UUID;
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
+    private final UserRepository userRepository;
 
     @PostMapping("/staff")
     public StaffResponse createStaff(@Valid @RequestBody CreateStaffRequest request) {
