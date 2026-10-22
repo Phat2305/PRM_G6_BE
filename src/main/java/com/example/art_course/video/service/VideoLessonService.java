@@ -7,6 +7,8 @@ import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
+import com.example.art_course.video.dto.VideoProcessingMessage;
+import com.example.art_course.video.messaging.VideoProcessingPublisher;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,24 +25,24 @@ public class VideoLessonService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final VideoStorageService videoStorageService;
-    private final VideoProcessingService videoProcessingService;
+    private final VideoProcessingPublisher videoProcessingPublisher;
 
     public VideoLessonService(
             LessonRepository lessonRepository,
             CourseRepository courseRepository,
             UserRepository userRepository,
             VideoStorageService videoStorageService,
-            VideoProcessingService videoProcessingService) {
+            VideoProcessingPublisher videoProcessingPublisher) {
 
         this.lessonRepository = lessonRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
         this.videoStorageService = videoStorageService;
-        this.videoProcessingService = videoProcessingService;
+        this.videoProcessingPublisher = videoProcessingPublisher;
     }
 
     @Transactional
-    public String uploadLessonVideo(
+    public String queueLessonVideo(
             UUID lessonId,
             MultipartFile file,
             String userId) {
@@ -92,15 +94,26 @@ public class VideoLessonService {
         VideoStorageService.StoredVideo storedVideo =
                 videoStorageService.store(file);
 
-        String hlsId = videoProcessingService.convertToHls(
-                storedVideo.absolutePath());
+        String videoId = UUID.randomUUID().toString();
 
-        String playlistUrl = "/api/videos/hls/"
-                + hlsId + "/master.m3u8";
+        VideoProcessingMessage message = new VideoProcessingMessage(
+                videoId,
+                storedVideo.absolutePath(),
+                lessonId.toString());
 
-        lesson.setVideoUrl(playlistUrl);
+        videoProcessingPublisher.publish(message);
+
+        return videoId;
+    }
+
+    @Transactional
+    public void completeLessonVideo(UUID lessonId, String hlsId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Lesson not found"));
+
+        lesson.setVideoUrl("/api/videos/hls/" + hlsId + "/master.m3u8");
         lessonRepository.save(lesson);
-
-        return playlistUrl;
     }
 }

@@ -81,16 +81,16 @@ public class VideoController {
             @RequestParam("file") MultipartFile file,
             Authentication authentication
     ) {
-        String playlistUrl = videoLessonService.uploadLessonVideo(
+        String videoId = videoLessonService.queueLessonVideo(
                 lessonId,
                 file,
                 authentication.getName()
         );
 
-        return ResponseEntity.ok(Map.of(
+        return ResponseEntity.accepted().body(Map.of(
                 "lessonId", lessonId.toString(),
-                "videoUrl", playlistUrl,
-                "status", "READY"
+                "videoId", videoId,
+                "status", "QUEUED"
         ));
     }
 
