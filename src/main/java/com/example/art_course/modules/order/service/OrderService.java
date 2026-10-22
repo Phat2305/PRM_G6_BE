@@ -84,8 +84,23 @@ public class OrderService {
 
         for (CartItem item : itemsToProcess) {
             if ("COURSE".equalsIgnoreCase(item.getProductType())) {
-                if (item.getCourseId() == null || item.getChildId() == null) {
-                    throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học phải có courseId và childId");
+                if (item.getCourseId() == null) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học phải có courseId");
+                }
+                if (item.getChildId() == null) {
+                    List<?> children = entityManager.createNativeQuery("SELECT user_id FROM child_profiles WHERE parent_id = :parentId")
+                            .setParameter("parentId", parentId)
+                            .getResultList();
+                    if (!children.isEmpty()) {
+                        Object cId = children.get(0);
+                        if (cId instanceof UUID u) {
+                            item.setChildId(u);
+                        } else {
+                            item.setChildId(UUID.fromString(cId.toString()));
+                        }
+                    } else {
+                        throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học phải có childId");
+                    }
                 }
 
                 // Chặn mua trùng khóa học cho cùng 1 Child (SHOP-04)

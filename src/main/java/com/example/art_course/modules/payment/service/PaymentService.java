@@ -162,6 +162,7 @@ public class PaymentService {
         if (paymentId != null) {
             payment = paymentRepository.findByIdForUpdate(paymentId)
                     .or(() -> paymentRepository.findById(paymentId))
+                    .or(() -> paymentRepository.findByOrderId(paymentId))
                     .orElse(null);
         }
 

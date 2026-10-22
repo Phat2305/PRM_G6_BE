@@ -18,13 +18,13 @@ public class VNPayPaymentGateway implements PaymentGateway {
 
     public static final String GATEWAY_CODE = "VNPAY";
 
-    @Value("${VNPAY_TMN_CODE:${app.payment.vnpay.tmn-code:}}")
+    @Value("${app.payment.vnpay.tmn-code:6MOOS6DN}")
     private String tmnCode;
 
-    @Value("${VNPAY_HASH_SECRET:${app.payment.vnpay.hash-secret:}}")
+    @Value("${app.payment.vnpay.hash-secret:KYOLQZTMXXHKMWUXXANCABHMUCCAWGIX}")
     private String hashSecret;
 
-    @Value("${VNPAY_URL:${app.payment.vnpay.url:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}}")
+    @Value("${app.payment.vnpay.url:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}")
     private String vnpayUrl;
 
     @Override
@@ -38,7 +38,7 @@ public class VNPayPaymentGateway implements PaymentGateway {
         String vnp_Command = "pay";
         String vnp_TxnRef = payment.getId() != null ? payment.getId().toString() : order.getId().toString();
         String vnp_IpAddr = "127.0.0.1";
-        String vnp_TmnCode = tmnCode != null && !tmnCode.isBlank() ? tmnCode : "DEMO_TMN";
+        String vnp_TmnCode = tmnCode != null && !tmnCode.isBlank() ? tmnCode : "6MOOS6DN";
 
         long amountInVNDTimes100 = payment.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
 
@@ -55,9 +55,9 @@ public class VNPayPaymentGateway implements PaymentGateway {
         vnp_Params.put("vnp_ReturnUrl", returnUrl);
         vnp_Params.put("vnp_IpAddr", vnp_IpAddr);
 
-        Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
+        Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
-        formatter.setTimeZone(TimeZone.getTimeZone("Etc/GMT+7"));
+        formatter.setTimeZone(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         String vnp_CreateDate = formatter.format(cld.getTime());
         vnp_Params.put("vnp_CreateDate", vnp_CreateDate);
 
@@ -82,7 +82,7 @@ public class VNPayPaymentGateway implements PaymentGateway {
         if (hashData.length() > 0) hashData.setLength(hashData.length() - 1);
         if (query.length() > 0) query.setLength(query.length() - 1);
 
-        String secret = hashSecret != null && !hashSecret.isBlank() ? hashSecret : "DEMO_SECRET_KEY";
+        String secret = hashSecret != null && !hashSecret.isBlank() ? hashSecret : "KYOLQZTMXXHKMWUXXANCABHMUCCAWGIX";
         String vnp_SecureHash = hmacSHA512(secret, hashData.toString());
         return vnpayUrl + "?" + query.toString() + "&vnp_SecureHash=" + vnp_SecureHash;
     }
@@ -114,7 +114,7 @@ public class VNPayPaymentGateway implements PaymentGateway {
         if (hashData.length() > 0) hashData.setLength(hashData.length() - 1);
         if (rawHashData.length() > 0) rawHashData.setLength(rawHashData.length() - 1);
 
-        String secret = hashSecret != null && !hashSecret.isBlank() ? hashSecret : "DEMO_SECRET_KEY";
+        String secret = hashSecret != null && !hashSecret.isBlank() ? hashSecret : "KYOLQZTMXXHKMWUXXANCABHMUCCAWGIX";
         String calculatedHash = hmacSHA512(secret, hashData.toString());
         String rawCalculatedHash = hmacSHA512(secret, rawHashData.toString());
 
