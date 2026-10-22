@@ -1,5 +1,5 @@
 # Bước 1: Build source code với Java 21
-FROM eclipse-temurin:21.0.11_10-jre-jammy
+FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /app
 
 # Copy các file cấu hình và wrapper vào trước
@@ -16,8 +16,8 @@ RUN ./gradlew dependencies --no-daemon || true
 COPY src ./src
 RUN ./gradlew build --no-daemon -x test
 
-# Bước 2: Khởi chạy ứng dụng với Java 21
-FROM eclipse-temurin:21-jre-jammy
-EXPOSE 8080 
+# Bước 2: Khởi chạy ứng dụng với Java 21 (ghim 21.0.11 như máy local đang chạy được)
+FROM eclipse-temurin:21.0.11_10-jre-jammy
+EXPOSE 8080
 COPY --from=build /app/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "/app.jar", "--spring.profiles.active=supabase"]
