@@ -20,4 +20,4 @@ RUN ./gradlew build --no-daemon -x test
 FROM eclipse-temurin:21-jre-jammy
 EXPOSE 8080 
 COPY --from=build /app/build/libs/*.jar app.jar
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app.jar", "--spring.profiles.active=supabase"]
