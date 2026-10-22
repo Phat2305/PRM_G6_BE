@@ -27,6 +27,7 @@ Java 21 · Spring Boot 4.1.1 (Gradle) · Spring Security + JWT (HS256) · Spring
 | `DATABASE_URL_DEV` | Database dev riêng, dùng với profile `dev` |
 | `JWT_SECRET` | Khóa ký JWT, tối thiểu 32 ký tự |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | Gửi mail mã quên mật khẩu. Gmail dùng App Password |
+| `SENDGRID_API_KEY` / `SENDGRID_FROM` | Gửi mail qua SendGrid (HTTPS). Có khóa này thì bỏ qua SMTP; cần khi deploy Render vì Render chặn cổng SMTP. `SENDGRID_FROM` phải là Single Sender (hoặc domain) đã xác minh trên SendGrid, nếu không SendGrid từ chối |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_FROM` | Tùy chọn (mặc định `smtp.gmail.com`, `587`, `MAIL_USERNAME`) |
 | `PAYOS_CLIENT_ID` / `PAYOS_API_KEY` / `PAYOS_CHECKSUM_KEY` | Khóa kênh thanh toán PayOS (my.payos.vn). Thiếu thì tạo link thanh toán trả lỗi `PAYOS_NOT_CONFIGURED` |
 | `PAYOS_ENDPOINT` | Tùy chọn, mặc định `https://api-merchant.payos.vn` |
@@ -118,11 +119,36 @@ Luồng thanh toán:
 
 Cấu hình PayOS:
 
-- Dán URL webhook vào kênh thanh toán trên PayOS: `https://<tên-miền-ngrok>/api/v1/payments/webhook/PAYOS`. Khi lưu, PayOS gửi một webhook mẫu; backend trả 200.
+- Dán URL webhook vào kênh thanh toán trên PayOS: `https://prm-g6-be.onrender.com/api/v1/payments/webhook/PAYOS` (hoặc URL ngrok khi chạy local). Khi lưu, PayOS gửi một webhook mẫu; backend trả 200.
 - Hiện chỉ nhận cổng `PAYOS`. Lớp VNPay/MoMo/Mock vẫn còn trong code, nhưng API tạo thanh toán từ chối cổng khác.
 - Mỗi lần tạo link dùng một `orderCode` mới (lưu ở `payments.gateway_order_code`), nên đơn chưa trả có thể thanh toán lại.
 
-## CORS và ngrok
+## API backend và trạng thái nối với FE
+
+Danh sách đầy đủ xem Swagger. Bảng dưới cho biết nhóm nào app Flutter (`PRM393_G6_FE`) đã gọi.
+
+| Nhóm | Prefix | FE |
+|------|--------|----|
+| Xác thực | `/auth` (login, register, forgot-password, reset-password) | Đã nối |
+| Danh mục công khai | `/api/v1/shop/courses`, `/api/v1/supplies` | Đã nối (danh sách, chi tiết khóa học) |
+| Con | `/api/children` (GET, POST, DELETE) | Đã nối; `GET/PUT /{userId}` chưa dùng |
+| Đơn hàng | `/api/v1/orders` (`checkout`, `my-orders`, `{id}`, `assign-child`, `cancel`) | Đã nối; `teacher-orders` chưa dùng |
+| Thanh toán | `/api/v1/payments` (`create`, `{id}/status`) | Đã nối; webhook do PayOS gọi |
+| Giỏ hàng | `/api/v1/cart` | Chưa (FE giữ giỏ trong bộ nhớ) |
+| Hồ sơ | `/api/v1/users/me` (GET, PUT, logout, change-password) | Chưa |
+| Khóa học, bài học, dụng cụ (quản lý) | `/api/courses`, `/api/lessons`, `/api/supplies`, `/api/lesson-supplies` | Chưa |
+| Học tập | `/api/enrollments`, `/api/child-progress`, `/api/submissions`, `/api/course-reviews`, `/api/v1/course-reviews` | Chưa |
+| Tùy biến | `/api/customize-requests`, `/api/offers` | Chưa |
+| Tin nhắn, thông báo | `/api/conversations`, `/api/messages`, `/api/v1/notifications` | Chưa |
+| Giao hàng, hoàn tiền | `/api/v1/fulfillment`, `/api/v1/refunds`, `/api/refunds` | Chưa |
+| Tài chính | `/api/v1/teacher/finance`, `/api/v1/admin/finance`, `/api/v1/admin/analytics` | Chưa |
+| Kiểm duyệt, staff, admin | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff`, `/api/v1/admin/users` | Chưa |
+| Video | `/api/videos/upload`, `/api/videos/lessons/{lessonId}/upload`, `/api/videos/hls/{hlsId}/{fileName}` | Chưa. FE định gọi `/videos/upload-url` (R2 presigned) mà BE chưa có |
+
+## Deploy Render, CORS và ngrok
+
+Backend đang chạy tại <https://prm-g6-be.onrender.com>. Gói miễn phí tự ngủ khi không có request, lần gọi đầu có thể chậm 30–60 giây.
+
 
 - `config/CorsConfig.java` chỉ cho phép origin `http://localhost:*` và `http://127.0.0.1:*` (Flutter Web chạy local). Thêm origin khác vào `allowedOriginPatterns` khi deploy.
 - Header được phép: `Authorization`, `Content-Type`, `Accept`, `Origin`, `ngrok-skip-browser-warning`. Client thêm header nào khác thì phải thêm vào `allowedHeaders`, nếu không trình duyệt chặn ở bước preflight.
