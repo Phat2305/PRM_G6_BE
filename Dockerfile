@@ -1,5 +1,5 @@
 # Bước 1: Build source code với Java 21
-FROM eclipse-temurin:21-jdk-jammy AS build
+FROM eclipse-temurin:21.0.11_10-jre-jammy
 WORKDIR /app
 
 # Copy các file cấu hình và wrapper vào trước
