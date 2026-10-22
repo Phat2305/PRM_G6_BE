@@ -21,6 +21,10 @@ public class Supply {
     @Column(name = "teacher_id", nullable = false)
     private UUID teacherId;
 
+    // Họ tên giáo viên, được điền khi trả API (không lưu trong bảng supplies)
+    @Transient
+    private String teacherName;
+
     @Column(nullable = false)
     private String name;
 

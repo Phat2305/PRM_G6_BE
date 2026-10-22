@@ -327,7 +327,7 @@ public class PaymentFulfillmentTests {
         OrderDetail detail = OrderDetail.builder()
                 .id(detailId)
                 .orderId(orderId)
-                .productType("SUPPLY")
+                .supplyId(UUID.randomUUID())
                 .deliveryStatus(DeliveryStatus.CONFIRMED) // Đang CONFIRMED
                 .build();
 
@@ -366,7 +366,7 @@ public class PaymentFulfillmentTests {
         OrderDetail detail = OrderDetail.builder()
                 .id(detailId)
                 .orderId(orderId)
-                .productType("SUPPLY")
+                .supplyId(UUID.randomUUID())
                 .deliveryStatus(DeliveryStatus.DELIVERED)
                 .deliveredAt(Instant.now().minus(8, ChronoUnit.DAYS)) // Đã giao 8 ngày trước (> 7 ngày)
                 .build();
@@ -497,7 +497,7 @@ public class PaymentFulfillmentTests {
                 supplyId, teacherId);
         jdbc.update("INSERT INTO public.orders (id, parent_id, teacher_id, total_amount, shipping_fee, status) VALUES (?, ?, ?, 130000, 30000, 'PENDING_PAYMENT')",
                 orderId, parentId, teacherId);
-        jdbc.update("INSERT INTO public.order_details (order_id, product_type, supply_id, product_name, unit_price, quantity, sub_total, delivery_status) VALUES (?, 'SUPPLY', ?, 'Giay ve', 50000, 2, 100000, 'PENDING')",
+        jdbc.update("INSERT INTO public.order_details (order_id, supply_id, product_name, unit_price, quantity, sub_total, delivery_status) VALUES (?, ?, 'Giay ve', 50000, 2, 100000, 'PENDING')",
                 orderId, supplyId);
         jdbc.update("INSERT INTO public.payments (id, order_id, teacher_id, gateway, amount, commission_amount, net_amount, status) VALUES (?, ?, ?, 'MOCK', 130000, 10000, 120000, 'PENDING')",
                 paymentId, orderId, teacherId);

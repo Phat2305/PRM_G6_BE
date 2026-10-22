@@ -19,6 +19,8 @@ import java.util.UUID;
 public class CourseSummaryDto {
     private UUID id;
     private UUID teacherId;
+    // Họ tên giáo viên (teacher_profiles.full_name)
+    private String teacherName;
     private String name;
     private String description;
     private String category;

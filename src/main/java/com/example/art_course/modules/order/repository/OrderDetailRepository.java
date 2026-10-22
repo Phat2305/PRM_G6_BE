@@ -12,6 +12,7 @@ import java.util.UUID;
 @Repository
 public interface OrderDetailRepository extends JpaRepository<OrderDetail, UUID> {
     List<OrderDetail> findByOrderId(UUID orderId);
-    List<OrderDetail> findByOrderIdAndProductType(UUID orderId, String productType);
+    List<OrderDetail> findByOrderIdAndSupplyIdIsNotNull(UUID orderId);
+    List<OrderDetail> findByOrderIdAndCustomizeRequestIdIsNotNull(UUID orderId);
     List<OrderDetail> findByDeliveryStatusAndDeliveredAtBefore(DeliveryStatus deliveryStatus, Instant threshold);
 }

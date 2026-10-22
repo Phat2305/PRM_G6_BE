@@ -34,6 +34,7 @@ public class CourseService {
     private final ApplicationEventPublisher eventPublisher;
     private final EntityManager entityManager;
     private final IVideoAccessContract videoAccessContract;
+    private final com.example.art_course.common.TeacherNames teacherNames;
 
     /**
      * Danh mục khóa học đã xuất bản phục vụ mua sắm (SHOP-01).
@@ -41,10 +42,14 @@ public class CourseService {
      */
     @Transactional(readOnly = true)
     public List<CourseSummaryDto> listCourses() {
-        return courseRepository.findByStatusIgnoreCase("PUBLISHED").stream()
+        List<Course> published = courseRepository.findByStatusIgnoreCase("PUBLISHED");
+        java.util.Map<UUID, String> names = teacherNames.byIds(
+                published.stream().map(Course::getTeacherId).distinct().toList());
+        return published.stream()
                 .map(c -> CourseSummaryDto.builder()
                         .id(c.getId())
                         .teacherId(c.getTeacherId())
+                        .teacherName(names.get(c.getTeacherId()))
                         .name(c.getName())
                         .description(c.getDescription())
                         .category(c.getCategory())
@@ -82,6 +87,7 @@ public class CourseService {
         return CourseDetailDto.builder()
                 .id(course.getId())
                 .teacherId(course.getTeacherId())
+                .teacherName(teacherNames.byId(course.getTeacherId()))
                 .name(course.getName())
                 .description(course.getDescription())
                 .category(course.getCategory())

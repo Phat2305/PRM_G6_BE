@@ -23,9 +23,6 @@ public class OrderDetail {
     @Column(name = "order_id", nullable = false)
     private UUID orderId;
 
-    @Column(name = "product_type", nullable = false, length = 20)
-    private String productType; // COURSE, SUPPLY, CUSTOMIZE
-
     @Column(name = "course_id")
     private UUID courseId;
 
@@ -88,4 +85,15 @@ public class OrderDetail {
     @Column(name = "updated_at", nullable = false)
     @Builder.Default
     private Instant updatedAt = Instant.now();
+
+    /**
+     * Loại dòng suy ra từ cột khóa ngoại (đúng một trong ba cột có giá trị, ràng buộc bởi
+     * chk_order_detail_type_exclusive): COURSE, SUPPLY hoặc CUSTOMIZE. Không lưu trong DB.
+     */
+    public String getProductType() {
+        if (courseId != null) return "COURSE";
+        if (supplyId != null) return "SUPPLY";
+        if (customizeRequestId != null) return "CUSTOMIZE";
+        return null;
+    }
 }

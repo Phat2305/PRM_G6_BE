@@ -63,6 +63,11 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok:1.18.36'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.36'
+    
+    implementation platform('software.amazon.awssdk:bom:2.31.0')
+    implementation 'software.amazon.awssdk:s3'
+
+    implementation 'vn.payos:payos-java:2.0.1'
 }
 
 tasks.named('test') {

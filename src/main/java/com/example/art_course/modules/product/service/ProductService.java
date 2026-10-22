@@ -16,15 +16,22 @@ import java.util.UUID;
 public class ProductService {
 
     private final SupplyRepository supplyRepository;
+    private final com.example.art_course.common.TeacherNames teacherNames;
 
     @Transactional(readOnly = true)
     public List<Supply> listSupplies() {
-        return supplyRepository.findByStatusIgnoreCase("ACTIVE");
+        List<Supply> supplies = supplyRepository.findByStatusIgnoreCase("ACTIVE");
+        java.util.Map<UUID, String> names = teacherNames.byIds(
+                supplies.stream().map(Supply::getTeacherId).distinct().toList());
+        supplies.forEach(s -> s.setTeacherName(names.get(s.getTeacherId())));
+        return supplies;
     }
 
     @Transactional(readOnly = true)
     public Supply getSupplyDetail(UUID supplyId) {
-        return supplyRepository.findById(supplyId)
+        Supply supply = supplyRepository.findById(supplyId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
+        supply.setTeacherName(teacherNames.byId(supply.getTeacherId()));
+        return supply;
     }
 }

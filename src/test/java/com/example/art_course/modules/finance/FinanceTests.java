@@ -86,7 +86,6 @@ public class FinanceTests {
         OrderDetail courseDetail = OrderDetail.builder()
                 .id(UUID.randomUUID())
                 .orderId(orderId)
-                .productType("COURSE")
                 .courseId(courseId)
                 .productName("Khóa học vẽ nét cơ bản")
                 .build();
@@ -95,7 +94,7 @@ public class FinanceTests {
         OrderDetail supplyDetail = OrderDetail.builder()
                 .id(UUID.randomUUID())
                 .orderId(orderId)
-                .productType("SUPPLY")
+                .supplyId(UUID.randomUUID())
                 .deliveryStatus(DeliveryStatus.SHIPPING)
                 .productName("Bộ cọ vẽ chuyên dụng")
                 .build();

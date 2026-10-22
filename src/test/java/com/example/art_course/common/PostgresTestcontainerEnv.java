@@ -173,10 +173,14 @@ public final class PostgresTestcontainerEnv {
                 com.example.art_course.modules.course.repository.CourseRepository courseRepo,
                 com.example.art_course.modules.product.repository.SupplyRepository supplyRepo,
                 EntityManagerFactory emf,
-                ConfigService configService
+                ConfigService configService,
+                EnrollmentGrantService enrollmentGrantService
         ) {
             jakarta.persistence.EntityManager sharedEm = org.springframework.orm.jpa.SharedEntityManagerCreator.createSharedEntityManager(emf);
-            return new OrderService(orderRepo, orderDetailRepo, cartRepo, cartItemRepo, courseRepo, supplyRepo, sharedEm, configService);
+            return new OrderService(orderRepo, orderDetailRepo, cartRepo, cartItemRepo, courseRepo, supplyRepo, sharedEm,
+                    new com.example.art_course.common.TeacherNames(sharedEm),
+                    mock(com.example.art_course.child.repository.ChildRepository.class),
+                    enrollmentGrantService, configService);
         }
 
         @Bean

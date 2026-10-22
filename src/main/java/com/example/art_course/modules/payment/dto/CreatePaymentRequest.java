@@ -20,7 +20,7 @@ public class CreatePaymentRequest {
 
     @NotBlank(message = "Cổng thanh toán không được để trống")
     @JsonAlias({"gateway", "paymentGateway", "payment_gateway", "paymentMethod", "payment_method"})
-    private String gateway; // VNPAY, MOMO, MOCK
+    private String gateway; // chỉ PAYOS
 
     @NotBlank(message = "Return URL không được để trống")
     @JsonAlias({"returnUrl", "return_url", "redirectUrl", "redirect_url"})

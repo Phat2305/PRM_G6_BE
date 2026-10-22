@@ -26,6 +26,10 @@ public class Order {
     @Column(name = "teacher_id", nullable = false)
     private UUID teacherId;
 
+    // Họ tên giáo viên, được điền khi trả API (không lưu trong bảng orders)
+    @Transient
+    private String teacherName;
+
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalAmount;
 

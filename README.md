@@ -28,7 +28,8 @@ Java 21 · Spring Boot 4.1.1 (Gradle) · Spring Security + JWT (HS256) · Spring
 | `JWT_SECRET` | Khóa ký JWT, tối thiểu 32 ký tự |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | Gửi mail mã quên mật khẩu. Gmail dùng App Password |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_FROM` | Tùy chọn (mặc định `smtp.gmail.com`, `587`, `MAIL_USERNAME`) |
-| `VNPAY_*`, `MOMO_*` | Cổng thanh toán sandbox (tùy chọn) |
+| `PAYOS_CLIENT_ID` / `PAYOS_API_KEY` / `PAYOS_CHECKSUM_KEY` | Khóa kênh thanh toán PayOS (my.payos.vn). Thiếu thì tạo link thanh toán trả lỗi `PAYOS_NOT_CONFIGURED` |
+| `PAYOS_ENDPOINT` | Tùy chọn, mặc định `https://api-merchant.payos.vn` |
 | `SUPABASE_JDBC_URL` / `SUPABASE_DB_USERNAME` / `SUPABASE_DB_PASSWORD` | Chỉ cho profile `supabase` |
 | `PORT` | Cổng chạy, mặc định 8080 |
 
@@ -53,7 +54,17 @@ Swagger UI: <http://localhost:8080/swagger-ui.html> · OpenAPI JSON: <http://loc
 
 ## Database và migration
 
-- Schema nền: `docs/ART_COUSE.sql`. Migration BE2: `src/main/resources/db/migration/` (`V1__be2_schema_init.sql`, `V2__ledger_hardening.sql`).
+- Schema nền: `docs/ART_COUSE.sql`. Migration BE2: `src/main/resources/db/migration/`:
+
+  | File | Nội dung |
+  |------|----------|
+  | `V1__be2_schema_init.sql` | Schema BE2 |
+  | `V2__ledger_hardening.sql` | Sổ cái chỉ-ghi-thêm |
+  | `V3__payos_gateway.sql` | Cột `payments.gateway_order_code` (orderCode của PayOS), ràng buộc cổng chỉ `PAYOS` và `MOCK` (chỉ áp cho dòng mới) |
+  | `V4__course_child_optional.sql` | Khóa học được phép chưa gán bé khi đặt hàng |
+  | `V5__drop_order_detail_product_type.sql` | Bỏ cột `order_details.product_type`; loại dòng suy ra từ `course_id` / `supply_id` / `customize_request_id` |
+
+  Chạy theo thứ tự V3 → V4 → V5. Profile `dev` tự áp bằng Flyway; Supabase phải chạy tay (SQL Editor).
 - Flyway chỉ bật ở profile `dev`. Hibernate `ddl-auto` là `none` hoặc `validate`.
 - **Không** chạy app, test hay migration vào database Supabase. Muốn áp migration lên Supabase, xuất file SQL rồi chạy thủ công.
 - Script dev (PowerShell). Chỉ cho phép database `art_course_dev` trên localhost và cần biến `DEV_DB_PASSWORD`:
@@ -64,7 +75,10 @@ Swagger UI: <http://localhost:8080/swagger-ui.html> · OpenAPI JSON: <http://loc
 ```powershell
 .\gradlew.bat test
 .\gradlew.bat test --tests "com.example.art_course.modules.payment.PaymentFulfillmentTests"
+.\gradlew.bat test --tests "*PayOSPaymentGatewayTest"   # không cần Docker
 ```
+
+Các test dùng PostgreSQL thật (Testcontainers) cần Docker; không có Docker thì chúng báo lỗi, các test còn lại vẫn chạy.
 
 ## Xác thực
 
@@ -78,6 +92,35 @@ Swagger UI: <http://localhost:8080/swagger-ui.html> · OpenAPI JSON: <http://loc
 - Gửi token qua header `Authorization: Bearer <token>`. Token sống 24 giờ.
 - Vai trò: `PARENT`, `CHILD`, `TEACHER`, `STAFF`, `ADMIN`. `CHILD` bị chặn ở các API đơn hàng, thanh toán, hoàn tiền, giao hàng và tài chính.
 - Request mẫu: `docs/api/requests.http`.
+
+## Mua hàng và thanh toán PayOS
+
+Tất cả endpoint dưới đây (trừ webhook, danh mục và trang kết quả) cần JWT của `PARENT`.
+
+| Endpoint | Việc |
+|----------|------|
+| `GET /api/v1/shop/courses`, `GET /api/v1/shop/courses/{id}` | Danh mục khóa học (công khai). Có `teacherName` = `teacher_profiles.full_name` |
+| `GET /api/v1/supplies`, `GET /api/v1/supplies/{id}` | Dụng cụ vẽ (công khai). Có `teacherName` |
+| `GET/POST /api/children`, `DELETE /api/children/{id}` | Quản lý tài khoản con (BE1) |
+| `POST /api/v1/orders/checkout` | Tạo đơn, tự tách mỗi Teacher một đơn. Gửi `useCart:false` và `items[]` (`itemType`, `courseId` hoặc `supplyId`, `quantity`, `childId` tùy chọn cho khóa học) |
+| `GET /api/v1/orders/my-orders`, `GET /api/v1/orders/{id}` | Danh sách / chi tiết đơn. Có `teacherName` |
+| `POST /api/v1/orders/{orderId}/details/{detailId}/assign-child` | Chọn bé cho khóa học đã mua mà chưa gán. Body `{"childId": "..."}`. Cấp quyền học ngay |
+| `POST /api/v1/orders/{id}/cancel` | Hủy đơn chưa thanh toán, trả tồn kho |
+| `POST /api/v1/payments/create` | Body `{orderId, gateway:"PAYOS", returnUrl}`. Trả `paymentId` và `paymentUrl` (trang PayOS) |
+| `GET /api/v1/payments/{paymentId}/status` | Trạng thái giao dịch; nếu còn `PENDING` thì hỏi lại PayOS |
+| `POST /api/v1/payments/webhook/PAYOS` | Webhook PayOS (công khai, kiểm chữ ký HMAC-SHA256 bằng `PAYOS_CHECKSUM_KEY`) |
+
+Luồng thanh toán:
+
+1. Client gọi `payments/create`, mở `paymentUrl` ở trình duyệt, rồi hỏi `payments/{id}/status` mỗi vài giây.
+2. PayOS gọi webhook khi khách trả tiền. Hệ thống kiểm chữ ký và số tiền, rồi chuyển đơn sang `PAID`, giữ tiền (`HELD`) và cấp quyền học cho các khóa đã có bé.
+3. Sau thanh toán PayOS chuyển khách về `returnUrl` (cả khi thành công lẫn hủy) kèm `status` và `cancel`. Backend có sẵn trang tĩnh `/payment-result.html` cho việc này.
+
+Cấu hình PayOS:
+
+- Dán URL webhook vào kênh thanh toán trên PayOS: `https://<tên-miền-ngrok>/api/v1/payments/webhook/PAYOS`. Khi lưu, PayOS gửi một webhook mẫu; backend trả 200.
+- Hiện chỉ nhận cổng `PAYOS`. Lớp VNPay/MoMo/Mock vẫn còn trong code, nhưng API tạo thanh toán từ chối cổng khác.
+- Mỗi lần tạo link dùng một `orderCode` mới (lưu ở `payments.gateway_order_code`), nên đơn chưa trả có thể thanh toán lại.
 
 ## CORS và ngrok
 
@@ -103,6 +146,8 @@ src/main/java/com/example/art_course/
 - Tiền dùng `BigDecimal`, VND, làm tròn `HALF_UP`. Hoa hồng tính một lần lúc thanh toán và được lưu lại.
 - Sổ cái tiền chỉ ghi thêm, không sửa hay xóa.
 - Webhook thanh toán phải idempotent, xác thực chữ ký và khớp số tiền.
+- Khóa học có thể đặt khi chưa chọn bé; chọn bé sau thanh toán bằng `assign-child`. Khóa chưa gán bé chưa được cấp quyền học và chưa đủ điều kiện giải ngân (trừ khi có đánh giá hoặc tới mốc tự giải ngân).
+- Loại dòng đơn hàng (`COURSE` / `SUPPLY` / `CUSTOMIZE`) suy ra từ cột khóa ngoại, không lưu cột riêng. `OrderDetail.getProductType()` vẫn có trong JSON trả về.
 
 ## Tài liệu
 
