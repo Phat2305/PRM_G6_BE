@@ -1,25 +1,23 @@
-# Bước 1: Build source code
-FROM gradle:8.5-jdk17 AS build
-WORKDIR /home/gradle/src
+# Bước 1: Build source code với Java 21
+FROM eclipse-temurin:21-jdk-jammy AS build
+WORKDIR /app
 
-# TỐI ƯU 1: Chỉ copy các file cấu hình thư viện vào trước
-COPY build.gradle settings.gradle ./
-# Nếu dự án có thư mục gradle (chứa wrapper), hãy mở comment dòng dưới
-# COPY gradle ./gradle 
+# Copy các file cấu hình và wrapper vào trước
+COPY gradle/ ./gradle/
+COPY gradlew build.gradle settings.gradle ./
 
-# TỐI ƯU 2: Tải trước các thư viện. 
-# Bước này sẽ được Docker "nhớ" (cache) lại cho các lần push sau, 
-# MIỄN LÀ bạn không thêm/sửa thư viện trong file build.gradle.
-RUN gradle dependencies --no-daemon || true
+# Cấp quyền thực thi cho file gradlew
+RUN chmod +x ./gradlew
 
-# TỐI ƯU 3: Copy phần source code (thứ hay thay đổi nhất) vào sau cùng
+# Tải trước các thư viện (lưu cache)
+RUN ./gradlew dependencies --no-daemon || true
+
+# Copy source code và build
 COPY src ./src
+RUN ./gradlew build --no-daemon -x test
 
-# Build file .jar (lúc này thư viện đã có sẵn từ cache, build rất nhanh)
-RUN gradle build --no-daemon -x test
-
-# Bước 2: Khởi chạy ứng dụng
-FROM eclipse-temurin:17-jre-jammy
+# Bước 2: Khởi chạy ứng dụng với Java 21
+FROM eclipse-temurin:21-jre-jammy
 EXPOSE 8080 
-COPY --from=build /home/gradle/src/build/libs/*.jar app.jar
+COPY --from=build /app/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "/app.jar"]
