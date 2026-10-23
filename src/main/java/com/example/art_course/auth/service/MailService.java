@@ -26,8 +26,8 @@ public class MailService {
                        @Value("${app.mail.sendgrid.endpoint:https://api.sendgrid.com}") String sendgridEndpoint) {
         this.mailSender = mailSender;
         this.from = from;
-        this.sendgridApiKey = sendgridApiKey;
-        this.sendgridFrom = sendgridFrom;
+        this.sendgridApiKey = sendgridApiKey.strip(); // biến môi trường hay dính xuống dòng khi dán
+        this.sendgridFrom = sendgridFrom.strip();
         this.sendgrid = RestClient.create(sendgridEndpoint);
     }
 
