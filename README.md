@@ -137,10 +137,10 @@ Danh sách đầy đủ xem Swagger. Bảng dưới cho biết nhóm nào app Fl
 | Giỏ hàng | `/api/v1/cart` | Chưa (FE giữ giỏ trong bộ nhớ) |
 | Hồ sơ | `/api/v1/users/me` (GET, PUT, logout, change-password) | Chưa |
 | Khóa học, bài học, dụng cụ (quản lý) | `/api/courses`, `/api/lessons`, `/api/supplies`, `/api/lesson-supplies` | Chưa |
-| Học tập | `/api/enrollments`, `/api/child-progress`, `/api/submissions`, `/api/course-reviews`, `/api/v1/course-reviews` | Chưa |
+| Học tập | `/api/enrollments`, `/api/child-progress`, `/api/submissions`, `/api/v1/course-reviews` | Chưa |
 | Tùy biến | `/api/customize-requests`, `/api/offers` | Chưa |
 | Tin nhắn, thông báo | `/api/conversations`, `/api/messages`, `/api/v1/notifications` | Chưa |
-| Giao hàng, hoàn tiền | `/api/v1/fulfillment`, `/api/v1/refunds`, `/api/refunds` | Chưa |
+| Giao hàng, hoàn tiền | `/api/v1/fulfillment`, `/api/v1/refunds` | Chưa |
 | Tài chính | `/api/v1/teacher/finance`, `/api/v1/admin/finance`, `/api/v1/admin/analytics` | Chưa |
 | Kiểm duyệt, staff, admin | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff`, `/api/v1/admin/users` | Chưa |
 | Video | `/api/videos/upload`, `/api/videos/lessons/{lessonId}/upload`, `/api/videos/hls/{hlsId}/{fileName}` | Chưa. FE định gọi `/videos/upload-url` (R2 presigned) mà BE chưa có |

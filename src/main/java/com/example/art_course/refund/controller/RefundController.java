@@ -9,13 +9,14 @@ import com.example.art_course.refund.service.RefundService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/refunds")
+@RequestMapping("/api/v1/refunds")
 public class RefundController {
 
     private final RefundService refundService;
@@ -28,6 +29,7 @@ public class RefundController {
         this.userRepository = userRepository;
     }
 
+    @PreAuthorize("hasRole('PARENT')")
     @PostMapping
     public ResponseEntity<RefundResponse> create(
             @Valid @RequestBody CreateRefundRequest request,
@@ -87,6 +89,7 @@ public class RefundController {
         return ResponseEntity.ok(refundService.getByStatus(status));
     }
 
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     @PatchMapping("/{id}")
     public ResponseEntity<RefundResponse> update(
             @PathVariable UUID id,

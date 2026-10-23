@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/course-reviews")
+@RequestMapping("/api/v1/course-reviews")
 public class CourseReviewController {
 
     private final CourseReviewService service;
@@ -37,13 +37,6 @@ public class CourseReviewController {
             @PathVariable UUID id) {
 
         return ResponseEntity.ok(service.getById(id));
-    }
-
-    @GetMapping("/course/{courseId}")
-    public ResponseEntity<List<CourseReviewResponse>> getByCourseId(
-            @PathVariable UUID courseId) {
-
-        return ResponseEntity.ok(service.getByCourseId(courseId));
     }
 
     @GetMapping("/child/{childId}")

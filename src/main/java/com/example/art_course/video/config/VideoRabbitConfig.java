@@ -72,6 +72,8 @@ public class VideoRabbitConfig {
                 new SimpleRabbitListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
+        // shortcut: lỗi bị bỏ message, chưa có DLQ; thêm DLX khi cần xử lý lại job lỗi
+        factory.setDefaultRequeueRejected(false);
         return factory;
     }
 

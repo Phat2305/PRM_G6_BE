@@ -56,7 +56,6 @@ public class SecurityConfig {
                                 "/api/v1/orders/**",
                                 "/api/v1/payments/**",
                                 "/api/v1/refunds/**",
-                                "/api/refunds/**",
                                 "/api/v1/fulfillment/**",
                                 "/api/v1/teacher/finance/**"
                         ).access((authentication, context) -> new AuthorizationDecision(
