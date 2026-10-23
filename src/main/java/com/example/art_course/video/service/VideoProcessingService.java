@@ -74,6 +74,11 @@ public class VideoProcessingService {
                     "-y",
                     "-i", input.toString(),
                     "-c:v", "libx264",
+                    // Giảm RAM và CPU để không vượt giới hạn bộ nhớ của instance Render.
+                    "-preset", "veryfast",
+                    "-threads", "1",
+                    // Tối đa 720p (video nhỏ hơn giữ nguyên) để giảm RAM của ffmpeg.
+                    "-vf", "scale=-2:'min(720,ih)'",
                     "-c:a", "aac",
                     "-f", "hls",
                     "-hls_time", "6",
@@ -143,9 +148,15 @@ public class VideoProcessingService {
                     "Cannot execute FFmpeg or access HLS files",
                     e);
 
-        } catch (RuntimeException e) {
+        } finally {
+            // HLS được phát từ R2 và job lỗi không requeue, nên file cục bộ không còn cần nữa.
+            // shortcut: xóa cả khi lỗi (mất ffmpeg.log), cần giữ input khi thêm retry/DLQ.
             deleteDirectoryQuietly(outputDirectory);
-            throw e;
+            try {
+                Files.deleteIfExists(input);
+            } catch (IOException ignored) {
+                // Best-effort cleanup.
+            }
         }
     }
 

@@ -23,4 +23,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 EXPOSE 8080
 COPY --from=build /app/build/libs/*.jar app.jar
-ENTRYPOINT ["java", "-jar", "/app.jar", "--spring.profiles.active=supabase"]
+# Instance 512MB: giới hạn heap ~50% và dùng SerialGC để chừa RAM cho ffmpeg.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=50", "-XX:+UseSerialGC", "-Xss512k", "-jar", "/app.jar", "--spring.profiles.active=supabase"]
