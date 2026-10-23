@@ -44,9 +44,10 @@ public class R2StorageService {
                 .region(Region.of("auto"))
                 .credentialsProvider(
                         StaticCredentialsProvider.create(
+                                // trim: biến môi trường dán vào Render hay dính khoảng trắng/xuống dòng.
                                 AwsBasicCredentials.create(
-                                        accessKey,
-                                        secretKey)))
+                                        accessKey.trim(),
+                                        secretKey.trim())))
                 .serviceConfiguration(
                         S3Configuration.builder()
                                 .pathStyleAccessEnabled(true)
