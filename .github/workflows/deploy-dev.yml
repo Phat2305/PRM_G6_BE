@@ -1,0 +1,38 @@
+name: Deploy dev to VPS
+
+on:
+  push:
+    branches: [dev]
+
+# Không chạy hai lần deploy chồng nhau; push mới đợi lần trước xong.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, prm-g6-vps]
+    timeout-minutes: 15
+    steps:
+      - name: Cập nhật code và build lại container
+        run: |
+          cd /home/kietmn/cdinh/prm-g6-be/app
+          git fetch origin dev
+          git reset --hard origin/dev
+          docker compose -f docker-compose.prod.yml up -d --build
+
+      - name: Kiểm tra app đã lên (tối đa 2.5 phút)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsSL -o /dev/null http://127.0.0.1:8090/swagger-ui.html; then
+              echo "BE đã lên"
+              exit 0
+            fi
+            sleep 5
+          done
+          docker logs --tail 50 prm-g6-be
+          exit 1
+
+      - name: Dọn image cũ
+        if: success()
+        run: docker image prune -f
