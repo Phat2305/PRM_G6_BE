@@ -13,6 +13,6 @@ public class CreateStaffRequest {
     private String username;
 
     @NotBlank(message = "Password là bắt buộc")
-    @Size(min = 8, max = 72, message = "Password gồm 8-72 ký tự")
+    @Size(min = 6, max = 20, message = "Password gồm 6-20 ký tự")
     private String password;
 }

@@ -11,6 +11,6 @@ public class UpdateStaffRequest {
     @Size(max = 255, message = "Username tối đa 255 ký tự")
     private String username;
 
-    @Size(max = 72, message = "Password tối đa 72 ký tự")
+    @Size(min = 6, max = 20, message = "Password gồm 6-20 ký tự")
     private String password;
 }

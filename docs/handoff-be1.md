@@ -108,3 +108,6 @@ BE2 cung cấp package contracts để đồng bộ giữa hai bên:
 - **Ưu điểm**: Không làm xáo trộn đường dẫn file cũ trong Git của BE1.
 - **Lưu ý**: Cần liệt kê đầy đủ tất cả package root để không bỏ sót controller nào.
 
+## Cờ "cho giáo viên xem thông tin" của con (shareInfo)
+- FE màn "Con của tôi" có tuỳ chọn bật/tắt cho giáo viên xem thông tin của con, hiện chỉ lưu trong phiên vì `child_profiles` chưa có cột tương ứng.
+- Đề xuất: thêm cột `share_info boolean not null default false` vào `child_profiles`, trả `shareInfo` trong `ChildResponse` và nhận trong `UpdateChildRequest`. Bảng thuộc BE1 nên BE2 không tự sửa.

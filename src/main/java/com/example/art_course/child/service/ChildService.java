@@ -95,10 +95,13 @@ public class ChildService {
             }
         }
 
-        // 4. Resolve Password
+        // 4. Password is required: no shared default, a guessable default would open every child account
         String password = request.getPassword();
         if (password == null || password.trim().isEmpty()) {
-            password = "Password123!";
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Password is required"
+            );
         }
 
         User childUser = new User();
@@ -166,6 +169,46 @@ public class ChildService {
         }
 
         return childRepository.save(child);
+    }
+
+    @Transactional
+    public void resetPassword(UUID parentId, UUID userId, String newPassword) {
+        Child child = getChild(parentId, userId);
+        User user = findChildUser(child);
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.revokeTokens();
+        userRepository.save(user);
+    }
+
+    // Only ACTIVE <-> LOCKED is the parent's call; a child suspended by an admin stays suspended.
+    @Transactional
+    public Child setLocked(UUID parentId, UUID userId, boolean locked) {
+        Child child = getChild(parentId, userId);
+        User user = findChildUser(child);
+
+        String target = locked ? "LOCKED" : "ACTIVE";
+        String current = user.getStatus();
+        if (target.equalsIgnoreCase(current)) {
+            return child;
+        }
+        if (!"ACTIVE".equalsIgnoreCase(current) && !"LOCKED".equalsIgnoreCase(current)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Child account is " + current + " and cannot be changed by the parent"
+            );
+        }
+
+        user.setStatus(target);
+        userRepository.save(user);
+        return child;
+    }
+
+    private User findChildUser(Child child) {
+        return userRepository.findById(child.getUserId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Child user not found"
+                ));
     }
 
     @Transactional

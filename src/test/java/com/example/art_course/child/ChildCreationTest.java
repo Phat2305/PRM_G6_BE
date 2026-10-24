@@ -89,11 +89,12 @@ class ChildCreationTest {
     }
 
     @Test
-    @DisplayName("Tạo tài khoản trẻ em thành công với format Swagger/Frontend (chỉ gửi name và birthDate)")
+    @DisplayName("Tạo tài khoản trẻ em với format Swagger/Frontend (name, birthDate, password; username tự sinh)")
     void testCreateChildSwaggerFormat() {
         CreateChildRequest request = new CreateChildRequest();
         request.setDisplayName("Bé An");
         request.setBirthDate("2019-06-15");
+        request.setPassword("123456");
 
         Child child = childService.createChild(parentId, request);
 
@@ -126,6 +127,17 @@ class ChildCreationTest {
         assertNotNull(child);
         assertEquals("Bé Na", child.getDisplayName());
         verify(passwordEncoder).encode("123456");
+    }
+
+    @Test
+    @DisplayName("Thiếu mật khẩu thì không tạo tài khoản, không có mật khẩu mặc định")
+    void testCreateChildRequiresPassword() {
+        CreateChildRequest request = new CreateChildRequest();
+        request.setDisplayName("Bé An");
+        assertThrows(ResponseStatusException.class, () -> childService.createChild(parentId, request));
+        request.setPassword("   ");
+        assertThrows(ResponseStatusException.class, () -> childService.createChild(parentId, request));
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test

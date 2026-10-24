@@ -116,6 +116,14 @@ public class OrderService {
                 Supply supply = supplyRepository.findByIdForUpdate(item.getSupplyId())
                         .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
 
+                // SHOP-05: dụng cụ đã ngừng bán không được đặt dù còn nằm trong giỏ
+                if ("OUT_OF_STOCK".equalsIgnoreCase(supply.getStatus())) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK", "Dụng cụ \"" + supply.getName() + "\" đã hết hàng");
+                }
+                if (!"ACTIVE".equalsIgnoreCase(supply.getStatus())) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "SUPPLY_UNAVAILABLE", "Dụng cụ \"" + supply.getName() + "\" hiện không được bán");
+                }
+
                 int qty = item.getQuantity();
                 int available = supply.getAvailableStock();
                 if (available < qty) {

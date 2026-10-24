@@ -167,6 +167,7 @@ public class StaffAdminJobTests {
                 .id(supplyId)
                 .name("Bút chì màu cao cấp")
                 .status("PENDING")
+                .stockQuantity(5)
                 .price(new BigDecimal("150000"))
                 .build();
 

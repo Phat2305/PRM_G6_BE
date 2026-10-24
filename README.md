@@ -91,6 +91,8 @@ Các test dùng PostgreSQL thật (Testcontainers) cần Docker; không có Dock
 | `POST /auth/reset-password` | Đặt mật khẩu mới bằng email + mã |
 
 - Gửi token qua header `Authorization: Bearer <token>`. Token sống 24 giờ.
+- Mật khẩu dài **6–20 ký tự** ở mọi API (đăng ký, quên/đặt lại, đổi mật khẩu, tạo và đặt lại mật khẩu con, tài khoản Staff). Không có mật khẩu mặc định.
+- `POST /api/v1/users/me/logout` thu hồi **mọi** token của tài khoản (đăng xuất khỏi mọi thiết bị). Token cấp trước mốc thu hồi bị `JwtAuthFilter` từ chối.
 - Vai trò: `PARENT`, `CHILD`, `TEACHER`, `STAFF`, `ADMIN`. `CHILD` bị chặn ở các API đơn hàng, thanh toán, hoàn tiền, giao hàng và tài chính.
 - Request mẫu: `docs/api/requests.http`.
 
@@ -102,7 +104,9 @@ Tất cả endpoint dưới đây (trừ webhook, danh mục và trang kết qu�
 |----------|------|
 | `GET /api/v1/shop/courses`, `GET /api/v1/shop/courses/{id}` | Danh mục khóa học (công khai). Có `teacherName` = `teacher_profiles.full_name` |
 | `GET /api/v1/supplies`, `GET /api/v1/supplies/{id}` | Dụng cụ vẽ (công khai). Có `teacherName` |
-| `GET/POST /api/children`, `DELETE /api/children/{id}` | Quản lý tài khoản con (BE1) |
+| `GET/POST /api/children`, `GET/PUT/DELETE /api/children/{id}` | Quản lý tài khoản con (BE1). `POST` bắt buộc `password` 6–20 ký tự |
+| `PUT /api/children/{id}/password` | Phụ huynh đặt lại mật khẩu cho con, body `{"newPassword": "..."}` (6–20 ký tự), 204. Thu hồi token cũ của con |
+| `PUT /api/children/{id}/lock` | Khóa/mở khóa con, body `{"locked": true}`. Khóa = `users.status` `LOCKED` (con không đăng nhập được, token đang dùng cũng bị chặn). Con bị admin đình chỉ thì trả 409. `ChildResponse` có trường `locked` |
 | `POST /api/v1/orders/checkout` | Tạo đơn, tự tách mỗi Teacher một đơn. Gửi `useCart:false` và `items[]` (`itemType`, `courseId` hoặc `supplyId`, `quantity`, `childId` tùy chọn cho khóa học) |
 | `GET /api/v1/orders/my-orders`, `GET /api/v1/orders/{id}` | Danh sách / chi tiết đơn. Có `teacherName` |
 | `POST /api/v1/orders/{orderId}/details/{detailId}/assign-child` | Chọn bé cho khóa học đã mua mà chưa gán. Body `{"childId": "..."}`. Cấp quyền học ngay |
@@ -125,25 +129,33 @@ Cấu hình PayOS:
 
 ## API backend và trạng thái nối với FE
 
-Danh sách đầy đủ xem Swagger. Bảng dưới cho biết nhóm nào app Flutter (`PRM393_G6_FE`) đã gọi.
+Danh sách đầy đủ xem Swagger. Bảng dưới cho biết app Flutter (`PRM393_G6_FE`) đã gọi những endpoint nào, đối chiếu với mã nguồn FE (cập nhật 24/10/2026).
 
-| Nhóm | Prefix | FE |
-|------|--------|----|
-| Xác thực | `/auth` (login, register, forgot-password, reset-password) | Đã nối |
-| Danh mục công khai | `/api/v1/shop/courses`, `/api/v1/supplies` | Đã nối (danh sách, chi tiết khóa học) |
-| Con | `/api/children` (GET, POST, DELETE) | Đã nối; `GET/PUT /{userId}` chưa dùng |
-| Đơn hàng | `/api/v1/orders` (`checkout`, `my-orders`, `{id}`, `assign-child`, `cancel`) | Đã nối; `teacher-orders` chưa dùng |
-| Thanh toán | `/api/v1/payments` (`create`, `{id}/status`) | Đã nối; webhook do PayOS gọi |
-| Giỏ hàng | `/api/v1/cart` | Chưa (FE giữ giỏ trong bộ nhớ) |
-| Hồ sơ | `/api/v1/users/me` (GET, PUT, logout, change-password) | Chưa |
-| Khóa học, bài học, dụng cụ (quản lý) | `/api/courses`, `/api/lessons`, `/api/supplies`, `/api/lesson-supplies` | Chưa |
-| Học tập | `/api/enrollments`, `/api/child-progress`, `/api/submissions`, `/api/v1/course-reviews` | Chưa |
-| Tùy biến | `/api/customize-requests`, `/api/offers` | Chưa |
-| Tin nhắn, thông báo | `/api/conversations`, `/api/messages`, `/api/v1/notifications` | Chưa |
-| Giao hàng, hoàn tiền | `/api/v1/fulfillment`, `/api/v1/refunds` | Chưa |
-| Tài chính | `/api/v1/teacher/finance`, `/api/v1/admin/finance`, `/api/v1/admin/analytics` | Chưa |
-| Kiểm duyệt, staff, admin | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff`, `/api/v1/admin/users` | Chưa |
-| Video | `/api/videos/upload`, `/api/videos/lessons/{lessonId}/upload`, `/api/videos/hls/{hlsId}/{fileName}` | Chưa. FE định gọi `/videos/upload-url` (R2 presigned) mà BE chưa có |
+- **Đã nối**: FE gọi các endpoint chính của nhóm.
+- **Một phần**: chỉ một vài endpoint, hoặc chỉ một vai trò; phần còn lại FE vẫn dùng dữ liệu mẫu.
+- **Chưa**: FE chưa gọi.
+
+| Nhóm | Endpoint | FE |
+|------|----------|----|
+| Xác thực | `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password` | Đã nối |
+| Hồ sơ | `/api/v1/users/me` (GET, PUT), `/me/logout`, `/me/change-password` | Đã nối. Đăng xuất gọi `logout` trước khi xóa token cục bộ; lỗi mạng thì bỏ qua |
+| Danh mục công khai | `/api/v1/shop/courses`, `/api/v1/shop/courses/{id}`, `/api/v1/supplies` | Đã nối. Chưa dùng: `shop/courses/lessons/{id}/trial`, `supplies/{id}` |
+| Con | `/api/children` (GET, POST, `PUT`/`DELETE` theo `{id}`), `PUT /{id}/password`, `PUT /{id}/lock` | Đã nối. Chưa dùng `GET /{userId}`. Cờ "cho giáo viên xem thông tin" (`shareInfo`) chưa có cột ở BE nên chỉ giữ trong phiên (xem `docs/handoff-be1.md`) |
+| Giỏ hàng | `/api/v1/cart` (GET, `items` POST/PATCH/DELETE) | Một phần: dụng cụ lưu trên server; khóa học chưa chọn bé chỉ ở bộ nhớ app vì `cart_items` bắt buộc `childId`. Khi mua FE gửi `checkout` với `useCart:false` rồi tự xóa dòng giỏ sau khi thanh toán |
+| Đơn hàng | `/api/v1/orders` (`checkout`, `my-orders`, `teacher-orders`, `{id}`, `assign-child`, `cancel`) | Đã nối |
+| Thanh toán | `/api/v1/payments` (`create`, `{id}/status`) | Đã nối; webhook do PayOS gọi. FE dùng trang tĩnh `/payment-result.html` thay cho `return/{gateway}` |
+| Khóa học, bài học, dụng cụ (giáo viên) | `/api/courses` (`teacher/{id}`, POST, PUT, DELETE), `/api/lessons` (`course/{id}`, `{id}`, POST, PUT, DELETE), `/api/supplies` (`teacher/{id}`, POST, PUT, DELETE), `/api/lesson-supplies` | Đã nối. Chưa dùng các `GET` danh sách/chi tiết công khai của `/api/courses` và `/api/supplies` |
+| Video | `/api/videos/lessons/{lessonId}/upload`, `/status`, `/api/videos/hls/{hlsId}/{fileName}` | Đã nối (tải lên, hỏi trạng thái, phát HLS có Bearer). Chưa dùng `/api/videos/upload` |
+| Bài nộp | `/api/submissions` | Một phần: giáo viên `GET /lesson/{id}` và `PUT /{id}/grade`. Nộp bài (`POST`) chưa |
+| Tùy biến | `/api/customize-requests`, `/api/offers` | Một phần (phía giáo viên): `customize-requests` `status/pending` và `{id}`, `offers` `POST`, `request/{id}`, `teacher/{id}`. Phụ huynh tạo/sửa yêu cầu chưa |
+| Tin nhắn | `/api/conversations`, `/api/messages` | Một phần: `POST /conversations`, `teacher/{id}`, `context`, `POST /messages`, `messages/conversation/{id}`. Hộp thư của phụ huynh (`conversations/parent/{id}`) chưa |
+| Giao hàng | `/api/v1/fulfillment` | Một phần: `teacher/items/{id}/confirm-or-reject`, `teacher/items/{id}/shipping`, `delivered/{id}`. Chưa: `parent/.../confirm-received`, `parent/.../cancel`, `staff/.../handle-failure` |
+| Tài chính giáo viên | `/api/v1/teacher/finance` (`balance`, `withdrawals` GET/POST) | Đã nối |
+| Học tập | `/api/enrollments`, `/api/child-progress`, `/api/v1/course-reviews` | Chưa |
+| Hoàn tiền | `/api/v1/refunds` | Chưa |
+| Thông báo | `/api/v1/notifications` | Chưa |
+| Tài chính admin | `/api/v1/admin/finance`, `/api/v1/admin/analytics` | Chưa |
+| Kiểm duyệt, Staff, Admin | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff`, `/api/v1/admin/users` | Chưa |
 
 ## Deploy Render, CORS và ngrok
 
@@ -173,6 +185,11 @@ src/main/java/com/example/art_course/
 - Sổ cái tiền chỉ ghi thêm, không sửa hay xóa.
 - Webhook thanh toán phải idempotent, xác thực chữ ký và khớp số tiền.
 - Khóa học có thể đặt khi chưa chọn bé; chọn bé sau thanh toán bằng `assign-child`. Khóa chưa gán bé chưa được cấp quyền học và chưa đủ điều kiện giải ngân (trừ khi có đánh giá hoặc tới mốc tự giải ngân).
+- Trạng thái dụng cụ do server quyết định, client gửi `status` cũng bị bỏ qua:
+  - Tạo mới luôn là `PENDING_REVIEW`; Staff duyệt (`APPROVE`) mới thành `ACTIVE`. Đổi tên, mô tả, ảnh hoặc giá thì quay lại `PENDING_REVIEW`.
+  - Tồn kho về 0 thì `ACTIVE` tự chuyển `OUT_OF_STOCK`; có hàng lại (giáo viên nhập thêm, hủy/hoàn đơn) thì tự về `ACTIVE`, không cần duyệt lại. `PENDING_REVIEW`, `REJECTED`, `HIDDEN` không bị đổi theo tồn kho.
+  - Danh mục `/api/v1/supplies` trả cả `ACTIVE` và `OUT_OF_STOCK` (FE hiện "Hết hàng"); giỏ và đặt hàng từ chối dụng cụ không ở `ACTIVE`.
+  - Thanh toán trừ `stock_quantity` (giữ chỗ → đã bán); tồn khả dụng = `stock_quantity - reserved_quantity`.
 - Loại dòng đơn hàng (`COURSE` / `SUPPLY` / `CUSTOMIZE`) suy ra từ cột khóa ngoại, không lưu cột riêng. `OrderDetail.getProductType()` vẫn có trong JSON trả về.
 
 ## Tài liệu

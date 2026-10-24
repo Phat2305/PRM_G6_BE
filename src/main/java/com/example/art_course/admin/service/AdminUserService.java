@@ -59,8 +59,8 @@ public class AdminUserService {
 
         String password = request.getPassword();
         if (password != null && !password.isBlank()) {
-            if (password.length() < 8) {
-                throw new AppError(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Password gồm 8-72 ký tự");
+            if (password.length() < 6 || password.length() > 20) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "WEAK_PASSWORD", "Password gồm 6-20 ký tự");
             }
             user.setPassword(passwordEncoder.encode(password));
         }

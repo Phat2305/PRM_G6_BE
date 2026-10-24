@@ -12,6 +12,6 @@ public class ChangePasswordRequest {
     private String currentPassword;
 
     @NotBlank(message = "Mật khẩu mới là bắt buộc")
-    @Size(min = 8, max = 72, message = "Password gồm 8-72 ký tự")
+    @Size(min = 6, max = 20, message = "Password gồm 6-20 ký tự")
     private String newPassword;
 }

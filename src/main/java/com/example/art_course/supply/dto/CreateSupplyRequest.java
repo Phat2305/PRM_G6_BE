@@ -38,6 +38,7 @@ public class CreateSupplyRequest {
     @Min(0)
     private Integer stockQuantity;
 
+    // Ignored by the service: the status is decided server-side (review + stock). Kept so old clients still parse.
     @Size(max = 20)
     private String status;
 }
