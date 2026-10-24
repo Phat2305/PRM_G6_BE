@@ -15,6 +15,18 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
 
+    // authentication.getName() là UUID người dùng (subject của JWT); vẫn nhận username cho token cũ/test.
+    default Optional<User> findByPrincipal(String name) {
+        if (name == null) {
+            return Optional.empty();
+        }
+        try {
+            return findById(UUID.fromString(name));
+        } catch (IllegalArgumentException e) {
+            return findByUsername(name);
+        }
+    }
+
     // Trạng thái tài khoản và mốc thu hồi token, JwtAuthFilter tra ở mỗi request
     interface AuthState {
         String getStatus();

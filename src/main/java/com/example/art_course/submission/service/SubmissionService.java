@@ -225,7 +225,7 @@ public class SubmissionService {
     }
 
     private User getUser(String username) {
-        return userRepository.findByUsername(username)
+        return userRepository.findByPrincipal(username)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "User not found"));
