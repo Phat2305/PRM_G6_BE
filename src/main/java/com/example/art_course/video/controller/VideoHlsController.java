@@ -2,6 +2,7 @@
 package com.example.art_course.video.controller;
 
 import com.example.art_course.video.service.R2StorageService;
+import com.example.art_course.video.service.VideoProcessingService;
 
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -43,10 +44,10 @@ public class VideoHlsController {
                     "Invalid video ID");
         }
 
-        // Only allow the playlist and generated MPEG-TS segments.
+        // Chỉ cho phép playlist và segment do ffmpeg tạo (cả dạng một mức cũ lẫn nhiều mức mới).
         if (fileName == null
-                || !(fileName.equals("master.m3u8")
-                || fileName.matches("segment_\\d+\\.ts"))) {
+                || !(fileName.matches(VideoProcessingService.PLAYLIST_PATTERN)
+                || fileName.matches(VideoProcessingService.SEGMENT_PATTERN))) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Invalid HLS file name");
