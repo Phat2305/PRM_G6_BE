@@ -16,6 +16,8 @@ import java.util.UUID;
 public interface SupplyRepository extends JpaRepository<Supply, UUID> {
     List<Supply> findByStatusIgnoreCase(String status);
 
+    List<Supply> findByStatusInIgnoreCase(java.util.Collection<String> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Be2Supply s WHERE s.id = :id")
     Optional<Supply> findByIdForUpdate(@Param("id") UUID id);

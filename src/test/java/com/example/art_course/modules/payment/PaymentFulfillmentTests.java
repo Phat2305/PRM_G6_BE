@@ -493,7 +493,7 @@ public class PaymentFulfillmentTests {
                 parentId, "parent_rb_" + parentId);
         jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
                 teacherId, "teacher_rb_" + teacherId);
-        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Giay ve', 50000, 10, 2, 0, 'PUBLISHED')",
+        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Giay ve', 50000, 10, 2, 0, 'ACTIVE')",
                 supplyId, teacherId);
         jdbc.update("INSERT INTO public.orders (id, parent_id, teacher_id, total_amount, shipping_fee, status) VALUES (?, ?, ?, 130000, 30000, 'PENDING_PAYMENT')",
                 orderId, parentId, teacherId);

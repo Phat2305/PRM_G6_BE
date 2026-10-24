@@ -2,7 +2,9 @@
 package com.example.art_course.child.Controller;
 
 import com.example.art_course.child.dto.ChildResponse;
+import com.example.art_course.child.dto.ChildLockRequest;
 import com.example.art_course.child.dto.CreateChildRequest;
+import com.example.art_course.child.dto.ResetChildPasswordRequest;
 import com.example.art_course.child.dto.UpdateChildRequest;
 import com.example.art_course.child.entity.Child;
 import com.example.art_course.child.service.ChildService;
@@ -85,6 +87,32 @@ public class ChildController {
         );
     }
 
+    // Parent sets a new password for the child; the child's old sessions stop working.
+    @PutMapping("/{userId}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetChildPassword(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ResetChildPasswordRequest request,
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        childService.resetPassword(parentId, userId, request.getNewPassword());
+    }
+
+    @PutMapping("/{userId}/lock")
+    public ChildResponse setChildLocked(
+            @PathVariable UUID userId,
+            @Valid @RequestBody ChildLockRequest request,
+            Authentication authentication
+    ) {
+        UUID parentId = getCurrentUserId(authentication);
+
+        return toResponse(
+                childService.setLocked(parentId, userId, request.getLocked())
+        );
+    }
+
     @DeleteMapping("/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteChild(
@@ -143,7 +171,8 @@ public class ChildController {
                 child.getUserId(),
                 childUser.getUsername(),
                 child.getDisplayName(),
-                child.getBirthYear()
+                child.getBirthYear(),
+                "LOCKED".equalsIgnoreCase(childUser.getStatus())
         );
     }
 }

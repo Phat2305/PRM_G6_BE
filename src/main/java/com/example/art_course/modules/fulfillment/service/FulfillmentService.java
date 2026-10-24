@@ -298,6 +298,7 @@ public class FulfillmentService {
             Supply supply = supplyRepository.findByIdForUpdate(detail.getSupplyId()).orElse(null);
             if (supply != null) {
                 supply.setStockQuantity(supply.getStockQuantity() + detail.getQuantity());
+                supply.syncStatusWithStock();
                 supply.setSoldQuantity(Math.max(0, supply.getSoldQuantity() - detail.getQuantity()));
                 supplyRepository.save(supply);
             }

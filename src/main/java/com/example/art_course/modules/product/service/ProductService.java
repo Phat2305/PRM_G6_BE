@@ -20,7 +20,7 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public List<Supply> listSupplies() {
-        List<Supply> supplies = supplyRepository.findByStatusIgnoreCase("ACTIVE");
+        List<Supply> supplies = supplyRepository.findByStatusInIgnoreCase(List.of("ACTIVE", "OUT_OF_STOCK")); // hết hàng vẫn hiện để FE ghi "Hết hàng"
         java.util.Map<UUID, String> names = teacherNames.byIds(
                 supplies.stream().map(Supply::getTeacherId).distinct().toList());
         supplies.forEach(s -> s.setTeacherName(names.get(s.getTeacherId())));

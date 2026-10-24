@@ -3,6 +3,7 @@ package com.example.art_course.child.dto;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -18,7 +19,8 @@ public class CreateChildRequest {
     @Size(max = 255)
     private String username;
 
-    @Size(max = 255)
+    @NotBlank(message = "Password là bắt buộc")
+    @Size(min = 6, max = 20, message = "Password gồm 6-20 ký tự")
     private String password;
 
     @JsonAlias({"name", "display_name", "fullName", "childName"})

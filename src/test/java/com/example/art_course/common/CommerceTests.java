@@ -97,7 +97,7 @@ public class CommerceTests {
                 parentId, "parent_oversell_" + parentId);
         jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
                 teacherId, "teacher_oversell_" + teacherId);
-        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Co ve Test', 50000, 5, 0, 0, 'PUBLISHED')",
+        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Co ve Test', 50000, 5, 0, 0, 'ACTIVE')",
                 supplyId, teacherId);
 
         int totalThreads = 10;
@@ -169,7 +169,7 @@ public class CommerceTests {
                 parentId, "parent_exp_" + parentId);
         jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'TEACHER', 'ACTIVE')",
                 teacherId, "teacher_exp_" + teacherId);
-        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Mau ve', 60000, 10, 2, 0, 'PUBLISHED')",
+        jdbc.update("INSERT INTO public.supplies (id, teacher_id, name, price, stock_quantity, reserved_quantity, sold_quantity, status) VALUES (?, ?, 'Mau ve', 60000, 10, 2, 0, 'ACTIVE')",
                 supplyId, teacherId);
         jdbc.update("INSERT INTO public.orders (id, parent_id, teacher_id, total_amount, shipping_fee, status, expired_at) VALUES (?, ?, ?, 150000, 30000, 'PENDING_PAYMENT', CURRENT_TIMESTAMP - INTERVAL '5 minutes')",
                 orderId, parentId, teacherId);

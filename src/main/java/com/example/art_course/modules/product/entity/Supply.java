@@ -48,6 +48,16 @@ public class Supply {
     @Column(nullable = false, length = 20)
     private String status;
 
+    // Hết hàng thì tự chuyển OUT_OF_STOCK; có hàng lại (giáo viên nhập thêm, hủy/hoàn đơn) thì tự về ACTIVE, không cần duyệt lại.
+    // Chỉ đụng hai trạng thái này: PENDING_REVIEW, REJECTED, HIDDEN do kiểm duyệt quyết định.
+    public void syncStatusWithStock() {
+        if (stockQuantity <= 0 && "ACTIVE".equalsIgnoreCase(status)) {
+            status = "OUT_OF_STOCK";
+        } else if (stockQuantity > 0 && "OUT_OF_STOCK".equalsIgnoreCase(status)) {
+            status = "ACTIVE";
+        }
+    }
+
     public int getAvailableStock() {
         return Math.max(0, stockQuantity - reservedQuantity);
     }

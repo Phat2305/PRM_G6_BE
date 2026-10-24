@@ -84,7 +84,8 @@ public class SupplyService {
                 .imageUrl(request.getImageUrl())
                 .price(request.getPrice())
                 .stockQuantity(request.getStockQuantity())
-                .status(request.getStatus())
+                // CRS-06: client status is ignored; a new supply always waits for Staff approval
+                .status("PENDING_REVIEW")
                 .build();
 
         return supplyRepository.save(supply);
@@ -100,6 +101,8 @@ public class SupplyService {
         User user = getUserById(userId);
         checkOwnership(supply, user);
 
+        boolean contentChanged = false;
+
         if (request.getName() != null) {
             if (request.getName().isBlank()) {
                 throw new ResponseStatusException(
@@ -108,18 +111,24 @@ public class SupplyService {
                 );
             }
 
-            supply.setName(request.getName().trim());
+            String name = request.getName().trim();
+            contentChanged |= !name.equals(supply.getName());
+            supply.setName(name);
         }
 
         if (request.getDescription() != null) {
+            contentChanged |= !request.getDescription().equals(blankIfNull(supply.getDescription()));
             supply.setDescription(request.getDescription());
         }
 
         if (request.getImageUrl() != null) {
+            contentChanged |= !request.getImageUrl().equals(blankIfNull(supply.getImageUrl()));
             supply.setImageUrl(request.getImageUrl());
         }
 
         if (request.getPrice() != null) {
+            contentChanged |= supply.getPrice() == null
+                    || supply.getPrice().compareTo(request.getPrice()) != 0;
             supply.setPrice(request.getPrice());
         }
 
@@ -127,8 +136,12 @@ public class SupplyService {
             supply.setStockQuantity(request.getStockQuantity());
         }
 
-        if (request.getStatus() != null) {
-            supply.setStatus(request.getStatus());
+        // CRS-06/07: client status is ignored. Changing what the buyer sees goes back to Staff review;
+        // a stock-only change never needs review, it just toggles ACTIVE <-> OUT_OF_STOCK.
+        if (contentChanged) {
+            supply.setStatus("PENDING_REVIEW");
+        } else {
+            syncStatusWithStock(supply);
         }
 
         return supplyRepository.save(supply);
@@ -141,6 +154,20 @@ public class SupplyService {
         checkOwnership(supply, user);
 
         supplyRepository.delete(supply);
+    }
+
+    private static String blankIfNull(String value) {
+        return value == null ? "" : value;
+    }
+
+    // Only ACTIVE and OUT_OF_STOCK follow the stock; review states (PENDING_REVIEW, REJECTED, HIDDEN) are left alone.
+    private static void syncStatusWithStock(Supply supply) {
+        boolean empty = supply.getStockQuantity() == null || supply.getStockQuantity() <= 0;
+        if (empty && "ACTIVE".equalsIgnoreCase(supply.getStatus())) {
+            supply.setStatus("OUT_OF_STOCK");
+        } else if (!empty && "OUT_OF_STOCK".equalsIgnoreCase(supply.getStatus())) {
+            supply.setStatus("ACTIVE");
+        }
     }
 
     private User getUserById(String userId) {

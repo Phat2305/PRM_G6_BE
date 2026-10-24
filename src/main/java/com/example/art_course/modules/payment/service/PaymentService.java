@@ -268,11 +268,14 @@ public class PaymentService {
                 if (detail.getSupplyId() != null) {
                     Supply supply = supplyRepository.findByIdForUpdate(detail.getSupplyId()).orElse(null);
                     if (supply != null) {
-                        // Giữ chỗ chuyển thành đã bán: reserved_quantity giảm, sold_quantity tăng
+                        // Giữ chỗ chuyển thành đã bán: reserved_quantity giảm, sold_quantity tăng, stock_quantity giảm
+                        // (hủy/hoàn đơn cộng lại stock_quantity, nên không trừ ở đây thì tồn khả dụng tăng ảo sau khi thanh toán)
                         int newReserved = Math.max(0, supply.getReservedQuantity() - detail.getQuantity());
                         int newSold = supply.getSoldQuantity() + detail.getQuantity();
                         supply.setReservedQuantity(newReserved);
                         supply.setSoldQuantity(newSold);
+                        supply.setStockQuantity(Math.max(0, supply.getStockQuantity() - detail.getQuantity()));
+                        supply.syncStatusWithStock();
                         supplyRepository.save(supply);
                     }
                 }

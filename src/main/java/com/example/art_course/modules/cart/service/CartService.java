@@ -107,6 +107,14 @@ public class CartService {
             Supply supply = supplyRepository.findById(input.getSupplyId())
                     .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
 
+            // SHOP-02: chỉ dụng cụ đang bán (ACTIVE) mới vào giỏ, khớp danh mục /api/v1/supplies
+            if ("OUT_OF_STOCK".equalsIgnoreCase(supply.getStatus())) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK", "Dụng cụ \"" + supply.getName() + "\" đã hết hàng");
+            }
+            if (!"ACTIVE".equalsIgnoreCase(supply.getStatus())) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "SUPPLY_UNAVAILABLE", "Dụng cụ vẽ hiện không được bán");
+            }
+
             int qty = input.getQuantity() > 0 ? input.getQuantity() : 1;
             int available = supply.getAvailableStock();
 

@@ -43,6 +43,7 @@ public class StaffService {
 
         if ("APPROVE".equals(cleanAction)) {
             supply.setStatus("ACTIVE");
+            supply.syncStatusWithStock(); // duyệt khi kho đang 0 thì hiện hết hàng
             decision = "APPROVED";
         } else if ("REJECT".equals(cleanAction)) {
             supply.setStatus("REJECTED");
