@@ -56,6 +56,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private void reject(HttpServletResponse response, HttpStatus status, String code, String message) throws IOException {
         SecurityContextHolder.clearContext();
+        writeError(response, status, code, message);
+    }
+
+    // Cùng dạng ApiResponse.error; message là hằng số nên ghép chuỗi không cần escape
+    public static void writeError(HttpServletResponse response, HttpStatus status, String code, String message) throws IOException {
         response.setStatus(status.value());
         response.setContentType("application/json;charset=UTF-8");
         response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}}");
@@ -78,9 +83,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 // 1. Phân biệt Access Token vs Refresh Token (Chỉ chấp nhận ACCESS, từ chối REFRESH)
                 String tokenType = claims.get("type", String.class);
                 if (tokenType != null && !"ACCESS".equalsIgnoreCase(tokenType)) {
-                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"INVALID_TOKEN_TYPE\",\"message\":\"Chỉ chấp nhận Access Token, không được dùng Refresh Token gọi API\"}}");
+                    reject(response, HttpStatus.UNAUTHORIZED, "INVALID_TOKEN_TYPE",
+                            "Chỉ chấp nhận Access Token, không được dùng Refresh Token gọi API");
                     return;
                 }
 
@@ -130,16 +134,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             } catch (io.jsonwebtoken.ExpiredJwtException ex) {
-                SecurityContextHolder.clearContext();
-                response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"TOKEN_EXPIRED\",\"message\":\"Access token đã hết hạn\"}}");
+                reject(response, HttpStatus.UNAUTHORIZED, "TOKEN_EXPIRED", "Access token đã hết hạn");
                 return;
             } catch (Exception ex) {
-                SecurityContextHolder.clearContext();
-                response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write("{\"success\":false,\"error\":{\"code\":\"INVALID_TOKEN\",\"message\":\"Access token không hợp lệ hoặc chữ ký không khớp\"}}");
+                reject(response, HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
+                        "Access token không hợp lệ hoặc chữ ký không khớp");
                 return;
             }
         }
