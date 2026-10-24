@@ -10,8 +10,8 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.config.Customizer;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -64,6 +64,12 @@ public class SecurityConfig {
                                         .noneMatch(a -> "ROLE_CHILD".equals(a.getAuthority()))))
                         .anyRequest().authenticated()
                 )
+                // Mặc định Spring trả 401/403 body rỗng; ghi JSON cùng dạng ApiResponse để FE đọc error.message
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((req, res, e) -> JwtAuthFilter.writeError(res, HttpStatus.UNAUTHORIZED,
+                                "UNAUTHORIZED", "Bạn cần đăng nhập để gọi API này"))
+                        .accessDeniedHandler((req, res, e) -> JwtAuthFilter.writeError(res, HttpStatus.FORBIDDEN,
+                                "FORBIDDEN", "Bạn không có quyền thực hiện thao tác này")))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

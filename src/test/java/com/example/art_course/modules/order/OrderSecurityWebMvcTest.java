@@ -178,10 +178,11 @@ public class OrderSecurityWebMvcTest {
     }
 
     @Test
-    @DisplayName("1. Không có JWT token gọi API đơn hàng bị Spring Security chặn (403 Forbidden)")
+    @DisplayName("1. Không có JWT token gọi API đơn hàng bị Spring Security chặn (401 Unauthorized)")
     void testUnauthenticatedRequestBlocked() throws Exception {
         mockMvc.perform(get("/api/v1/orders/my-orders"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
     }
 
     @Test
@@ -219,7 +220,8 @@ public class OrderSecurityWebMvcTest {
                         .header("Authorization", "Bearer " + teacherToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"useCart\":true}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
 
         verifyNoInteractions(orderService);
     }
@@ -231,7 +233,8 @@ public class OrderSecurityWebMvcTest {
 
         mockMvc.perform(get("/api/v1/orders/teacher-orders")
                         .header("Authorization", "Bearer " + parentToken))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
 
         verifyNoInteractions(orderService);
     }
