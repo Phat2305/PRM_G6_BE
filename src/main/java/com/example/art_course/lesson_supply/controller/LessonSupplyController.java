@@ -10,6 +10,7 @@ import com.example.art_course.lesson_supply.service.LessonSupplyService;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,19 +39,22 @@ public class LessonSupplyController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public LessonSupplyResponse add(
-            @Valid @RequestBody AddLessonSupplyRequest request
+            @Valid @RequestBody AddLessonSupplyRequest request,
+            Authentication authentication
     ) {
-        return toResponse(service.add(request));
+        return toResponse(service.add(request, authentication.getName()));
     }
 
     @PutMapping("/lesson/{lessonId}/supply/{supplyId}")
     public LessonSupplyResponse updateQuantity(
             @PathVariable UUID lessonId,
             @PathVariable UUID supplyId,
-            @Valid @RequestBody UpdateLessonSupplyRequest request
+            @Valid @RequestBody UpdateLessonSupplyRequest request,
+            Authentication authentication
     ) {
         return toResponse(
-                service.updateQuantity(lessonId, supplyId, request)
+                service.updateQuantity(
+                        lessonId, supplyId, request, authentication.getName())
         );
     }
 
@@ -58,9 +62,10 @@ public class LessonSupplyController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void remove(
             @PathVariable UUID lessonId,
-            @PathVariable UUID supplyId
+            @PathVariable UUID supplyId,
+            Authentication authentication
     ) {
-        service.remove(lessonId, supplyId);
+        service.remove(lessonId, supplyId, authentication.getName());
     }
 
     private LessonSupplyResponse toResponse(LessonSupply entity) {

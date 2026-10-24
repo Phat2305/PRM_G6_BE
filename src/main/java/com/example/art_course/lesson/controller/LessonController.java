@@ -105,7 +105,8 @@ public class LessonController {
                 lesson.getVideoUrl(),
                 lesson.getIsTrial(),
                 lesson.getHasAssignment(),
-                lesson.getStatus()
+                lesson.getStatus(),
+                lesson.getVideoStatus()
         );
     }
 }

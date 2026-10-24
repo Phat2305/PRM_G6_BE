@@ -27,4 +27,6 @@ public class LessonResponse {
     private Boolean hasAssignment;
 
     private String status;
+
+    private String videoStatus;
 }

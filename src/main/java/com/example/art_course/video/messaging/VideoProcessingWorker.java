@@ -29,14 +29,27 @@ public class VideoProcessingWorker {
         System.out.println(
                 "Received video processing job: " + message.getVideoId());
 
-        String hlsId = videoProcessingService.convertToHls(
-                message.getInputPath());
+        UUID lessonId = message.getLessonId() != null
+                && !message.getLessonId().isBlank()
+                ? UUID.fromString(message.getLessonId())
+                : null;
 
-        if (message.getLessonId() != null
-                && !message.getLessonId().isBlank()) {
-            videoLessonService.completeLessonVideo(
-                    UUID.fromString(message.getLessonId()),
-                    hlsId);
+        String hlsId;
+
+        if (lessonId == null) {
+            hlsId = videoProcessingService.convertToHls(
+                    message.getInputPath());
+        } else {
+            videoLessonService.markProcessing(lessonId);
+            try {
+                hlsId = videoProcessingService.convertToHls(
+                        message.getInputPath());
+                videoLessonService.completeLessonVideo(lessonId, hlsId);
+            } catch (RuntimeException e) {
+                // Ghi FAILED rồi ném lại để container reject message như cũ.
+                videoLessonService.markFailed(lessonId, e);
+                throw e;
+            }
         }
 
         System.out.println(

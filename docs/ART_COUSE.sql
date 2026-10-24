@@ -206,7 +206,9 @@ CREATE TABLE public.lessons (
     video_url text,
     is_trial boolean NOT NULL,
     has_assignment boolean NOT NULL,
-    status character varying(20) NOT NULL
+    status character varying(20) NOT NULL,
+    video_status character varying(20),
+    video_error text
 );
 
 

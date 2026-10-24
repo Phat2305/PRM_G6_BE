@@ -10,6 +10,7 @@ import com.example.art_course.supply.service.SupplyService;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -49,7 +50,9 @@ public class SupplyController {
                 .toList();
     }
 
+    // CRS-06: chỉ Teacher được tạo dụng cụ (Parent/Child/Staff nhận 403).
     @PostMapping
+    @PreAuthorize("hasRole('TEACHER')")
     @ResponseStatus(HttpStatus.CREATED)
     public SupplyResponse createSupply(
             @Valid @RequestBody CreateSupplyRequest request,

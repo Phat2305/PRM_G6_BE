@@ -32,6 +32,13 @@ public class Lesson {
     @Column(name = "video_url", columnDefinition = "text")
     private String videoUrl;
 
+    // NO_VIDEO, QUEUED, PROCESSING, READY, FAILED
+    @Column(name = "video_status", length = 20)
+    private String videoStatus;
+
+    @Column(name = "video_error", columnDefinition = "text")
+    private String videoError;
+
     @Column(name = "is_trial")
     private Boolean isTrial;
 

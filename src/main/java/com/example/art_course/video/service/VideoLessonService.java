@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -59,6 +61,71 @@ public class VideoLessonService {
                     "Video file is required");
         }
 
+        Lesson lesson = ownedLesson(lessonId, userId);
+
+        VideoStorageService.StoredVideo storedVideo =
+                videoStorageService.store(file);
+
+        String videoId = UUID.randomUUID().toString();
+
+        // Ghi QUEUED trước khi publish; publish lỗi thì transaction rollback.
+        // Flush ngay để giữ khóa dòng: worker ghi PROCESSING phải chờ commit này, không bị QUEUED đè.
+        lesson.setVideoStatus("QUEUED");
+        lesson.setVideoError(null);
+        lessonRepository.saveAndFlush(lesson);
+
+        VideoProcessingMessage message = new VideoProcessingMessage(
+                videoId,
+                storedVideo.absolutePath(),
+                lessonId.toString());
+
+        videoProcessingPublisher.publish(message);
+
+        return videoId;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getLessonVideoStatus(UUID lessonId, String userId) {
+        Lesson lesson = ownedLesson(lessonId, userId);
+        String status = lesson.getVideoStatus();
+        if (status == null) {
+            // Bài học có từ trước khi có cột video_status.
+            status = lesson.getVideoUrl() == null || lesson.getVideoUrl().isBlank()
+                    ? "NO_VIDEO" : "READY";
+        }
+        // HashMap vì error/videoUrl có thể null.
+        Map<String, Object> body = new HashMap<>();
+        body.put("lessonId", lessonId.toString());
+        body.put("status", status);
+        body.put("error", lesson.getVideoError());
+        body.put("videoUrl", lesson.getVideoUrl());
+        return body;
+    }
+
+    @Transactional
+    public void markProcessing(UUID lessonId) {
+        lessonRepository.findById(lessonId).ifPresent(lesson -> {
+            lesson.setVideoStatus("PROCESSING");
+            lesson.setVideoError(null);
+            lessonRepository.save(lesson);
+        });
+    }
+
+    @Transactional
+    public void markFailed(UUID lessonId, Exception error) {
+        String message = error instanceof ResponseStatusException rse
+                && rse.getReason() != null
+                ? rse.getReason()
+                : "Video processing failed";
+        lessonRepository.findById(lessonId).ifPresent(lesson -> {
+            lesson.setVideoStatus("FAILED");
+            lesson.setVideoError(message.length() > 500
+                    ? message.substring(0, 500) : message);
+            lessonRepository.save(lesson);
+        });
+    }
+
+    private Lesson ownedLesson(UUID lessonId, String userId) {
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -88,22 +155,10 @@ public class VideoLessonService {
                 || !course.getTeacherId().equals(user.getId())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "You are not allowed to upload video to this lesson");
+                    "You are not allowed to access video of this lesson");
         }
 
-        VideoStorageService.StoredVideo storedVideo =
-                videoStorageService.store(file);
-
-        String videoId = UUID.randomUUID().toString();
-
-        VideoProcessingMessage message = new VideoProcessingMessage(
-                videoId,
-                storedVideo.absolutePath(),
-                lessonId.toString());
-
-        videoProcessingPublisher.publish(message);
-
-        return videoId;
+        return lesson;
     }
 
     @Transactional
@@ -114,6 +169,8 @@ public class VideoLessonService {
                         "Lesson not found"));
 
         lesson.setVideoUrl("/api/videos/hls/" + hlsId + "/master.m3u8");
+        lesson.setVideoStatus("READY");
+        lesson.setVideoError(null);
         lessonRepository.save(lesson);
     }
 }

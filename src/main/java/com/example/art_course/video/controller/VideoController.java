@@ -94,6 +94,20 @@ public class VideoController {
         ));
     }
 
+    /**
+     * Trạng thái xử lý video của bài học: NO_VIDEO, QUEUED, PROCESSING, READY, FAILED.
+     */
+    @GetMapping("/lessons/{lessonId}/status")
+    public ResponseEntity<Map<String, Object>> lessonVideoStatus(
+            @PathVariable UUID lessonId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(videoLessonService.getLessonVideoStatus(
+                lessonId,
+                authentication.getName()
+        ));
+    }
+
     public record UploadVideoResponse(
             String videoId,
             String originalFileName,
