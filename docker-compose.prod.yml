@@ -1,0 +1,25 @@
+# Chỉ dùng trên VPS: docker compose -f docker-compose.prod.yml up -d --build
+# Cần có sẵn ../.env (không commit), network prm-g6-net và volume prm-g6-uploads.
+# Máy local chạy docker compose bình thường sẽ không đụng tới file này.
+services:
+  prm-g6-be:
+    build:
+      context: .
+      dockerfile: dockerfile
+    image: prm-g6-be
+    container_name: prm-g6-be
+    restart: unless-stopped
+    env_file: ../.env
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - prm-g6-uploads:/uploads
+    networks: [prm-g6-net]
+
+volumes:
+  prm-g6-uploads:
+    external: true
+
+networks:
+  prm-g6-net:
+    external: true
