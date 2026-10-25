@@ -90,7 +90,7 @@ public class UserService {
             throw new AppError(HttpStatus.BAD_REQUEST, "AVATAR_REQUIRED", "Chưa chọn ảnh");
         }
         if (file.getSize() > MAX_AVATAR_BYTES) {
-            throw new AppError(HttpStatus.PAYLOAD_TOO_LARGE, "AVATAR_TOO_LARGE", "Ảnh tối đa 5 MB");
+            throw new AppError(HttpStatus.CONTENT_TOO_LARGE, "AVATAR_TOO_LARGE", "Ảnh tối đa 5 MB");
         }
         String type = file.getContentType();
         if (type == null || !AVATAR_TYPES.contains(type)) {

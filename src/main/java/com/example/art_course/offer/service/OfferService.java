@@ -3,6 +3,7 @@ package com.example.art_course.offer.service;
 
 import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
+import com.example.art_course.customize_request.service.CustomizeRequestService;
 import com.example.art_course.offer.dto.CreateOfferRequest;
 import com.example.art_course.offer.dto.OfferResponse;
 import com.example.art_course.offer.dto.UpdateOfferStatusRequest;
@@ -63,7 +64,7 @@ public class OfferService {
         CustomizeRequest customizeRequest =
                 findCustomizeRequest(request.getRequestId());
 
-        if (!"pending".equalsIgnoreCase(
+        if (!CustomizeRequestService.OPEN.equalsIgnoreCase(
                 customizeRequest.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,

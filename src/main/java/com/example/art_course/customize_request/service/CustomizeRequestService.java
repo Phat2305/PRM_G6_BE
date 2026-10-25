@@ -22,8 +22,10 @@ import java.util.UUID;
 @Service
 public class CustomizeRequestService {
 
+    // Tên trạng thái theo SRS; dữ liệu trong DB cũng lưu dạng này.
+    public static final String OPEN = "OPEN";
     private static final Set<String> ALLOWED_STATUSES =
-            Set.of("pending", "accepted", "rejected", "cancelled");
+            Set.of(OPEN, "ACCEPTED", "REJECTED", "CANCELLED");
 
     private final CustomizeRequestRepository repository;
     private final UserRepository userRepository;
@@ -58,7 +60,7 @@ public class CustomizeRequestService {
                 .childAge(request.getChildAge())
                 .budget(request.getBudget())
                 .deadline(request.getDeadline())
-                .status("pending")
+                .status(OPEN)
                 .build();
 
         return toResponse(repository.save(entity));
@@ -219,10 +221,10 @@ public class CustomizeRequestService {
     }
 
     private void requirePending(CustomizeRequest entity) {
-        if (!"pending".equalsIgnoreCase(entity.getStatus())) {
+        if (!OPEN.equalsIgnoreCase(entity.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Only pending requests can be edited or deleted");
+                    "Only open requests can be edited or deleted");
         }
     }
 
@@ -255,7 +257,11 @@ public class CustomizeRequestService {
                     "Status is required");
         }
 
-        String normalized = status.trim().toLowerCase(Locale.ROOT);
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        // App cũ vẫn gửi "pending"
+        if ("PENDING".equals(normalized)) {
+            normalized = OPEN;
+        }
 
         if (!ALLOWED_STATUSES.contains(normalized)) {
             throw new ResponseStatusException(

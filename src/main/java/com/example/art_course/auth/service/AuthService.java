@@ -45,7 +45,7 @@ public class AuthService {
 
         String email = PasswordResetService.normalize(request.getEmail());
 
-        if (userRepository.existsByUsername(username) || userRepository.existsByEmail(email)) {
+        if (userRepository.existsByUsernameIgnoreCase(username) || userRepository.existsByEmail(email)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Username or email already exists"
@@ -83,7 +83,7 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         // Cùng một lỗi cho "sai username" và "sai password" để không lộ username nào tồn tại
         User user = userRepository
-                .findByUsername(request.getUsername().trim())
+                .findForLogin(request.getUsername().trim())
                 .orElseThrow(this::invalidCredentials);
 
         if (!passwordEncoder.matches(

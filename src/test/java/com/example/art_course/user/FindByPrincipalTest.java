@@ -4,6 +4,7 @@ import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,6 +33,20 @@ class FindByPrincipalTest {
         doReturn(Optional.of(user)).when(repo).findByUsername("teacher");
 
         assertSame(user, repo.findByPrincipal("teacher").orElseThrow());
+    }
+
+    @Test
+    void login_matchesUsernameIgnoringCase_butNotWhenAmbiguous() {
+        User user = new User();
+        doReturn(List.of(user)).when(repo).findAllByUsernameIgnoreCase("Teacher");
+        assertSame(user, repo.findForLogin("Teacher").orElseThrow());
+
+        doReturn(List.of(new User(), new User())).when(repo).findAllByUsernameIgnoreCase("AN");
+        assertTrue(repo.findForLogin("AN").isEmpty());
+
+        User exact = new User();
+        doReturn(Optional.of(exact)).when(repo).findByUsername("an");
+        assertSame(exact, repo.findForLogin("an").orElseThrow());
     }
 
     @Test
