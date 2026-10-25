@@ -15,6 +15,8 @@ import java.util.UUID;
 public class WithdrawalResponseDto {
     private UUID id;
     private UUID teacherId;
+    // Họ tên giáo viên (teacher_profiles.full_name); chỉ điền ở danh sách dành cho Staff/Admin.
+    private String teacherName;
     private BigDecimal totalAmount;
     private String bankInfo;
     private WithdrawalStatus status;

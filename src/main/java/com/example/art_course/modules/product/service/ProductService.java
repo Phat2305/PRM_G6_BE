@@ -27,9 +27,11 @@ public class ProductService {
         return supplies;
     }
 
+    // Endpoint công khai: giống danh sách, chỉ dụng cụ đang bán (hoặc hết hàng). Bản chờ duyệt/bị ẩn coi như không tồn tại.
     @Transactional(readOnly = true)
     public Supply getSupplyDetail(UUID supplyId) {
         Supply supply = supplyRepository.findById(supplyId)
+                .filter(s -> "ACTIVE".equalsIgnoreCase(s.getStatus()) || "OUT_OF_STOCK".equalsIgnoreCase(s.getStatus()))
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
         supply.setTeacherName(teacherNames.byId(supply.getTeacherId()));
         return supply;

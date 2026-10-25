@@ -1,6 +1,7 @@
 package com.example.art_course.modules.finance.controller;
 
 import com.example.art_course.common.ApiResponse;
+import com.example.art_course.common.TeacherNames;
 import com.example.art_course.common.statemachine.WithdrawalStatus;
 import com.example.art_course.modules.systemconfig.entity.SystemConfig;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
@@ -27,6 +28,7 @@ public class AdminFinanceController {
 
     private final WithdrawalService withdrawalService;
     private final ConfigService configService;
+    private final TeacherNames teacherNames;
 
     /**
      * Danh sách tất cả yêu cầu rút tiền (lọc theo trạng thái) (FIN-04).
@@ -37,14 +39,17 @@ public class AdminFinanceController {
             @RequestParam(required = false) WithdrawalStatus status
     ) {
         List<WithdrawalResponseDto> list = withdrawalService.getAllWithdrawals(status);
+        Map<UUID, String> names = teacherNames.byIds(
+                list.stream().map(WithdrawalResponseDto::getTeacherId).distinct().toList());
+        list.forEach(dto -> dto.setTeacherName(names.get(dto.getTeacherId())));
         return ApiResponse.ok(list);
     }
 
     /**
-     * Admin duyệt yêu cầu rút tiền (ADM-03, FIN-05).
+     * Staff/Admin duyệt yêu cầu rút tiền (FIN-05).
      */
     @PostMapping("/withdrawals/{requestId}/approve")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<WithdrawalResponseDto> approveWithdrawal(
             @PathVariable UUID requestId,
             Authentication auth
@@ -55,10 +60,10 @@ public class AdminFinanceController {
     }
 
     /**
-     * Admin từ chối yêu cầu rút tiền (FIN-05).
+     * Staff/Admin từ chối yêu cầu rút tiền (FIN-05).
      */
     @PostMapping("/withdrawals/{requestId}/reject")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<WithdrawalResponseDto> rejectWithdrawal(
             @PathVariable UUID requestId,
             @Valid @RequestBody RejectWithdrawalRequest req,

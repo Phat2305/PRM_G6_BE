@@ -26,7 +26,7 @@ public interface EnrollmentRepository
             UUID courseId
     );
 
-    boolean existsByIdChildIdAndIdCourseIdAndStatus(
+    boolean existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(
             UUID childId,
             UUID courseId,
             String status

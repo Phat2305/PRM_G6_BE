@@ -5,6 +5,7 @@ import com.example.art_course.admin.dto.StaffResponse;
 import com.example.art_course.admin.dto.StaffStatusRequest;
 import com.example.art_course.admin.dto.UpdateStaffRequest;
 import com.example.art_course.common.AppError;
+import com.example.art_course.modules.moderation.service.ModerationService;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class AdminUserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ModerationService moderationService;
 
     @Transactional
     public StaffResponse createStaff(CreateStaffRequest request) {
@@ -83,6 +85,19 @@ public class AdminUserService {
             user.revokeTokens();
         }
         return toResponse(userRepository.save(user));
+    }
+
+    // ACC-12 / STF-07: duyệt hoặc từ chối giáo viên mới đăng ký; đổi trạng thái và ghi nhật ký kiểm duyệt cùng một transaction.
+    @Transactional
+    public User decideTeacher(UUID teacherId, UUID staffId, String newStatus, String decision, String reason) {
+        if (userRepository.decidePendingTeacher(teacherId, newStatus) == 0) {
+            if (!userRepository.existsById(teacherId)) {
+                throw new AppError(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "Không tìm thấy người dùng");
+            }
+            throw new AppError(HttpStatus.BAD_REQUEST, "NOT_PENDING_TEACHER", "Tài khoản này không phải giáo viên đang chờ duyệt");
+        }
+        moderationService.recordModerationReview(staffId, "TEACHER_PROFILE", teacherId, decision, reason);
+        return userRepository.findById(teacherId).orElseThrow();
     }
 
     // Staff đã có nhật ký duyệt thì không xóa được (FK) -> khóa tài khoản thay vì xóa

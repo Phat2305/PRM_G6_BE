@@ -1,7 +1,9 @@
 package com.example.art_course.modules.admin.controller;
 
 import com.example.art_course.common.ApiResponse;
+import com.example.art_course.common.TeacherNames;
 import com.example.art_course.modules.admin.dto.AdminAnalyticsDto;
+import com.example.art_course.modules.admin.dto.LedgerAuditEntryDto;
 import com.example.art_course.modules.admin.service.AdminService;
 import com.example.art_course.modules.payment.entity.MoneyLedger;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -17,6 +20,7 @@ import java.util.UUID;
 public class AdminAnalyticsController {
 
     private final AdminService adminService;
+    private final TeacherNames teacherNames;
 
     /**
      * Báo cáo thống kê tài chính và vận hành sàn (ADM-04, ADM-05, ADM-06).
@@ -28,14 +32,22 @@ public class AdminAnalyticsController {
     }
 
     /**
-     * Tra cứu sổ cái tài chính toàn sàn (Audit log - ADM-04).
+     * Tra cứu sổ cái tài chính toàn sàn (Audit log - ADM-04), mới nhất trước, phân trang (page từ 0, size 1-200).
      */
     @GetMapping("/ledger-audit")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<List<MoneyLedger>> getLedgerAudit(
+    public ApiResponse<List<LedgerAuditEntryDto>> getLedgerAudit(
             @RequestParam(required = false) UUID teacherId,
-            @RequestParam(required = false) String entryType
+            @RequestParam(required = false) String entryType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size
     ) {
-        return ApiResponse.ok(adminService.getLedgerAuditLogs(teacherId, entryType));
+        List<MoneyLedger> entries = adminService.getLedgerAuditLogs(
+                teacherId, entryType, Math.max(0, page), Math.min(Math.max(1, size), 200));
+        Map<UUID, String> names = teacherNames.byIds(
+                entries.stream().map(MoneyLedger::getTeacherId).distinct().toList());
+        return ApiResponse.ok(entries.stream()
+                .map(m -> LedgerAuditEntryDto.of(m, names.get(m.getTeacherId())))
+                .toList());
     }
 }

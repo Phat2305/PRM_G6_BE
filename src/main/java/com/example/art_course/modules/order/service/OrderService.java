@@ -210,7 +210,7 @@ public class OrderService {
     }
 
     private void requireChildNotEnrolled(UUID childId, UUID courseId) {
-        String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND status = 'ACTIVE'";
+        String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
         List<?> enrolled = entityManager.createNativeQuery(enrollSql)
                 .setParameter("childId", childId)
                 .setParameter("courseId", courseId)

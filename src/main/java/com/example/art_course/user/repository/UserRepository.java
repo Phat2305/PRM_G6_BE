@@ -2,6 +2,7 @@ package com.example.art_course.user.repository;
 
 import com.example.art_course.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -40,6 +41,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             return findByUsername(name);
         }
     }
+
+    // Đổi trạng thái giáo viên đang PENDING bằng một câu lệnh nguyên tử: hai người duyệt cùng lúc thì chỉ một người thắng (trả 0 cho người còn lại).
+    @Modifying(clearAutomatically = true)
+    @Query("update User u set u.status = :to where u.id = :id and u.role = 'TEACHER' and u.status = 'PENDING'")
+    int decidePendingTeacher(@Param("id") UUID id, @Param("to") String to);
 
     // Trạng thái tài khoản và mốc thu hồi token, JwtAuthFilter tra ở mỗi request
     interface AuthState {

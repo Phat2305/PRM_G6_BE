@@ -4,6 +4,7 @@ import com.example.art_course.admin.dto.StaffStatusRequest;
 import com.example.art_course.admin.service.AdminUserService;
 import com.example.art_course.auth.repository.AuthRepository;
 import com.example.art_course.common.AppError;
+import com.example.art_course.modules.moderation.service.ModerationService;
 import com.example.art_course.user.dto.ChangePasswordRequest;
 import com.example.art_course.user.dto.UpdateProfileRequest;
 import com.example.art_course.user.entity.User;
@@ -31,7 +32,8 @@ class UserAccountTest {
     private final AuthRepository authRepo = mock(AuthRepository.class);
     private final R2StorageService r2 = mock(R2StorageService.class);
     private final UserService userService = new UserService(repo, authRepo, encoder, r2);
-    private final AdminUserService adminService = new AdminUserService(repo, encoder);
+    private final ModerationService moderation = mock(ModerationService.class);
+    private final AdminUserService adminService = new AdminUserService(repo, encoder, moderation);
 
     private User user(String role) {
         User u = new User(UUID.randomUUID(), "u", "hash", role, "ACTIVE", null, null);
@@ -50,6 +52,42 @@ class UserAccountTest {
         StaffStatusRequest r = new StaffStatusRequest();
         r.setStatus(s);
         return r;
+    }
+
+    @Test
+    void decideTeacher_pending_changesStatusAndRecordsReview() {
+        User u = user("TEACHER");
+        UUID staff = UUID.randomUUID();
+        when(repo.decidePendingTeacher(u.getId(), "REJECTED")).thenReturn(1);
+
+        adminService.decideTeacher(u.getId(), staff, "REJECTED", "REJECTED", "Thiếu chứng chỉ");
+
+        verify(moderation).recordModerationReview(staff, "TEACHER_PROFILE", u.getId(), "REJECTED", "Thiếu chứng chỉ");
+    }
+
+    @Test
+    void decideTeacher_alreadyDecided_isRejectedAndNotLogged() {
+        User u = user("TEACHER");
+        when(repo.decidePendingTeacher(u.getId(), "ACTIVE")).thenReturn(0);
+        when(repo.existsById(u.getId())).thenReturn(true);
+
+        AppError e = assertThrows(AppError.class,
+                () -> adminService.decideTeacher(u.getId(), UUID.randomUUID(), "ACTIVE", "APPROVED", null));
+
+        assertEquals("NOT_PENDING_TEACHER", e.getErrorCode());
+        verifyNoInteractions(moderation);
+    }
+
+    @Test
+    void decideTeacher_unknownUser_is404() {
+        UUID id = UUID.randomUUID();
+        when(repo.decidePendingTeacher(id, "ACTIVE")).thenReturn(0);
+        when(repo.existsById(id)).thenReturn(false);
+
+        AppError e = assertThrows(AppError.class,
+                () -> adminService.decideTeacher(id, UUID.randomUUID(), "ACTIVE", "APPROVED", null));
+
+        assertEquals("USER_NOT_FOUND", e.getErrorCode());
     }
 
     @Test

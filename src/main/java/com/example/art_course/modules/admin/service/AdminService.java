@@ -6,15 +6,16 @@ import com.example.art_course.common.statemachine.WithdrawalStatus;
 import com.example.art_course.modules.admin.dto.AdminAnalyticsDto;
 import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.payment.entity.MoneyLedger;
-import com.example.art_course.modules.payment.entity.Payment;
 import com.example.art_course.modules.payment.repository.MoneyLedgerRepository;
 import com.example.art_course.modules.payment.repository.PaymentRepository;
-import com.example.art_course.modules.refund.entity.Refund;
 import com.example.art_course.modules.refund.repository.RefundRepository;
-import com.example.art_course.modules.withdrawal.entity.WithdrawalRequest;
 import com.example.art_course.modules.withdrawal.repository.WithdrawalRequestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,62 +36,37 @@ public class AdminService {
 
     /**
      * Thống kê tài chính toàn diện sàn (ADM-04, ADM-05, ADM-06).
+     * Cộng dồn ngay trong DB (GROUP BY/SUM) thay vì nạp mọi dòng vào bộ nhớ.
      */
     @Transactional(readOnly = true)
     public AdminAnalyticsDto getFinanceAnalytics() {
-        List<Payment> allPayments = paymentRepository.findAll();
-
-        // 1. Doanh thu: tổng tiền các đơn đã thanh toán thành công (HELD + RELEASED)
-        BigDecimal totalRevenue = allPayments.stream()
-                .filter(p -> p.getStatus() == PaymentStatus.HELD || p.getStatus() == PaymentStatus.RELEASED)
-                .map(Payment::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 2. Tiền đang giữ Escrow (HELD)
-        BigDecimal totalHeld = allPayments.stream()
-                .filter(p -> p.getStatus() == PaymentStatus.HELD)
-                .map(Payment::getNetAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 3. Hoa hồng sàn đã thu
-        BigDecimal totalCommission = allPayments.stream()
-                .filter(p -> p.getStatus() == PaymentStatus.HELD || p.getStatus() == PaymentStatus.RELEASED)
-                .map(Payment::getCommissionAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 4. Rút tiền
-        List<WithdrawalRequest> allWithdrawals = withdrawalRequestRepository.findAll();
-        BigDecimal totalPendingWithdrawals = allWithdrawals.stream()
-                .filter(w -> w.getStatus() == WithdrawalStatus.PENDING || w.getStatus() == WithdrawalStatus.APPROVED)
-                .map(WithdrawalRequest::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal totalPaidOut = allWithdrawals.stream()
-                .filter(w -> w.getStatus() == WithdrawalStatus.PAID)
-                .map(WithdrawalRequest::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 5. Hoàn tiền
-        List<Refund> allRefunds = refundRepository.findAll();
-        BigDecimal totalRefunded = allRefunds.stream()
-                .filter(r -> "COMPLETED".equalsIgnoreCase(r.getStatus()))
-                .map(Refund::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // 6. Số dư khả dụng toàn sàn (tính từ ledger)
-        List<MoneyLedger> allLedgers = moneyLedgerRepository.findAll();
-        BigDecimal totalAvailable = BigDecimal.ZERO;
-        for (MoneyLedger l : allLedgers) {
-            if ("RELEASE".equals(l.getEntryType()) || "WITHDRAW_UNLOCK".equals(l.getEntryType())) {
-                totalAvailable = totalAvailable.add(l.getAmount());
-            } else if ("WITHDRAW_LOCK".equals(l.getEntryType()) || "REFUND".equals(l.getEntryType())) {
-                totalAvailable = totalAvailable.subtract(l.getAmount());
+        // 1-3. Doanh thu = HELD + RELEASED, tiền đang giữ = net của HELD, hoa hồng = HELD + RELEASED
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+        BigDecimal totalHeld = BigDecimal.ZERO;
+        BigDecimal totalCommission = BigDecimal.ZERO;
+        for (Object[] row : paymentRepository.sumsByStatus(List.of(PaymentStatus.HELD, PaymentStatus.RELEASED))) {
+            totalRevenue = totalRevenue.add((BigDecimal) row[1]);
+            totalCommission = totalCommission.add((BigDecimal) row[3]);
+            if (row[0] == PaymentStatus.HELD) {
+                totalHeld = (BigDecimal) row[2];
             }
         }
-        if (totalAvailable.compareTo(BigDecimal.ZERO) < 0) totalAvailable = BigDecimal.ZERO;
 
-        long totalOrders = orderRepository.count();
-        long paidOrders = orderRepository.findByStatus(OrderStatus.PAID).size();
+        // 4. Rút tiền: đang chờ = PENDING + APPROVED, đã chi = PAID
+        BigDecimal totalPendingWithdrawals = BigDecimal.ZERO;
+        BigDecimal totalPaidOut = BigDecimal.ZERO;
+        for (Object[] row : withdrawalRequestRepository.sumByStatus(
+                List.of(WithdrawalStatus.PENDING, WithdrawalStatus.APPROVED, WithdrawalStatus.PAID))) {
+            if (row[0] == WithdrawalStatus.PAID) {
+                totalPaidOut = (BigDecimal) row[1];
+            } else {
+                totalPendingWithdrawals = totalPendingWithdrawals.add((BigDecimal) row[1]);
+            }
+        }
+
+        // 5-6. Hoàn tiền đã xong; số dư khả dụng toàn sàn tính từ ledger, không âm
+        BigDecimal totalRefunded = refundRepository.sumCompleted();
+        BigDecimal totalAvailable = moneyLedgerRepository.calculateTotalAvailable().max(BigDecimal.ZERO);
 
         return AdminAnalyticsDto.builder()
                 .totalRevenue(totalRevenue)
@@ -100,8 +76,8 @@ public class AdminService {
                 .totalPaidOut(totalPaidOut)
                 .totalRefunded(totalRefunded)
                 .totalCommission(totalCommission)
-                .totalOrders(totalOrders)
-                .paidOrders(paidOrders)
+                .totalOrders(orderRepository.count())
+                .paidOrders(orderRepository.countByStatus(OrderStatus.PAID))
                 .build();
     }
 
@@ -109,10 +85,21 @@ public class AdminService {
      * Tra cứu sổ cái tài chính toàn sàn (Audit log tiền tệ - ADM-04).
      */
     @Transactional(readOnly = true)
-    public List<MoneyLedger> getLedgerAuditLogs(UUID teacherId, String entryType) {
-        if (teacherId != null) {
-            return moneyLedgerRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId);
+    public List<MoneyLedger> getLedgerAuditLogs(UUID teacherId, String entryType, int page, int size) {
+        // id làm khóa phụ để các dòng cùng createdAt không bị lặp hoặc sót giữa các trang.
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
+        boolean byType = entryType != null && !entryType.isBlank();
+        Page<MoneyLedger> result;
+        if (teacherId != null && byType) {
+            result = moneyLedgerRepository.findByTeacherIdAndEntryType(teacherId, entryType, pageable);
+        } else if (teacherId != null) {
+            result = moneyLedgerRepository.findByTeacherId(teacherId, pageable);
+        } else if (byType) {
+            result = moneyLedgerRepository.findByEntryType(entryType, pageable);
+        } else {
+            result = moneyLedgerRepository.findAll(pageable);
         }
-        return moneyLedgerRepository.findAll();
+        return result.getContent();
     }
 }

@@ -45,6 +45,8 @@ public class CourseService {
         List<Course> published = courseRepository.findByStatusIgnoreCase("PUBLISHED");
         java.util.Map<UUID, String> names = teacherNames.byIds(
                 published.stream().map(Course::getTeacherId).distinct().toList());
+        java.util.Map<UUID, CourseReviewRepository.RatingSummary> ratings = ratingsOf(
+                published.stream().map(Course::getId).toList());
         return published.stream()
                 .map(c -> CourseSummaryDto.builder()
                         .id(c.getId())
@@ -56,8 +58,29 @@ public class CourseService {
                         .coverImageUrl(c.getCoverImageUrl())
                         .price(c.getPrice())
                         .status(c.getStatus())
+                        .averageRating(averageOf(ratings.get(c.getId())))
+                        .reviewCount(countOf(ratings.get(c.getId())))
                         .build())
                 .toList();
+    }
+
+    private java.util.Map<UUID, CourseReviewRepository.RatingSummary> ratingsOf(java.util.Collection<UUID> courseIds) {
+        if (courseIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        return courseReviewRepository.summarize(courseIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        CourseReviewRepository.RatingSummary::getCourseId, s -> s));
+    }
+
+    private static Double averageOf(CourseReviewRepository.RatingSummary summary) {
+        return summary == null || summary.getAverage() == null
+                ? null
+                : Math.round(summary.getAverage() * 10) / 10.0;
+    }
+
+    private static long countOf(CourseReviewRepository.RatingSummary summary) {
+        return summary == null || summary.getTotal() == null ? 0 : summary.getTotal();
     }
 
     /**
@@ -73,6 +96,8 @@ public class CourseService {
                 "SELECT l FROM Lesson l WHERE l.courseId = :courseId ORDER BY l.id ASC", Lesson.class)
                 .setParameter("courseId", courseId)
                 .getResultList();
+
+        CourseReviewRepository.RatingSummary rating = ratingsOf(List.of(courseId)).get(courseId);
 
         List<LessonSummaryDto> lessonDtos = lessons.stream()
                 .map(l -> LessonSummaryDto.builder()
@@ -94,6 +119,8 @@ public class CourseService {
                 .coverImageUrl(course.getCoverImageUrl())
                 .price(course.getPrice())
                 .status(course.getStatus())
+                .averageRating(averageOf(rating))
+                .reviewCount(countOf(rating))
                 .lessons(lessonDtos)
                 .build();
     }
@@ -136,7 +163,7 @@ public class CourseService {
             SELECT cp.user_id 
             FROM child_enroll ce
             JOIN child_profiles cp ON ce.child_id = cp.user_id
-            WHERE ce.course_id = :courseId AND cp.parent_id = :parentId AND ce.status = 'ACTIVE'
+            WHERE ce.course_id = :courseId AND cp.parent_id = :parentId AND LOWER(ce.status) = 'active'
             LIMIT 1
         """;
         List<?> enrolled = entityManager.createNativeQuery(checkEnrollSql)
@@ -173,6 +200,18 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public List<CourseReview> getCourseReviews(UUID courseId) {
+        return courseReviewRepository.findByCourseIdOrderByCreatedAtDesc(courseId);
+    }
+
+    // Giáo viên xem đánh giá khóa của chính mình; khóa của người khác hoặc không tồn tại đều bị từ chối như nhau.
+    @Transactional(readOnly = true)
+    public List<CourseReview> getCourseReviewsForTeacher(UUID courseId, UUID teacherId) {
+        boolean owner = courseRepository.findById(courseId)
+                .map(course -> teacherId != null && teacherId.equals(course.getTeacherId()))
+                .orElse(false);
+        if (!owner) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ giáo viên của khóa mới xem được đánh giá của khóa");
+        }
         return courseReviewRepository.findByCourseIdOrderByCreatedAtDesc(courseId);
     }
 }

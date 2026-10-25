@@ -103,7 +103,7 @@ Tất cả endpoint dưới đây (trừ webhook, danh mục và trang kết qu�
 | Endpoint | Việc |
 |----------|------|
 | `GET /api/v1/shop/courses`, `GET /api/v1/shop/courses/{id}` | Danh mục khóa học (công khai). Có `teacherName` = `teacher_profiles.full_name` |
-| `GET /api/v1/supplies`, `GET /api/v1/supplies/{id}` | Dụng cụ vẽ (công khai). Có `teacherName` |
+| `GET /api/v1/supplies`, `GET /api/v1/supplies/{id}` | Dụng cụ vẽ (công khai). Có `teacherName`. Chỉ trả dụng cụ `ACTIVE` hoặc `OUT_OF_STOCK`; bản chờ duyệt/bị ẩn trả 404 |
 | `GET/POST /api/children`, `GET/PUT/DELETE /api/children/{id}` | Quản lý tài khoản con (BE1). `POST` bắt buộc `password` 6–20 ký tự |
 | `PUT /api/children/{id}/password` | Phụ huynh đặt lại mật khẩu cho con, body `{"newPassword": "..."}` (6–20 ký tự), 204. Thu hồi token cũ của con |
 | `PUT /api/children/{id}/lock` | Khóa/mở khóa con, body `{"locked": true}`. Khóa = `users.status` `LOCKED` (con không đăng nhập được, token đang dùng cũng bị chặn). Con bị admin đình chỉ thì trả 409. `ChildResponse` có trường `locked` |
@@ -140,7 +140,7 @@ Danh sách đầy đủ xem Swagger. Bảng dưới cho biết app Flutter (`PRM
 | Xác thực | `/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password` | Đã nối |
 | Hồ sơ | `/api/v1/users/me` (GET, PUT), `/me/logout`, `/me/change-password` | Đã nối. Đăng xuất gọi `logout` trước khi xóa token cục bộ; lỗi mạng thì bỏ qua |
 | Danh mục công khai | `/api/v1/shop/courses`, `/api/v1/shop/courses/{id}`, `/api/v1/supplies` | Đã nối. Chưa dùng: `shop/courses/lessons/{id}/trial`, `supplies/{id}` |
-| Con | `/api/children` (GET, POST, `PUT`/`DELETE` theo `{id}`), `PUT /{id}/password`, `PUT /{id}/lock` | Đã nối. Chưa dùng `GET /{userId}`. Cờ "cho giáo viên xem thông tin" (`shareInfo`) chưa có cột ở BE nên chỉ giữ trong phiên (xem `docs/handoff-be1.md`) |
+| Con | `/api/children` (GET, POST, `PUT`/`DELETE` theo `{id}`), `PUT /{id}/password`, `PUT /{id}/lock` | Đã nối, kể cả `GET /{userId}` (làm mới hồ sơ một bé khi phụ huynh mở màn tiến độ). Cờ "cho giáo viên xem thông tin" (`shareInfo`) chưa có cột ở BE nên chỉ giữ trong phiên (xem `docs/handoff-be1.md`) |
 | Giỏ hàng | `/api/v1/cart` (GET, `items` POST/PATCH/DELETE) | Một phần: dụng cụ lưu trên server; khóa học chưa chọn bé chỉ ở bộ nhớ app vì `cart_items` bắt buộc `childId`. Khi mua FE gửi `checkout` với `useCart:false` rồi tự xóa dòng giỏ sau khi thanh toán |
 | Đơn hàng | `/api/v1/orders` (`checkout`, `my-orders`, `teacher-orders`, `{id}`, `assign-child`, `cancel`) | Đã nối |
 | Thanh toán | `/api/v1/payments` (`create`, `{id}/status`) | Đã nối; webhook do PayOS gọi. FE dùng trang tĩnh `/payment-result.html` thay cho `return/{gateway}` |
@@ -152,11 +152,13 @@ Danh sách đầy đủ xem Swagger. Bảng dưới cho biết app Flutter (`PRM
 | Giao hàng | `/api/v1/fulfillment` | Một phần: giáo viên (`confirm-or-reject`, `shipping`, `delivered`) và phụ huynh (`parent/.../confirm-received`, `parent/.../cancel`). Chưa: `staff/.../handle-failure` |
 | Tài chính giáo viên | `/api/v1/teacher/finance` (`balance`, `withdrawals` GET/POST) | Đã nối |
 | Tiến độ học | `/api/child-progress` (`child/{id}`, `child/{id}/lesson/{id}`, `child/{id}/course/{id}`, `course/{id}`) | Đã nối: bé đăng nhập nạp tiến độ và tự gửi `PUT` khi xem video (mỗi ~15 giây, khi xem hết, khi đóng; mất mạng thì xếp hàng gửi lại; mở lại bài thì tua tới chỗ dừng); phụ huynh xem tiến độ từng con và tải lại mỗi khi mở màn; giáo viên xem học viên của khóa qua `course/{id}` (chỉ có mã bé, chưa có tên). Dùng kèm `GET /api/enrollments/child/{id}` để biết bé đang học khóa nào |
-| Học tập khác | `/api/enrollments` (các endpoint còn lại), `/api/v1/course-reviews` | Chưa |
+| Quyền học | `/api/enrollments` | `GET child/{id}` đã nối (bé xem của mình, phụ huynh xem của con). Không có endpoint tạo: quyền học chỉ được cấp khi thanh toán thành công. `GET course/{id}` chỉ giáo viên của khóa; `PATCH .../status` chỉ Staff/Admin; FE chưa dùng hai endpoint này |
+| Đánh giá khóa | `/api/v1/course-reviews/course/{id}` (GET, POST) | Đã nối: phụ huynh đánh giá ở chi tiết đơn (mỗi khóa một lần, cần con đang học khóa) và xem ở tab Đánh giá; giáo viên xem đánh giá khóa của mình (`GET` chỉ cho PARENT hoặc TEACHER sở hữu khóa) ở chi tiết khóa và mục "Đánh giá gần đây". Phản hồi không có mã phụ huynh/bé, chỉ có cờ `mine`. Danh mục `GET /api/v1/shop/courses` và chi tiết có thêm `averageRating` (null nếu chưa có, làm tròn 1 chữ số) và `reviewCount`. Controller đánh giá cũ của BE1 (`POST /`, `PUT/DELETE /{id}`, `child/{id}`, `parent/{id}`) đã xóa vì không kiểm tra chủ sở hữu và cho đánh giá không cần quyền học |
 | Hoàn tiền | `/api/v1/refunds` | Chưa |
 | Thông báo | `/api/v1/notifications` | Chưa |
-| Tài chính admin | `/api/v1/admin/finance`, `/api/v1/admin/analytics` | Chưa |
-| Kiểm duyệt, Staff, Admin | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff`, `/api/v1/admin/users` | Chưa |
+| Tài chính admin | `/api/v1/admin/finance` (`withdrawals` GET, `approve`, `reject`, `paid`, `configs` GET/PUT), `/api/v1/admin/analytics/finance` | Đã nối cho Admin: màn Tổng quan (số liệu dòng tiền thật; biểu đồ doanh thu theo tháng chưa có API nên ẩn), Rút tiền (duyệt, từ chối kèm lý do, ghi mã giao dịch khi đã chuyển khoản) và Cấu hình (hoa hồng nhập theo %, các mốc thời gian, phí ship). `GET withdrawals` có thêm `teacherName`. `PUT configs/{key}` kiểm tra giá trị theo từng khóa (hoa hồng 0-1, số ngày nguyên, N/X cho trống = tắt) và từ chối khóa lạ. `analytics/ledger-audit` chưa có màn |
+| Tài khoản Staff, duyệt giáo viên | `/api/v1/admin/users` (`staff` CRUD, `staff/{id}/status`, `teachers/pending`, `teachers/{id}/approve`) | Đã nối cho Admin: tạo, sửa, khóa, xóa Staff (BE chỉ có tên đăng nhập và mật khẩu, chưa có họ tên, email hay phân quyền chi tiết) và màn Duyệt giáo viên (chỉ có tên đăng nhập, chưa có hồ sơ chứng chỉ) |
+| Kiểm duyệt, Staff | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff` | Chưa |
 
 ## Deploy Render, CORS và ngrok
 

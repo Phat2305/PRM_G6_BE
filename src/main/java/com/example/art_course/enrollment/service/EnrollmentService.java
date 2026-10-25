@@ -1,10 +1,11 @@
-        package com.example.art_course.enrollment.service;
+package com.example.art_course.enrollment.service;
 
-import com.example.art_course.enrollment.dto.CreateEnrollmentRequest;
+import com.example.art_course.child.repository.ChildRepository;
+import com.example.art_course.common.AppError;
+import com.example.art_course.course.repository.CourseRepository;
 import com.example.art_course.enrollment.dto.EnrollmentResponse;
 import com.example.art_course.enrollment.dto.UpdateEnrollmentStatusRequest;
 import com.example.art_course.enrollment.entity.Enrollment;
-import com.example.art_course.enrollment.entity.EnrollmentId;
 import com.example.art_course.enrollment.repository.EnrollmentRepository;
 
 import jakarta.transaction.Transactional;
@@ -20,53 +21,46 @@ import java.util.UUID;
 public class EnrollmentService {
 
     private final EnrollmentRepository enrollmentRepository;
+    private final ChildRepository childRepository;
+    private final CourseRepository courseRepository;
 
     private static final Set<String> ALLOWED_STATUSES =
             Set.of("active", "inactive", "cancelled");
 
     public EnrollmentService(
-            EnrollmentRepository enrollmentRepository) {
+            EnrollmentRepository enrollmentRepository,
+            ChildRepository childRepository,
+            CourseRepository courseRepository) {
         this.enrollmentRepository = enrollmentRepository;
-    }
-
-    @Transactional
-    public EnrollmentResponse create(
-            CreateEnrollmentRequest request) {
-
-        EnrollmentId id = new EnrollmentId(
-                request.getChildId(),
-                request.getCourseId()
-        );
-
-        if (enrollmentRepository.existsById(id)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Child is already enrolled in this course");
-        }
-
-        Enrollment enrollment = Enrollment.builder()
-                .id(id)
-                .status("active")
-                .build();
-
-        return toResponse(enrollmentRepository.save(enrollment));
+        this.childRepository = childRepository;
+        this.courseRepository = courseRepository;
     }
 
     public EnrollmentResponse getById(
+            UUID callerId,
             UUID childId,
             UUID courseId) {
 
+        requireSelfOrParent(callerId, childId);
         return toResponse(findEnrollment(childId, courseId));
     }
 
-    public List<EnrollmentResponse> getByChildId(UUID childId) {
+    public List<EnrollmentResponse> getByChildId(UUID callerId, UUID childId) {
+        requireSelfOrParent(callerId, childId);
         return enrollmentRepository.findAllByIdChildId(childId)
                 .stream()
                 .map(this::toResponse)
                 .toList();
     }
 
-    public List<EnrollmentResponse> getByCourseId(UUID courseId) {
+    // Danh sách bé theo mã chỉ dành cho giáo viên của khóa (tên bé thuộc về phụ huynh).
+    public List<EnrollmentResponse> getByCourseId(UUID callerId, UUID courseId) {
+        boolean owner = courseRepository.findById(courseId)
+                .map(course -> callerId.equals(course.getTeacherId()))
+                .orElse(false);
+        if (!owner) {
+            throw forbidden("Chỉ giáo viên của khóa mới xem được danh sách học viên");
+        }
         return enrollmentRepository.findAllByIdCourseId(courseId)
                 .stream()
                 .map(this::toResponse)
@@ -75,7 +69,7 @@ public class EnrollmentService {
 
     public boolean isEnrolled(UUID childId, UUID courseId) {
         return enrollmentRepository
-                .existsByIdChildIdAndIdCourseIdAndStatus(
+                .existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(
                         childId, courseId, "active");
     }
 
@@ -99,6 +93,19 @@ public class EnrollmentService {
         enrollment.setStatus(status);
 
         return toResponse(enrollmentRepository.save(enrollment));
+    }
+
+    // Bé, hoặc phụ huynh sở hữu bé.
+    private void requireSelfOrParent(UUID callerId, UUID childId) {
+        if (callerId.equals(childId)
+                || childRepository.findByUserIdAndParentId(childId, callerId).isPresent()) {
+            return;
+        }
+        throw forbidden("Bạn không có quyền xem quyền học của bé này");
+    }
+
+    private AppError forbidden(String message) {
+        return new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", message);
     }
 
     private Enrollment findEnrollment(

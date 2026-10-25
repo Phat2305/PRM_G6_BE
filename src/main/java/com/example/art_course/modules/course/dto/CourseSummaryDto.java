@@ -27,4 +27,7 @@ public class CourseSummaryDto {
     private String coverImageUrl;
     private BigDecimal price;
     private String status;
+    // Điểm trung bình (làm tròn 1 chữ số) và số đánh giá; chưa có đánh giá thì null và 0.
+    private Double averageRating;
+    private long reviewCount;
 }

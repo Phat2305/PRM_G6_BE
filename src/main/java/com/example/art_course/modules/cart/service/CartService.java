@@ -75,7 +75,7 @@ public class CartService {
 
             // 3. Chặn mua trùng 1 khóa cho cùng 1 Child (SHOP-04)
             // Kiểm tra trong child_enroll
-            String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND status = 'ACTIVE'";
+            String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
             List<?> enrolled = entityManager.createNativeQuery(enrollSql)
                     .setParameter("childId", input.getChildId())
                     .setParameter("courseId", input.getCourseId())

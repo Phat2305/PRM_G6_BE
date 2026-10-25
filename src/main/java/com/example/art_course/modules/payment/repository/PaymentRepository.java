@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,4 +33,9 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     Optional<Payment> findByGatewayAndGatewayTransactionId(String gateway, String gatewayTransactionId);
     List<Payment> findByTeacherIdOrderByCreatedAtDesc(UUID teacherId);
     List<Payment> findByStatus(PaymentStatus status);
+
+    // ADM-04: tổng tiền theo trạng thái, mỗi dòng là [status, tổng amount, tổng netAmount, tổng commissionAmount].
+    @Query("SELECT p.status, SUM(p.amount), SUM(p.netAmount), SUM(p.commissionAmount) "
+            + "FROM Payment p WHERE p.status IN :statuses GROUP BY p.status")
+    List<Object[]> sumsByStatus(@Param("statuses") Collection<PaymentStatus> statuses);
 }

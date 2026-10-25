@@ -202,6 +202,7 @@ public class CommerceTests {
         UUID teacherId = UUID.randomUUID();
         UUID child1 = UUID.randomUUID();
         UUID child2 = UUID.randomUUID();
+        UUID child3 = UUID.randomUUID();
         UUID course1 = UUID.randomUUID();
 
         jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'PARENT', 'ACTIVE')",
@@ -216,12 +217,18 @@ public class CommerceTests {
                 child1, parentId);
         jdbc.update("INSERT INTO public.child_profiles (user_id, parent_id, display_name, birth_year) VALUES (?, ?, 'Be 2', 2019)",
                 child2, parentId);
+        jdbc.update("INSERT INTO public.users (id, username, password, role, status) VALUES (?, ?, 'pw', 'CHILD', 'ACTIVE')",
+                child3, "child3_dup_" + child3);
+        jdbc.update("INSERT INTO public.child_profiles (user_id, parent_id, display_name, birth_year) VALUES (?, ?, 'Be 3', 2016)",
+                child3, parentId);
         jdbc.update("INSERT INTO public.courses (id, teacher_id, name, price, status) VALUES (?, ?, 'Khoa ve', 250000, 'PUBLISHED')",
                 course1, teacherId);
 
-        // Child 1 đã sở hữu Course 1 trong bảng child_enroll
-        jdbc.update("INSERT INTO public.child_enroll (child_id, course_id, status) VALUES (?, ?, 'ACTIVE')",
+        // Child 1 đã sở hữu Course 1: code cấp quyền ghi 'active' (chữ thường); child 3 là dữ liệu cũ viết hoa
+        jdbc.update("INSERT INTO public.child_enroll (child_id, course_id, status) VALUES (?, ?, 'active')",
                 child1, course1);
+        jdbc.update("INSERT INTO public.child_enroll (child_id, course_id, status) VALUES (?, ?, 'ACTIVE')",
+                child3, course1);
 
         var item1 = new com.example.art_course.modules.order.service.OrderService.CheckoutItem();
         item1.setItemType("COURSE");
@@ -236,6 +243,18 @@ public class CommerceTests {
         AppError ex = assertThrows(AppError.class, () -> orderService.createOrdersFromCheckout(parentId, req1));
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
         assertEquals("COURSE_ALREADY_OWNED", ex.getErrorCode());
+
+        // Quyền học viết hoa cũng bị chặn: so sánh trạng thái không phân biệt hoa thường
+        var item3 = new com.example.art_course.modules.order.service.OrderService.CheckoutItem();
+        item3.setItemType("COURSE");
+        item3.setCourseId(course1);
+        item3.setChildId(child3);
+        item3.setQuantity(1);
+        var req3 = new com.example.art_course.modules.order.service.OrderService.CheckoutRequest();
+        req3.setUseCart(false);
+        req3.setItems(List.of(item3));
+        assertEquals("COURSE_ALREADY_OWNED",
+                assertThrows(AppError.class, () -> orderService.createOrdersFromCheckout(parentId, req3)).getErrorCode());
 
         // Bé 2 mua Course 1 (chưa có) -> Thành công không ném lỗi
         var item2 = new com.example.art_course.modules.order.service.OrderService.CheckoutItem();
