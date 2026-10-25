@@ -97,6 +97,34 @@ public class R2StorageService {
         }
     }
 
+    public void uploadBytes(
+            String key,
+            byte[] data,
+            String contentType) {
+
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(key)
+                            .contentType(contentType)
+                            .build(),
+                    RequestBody.fromBytes(data));
+
+        } catch (S3Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Cloudflare R2 upload failed",
+                    e);
+
+        } catch (SdkException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Cloudflare R2 request failed",
+                    e);
+        }
+    }
+
     public ResponseInputStream<GetObjectResponse> getObject(
             String key) {
 

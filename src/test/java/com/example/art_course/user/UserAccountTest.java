@@ -10,7 +10,9 @@ import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 import com.example.art_course.user.service.UserService;
 import com.example.art_course.admin.dto.CreateStaffRequest;
+import com.example.art_course.video.service.R2StorageService;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -19,6 +21,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class UserAccountTest {
@@ -26,7 +29,8 @@ class UserAccountTest {
     private final UserRepository repo = mock(UserRepository.class);
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
     private final AuthRepository authRepo = mock(AuthRepository.class);
-    private final UserService userService = new UserService(repo, authRepo, encoder);
+    private final R2StorageService r2 = mock(R2StorageService.class);
+    private final UserService userService = new UserService(repo, authRepo, encoder, r2);
     private final AdminUserService adminService = new AdminUserService(repo, encoder);
 
     private User user(String role) {
@@ -139,6 +143,22 @@ class UserAccountTest {
         when(encoder.matches("old", "hash")).thenReturn(true);
         userService.changePassword(u.getId(), pw("old", "newpassword1"));
         assertNotNull(u.getTokensValidAfter());
+    }
+
+    @Test
+    void uploadAvatar_rejectsNonImageAndMissingType_storesImageUnderUserKey() {
+        User u = user("TEACHER");
+
+        AppError text = assertThrows(AppError.class, () -> userService.uploadAvatar(u.getId(),
+                new MockMultipartFile("file", "a.html", "text/html", new byte[]{1})));
+        AppError noType = assertThrows(AppError.class, () -> userService.uploadAvatar(u.getId(),
+                new MockMultipartFile("file", "a", null, new byte[]{1})));
+        assertEquals("AVATAR_TYPE", text.getErrorCode());
+        assertEquals("AVATAR_TYPE", noType.getErrorCode());
+        verifyNoInteractions(r2);
+
+        userService.uploadAvatar(u.getId(), new MockMultipartFile("file", "a.jpg", "image/jpeg", new byte[]{1}));
+        verify(r2).uploadBytes(eq("avatars/" + u.getId()), any(), eq("image/jpeg"));
     }
 
     @Test

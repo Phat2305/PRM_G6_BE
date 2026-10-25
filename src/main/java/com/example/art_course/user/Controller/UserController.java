@@ -7,9 +7,17 @@ import com.example.art_course.user.dto.UpdateProfileRequest;
 import com.example.art_course.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
 import java.util.UUID;
 
@@ -28,6 +36,22 @@ public class UserController {
     @PutMapping("/me")
     public ProfileResponse updateMe(@Valid @RequestBody UpdateProfileRequest request, Authentication auth) {
         return userService.updateProfile(currentUserId(auth), request);
+    }
+
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void uploadAvatar(@RequestParam("file") MultipartFile file, Authentication auth) {
+        userService.uploadAvatar(currentUserId(auth), file);
+    }
+
+    @GetMapping("/me/avatar")
+    public ResponseEntity<Resource> avatar(Authentication auth) {
+        ResponseInputStream<GetObjectResponse> object = userService.avatar(currentUserId(auth));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(object.response().contentType()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-cache")
+                .body(new InputStreamResource(object));
     }
 
     @PostMapping("/me/logout")

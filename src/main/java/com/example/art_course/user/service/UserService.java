@@ -16,6 +16,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.art_course.video.service.R2StorageService;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+
+import java.io.IOException;
+import java.util.Set;
 import java.util.UUID;
 
 // Hồ sơ và mật khẩu của chính người đăng nhập
@@ -26,6 +33,10 @@ public class UserService {
     private final UserRepository userRepository;
     private final AuthRepository authRepository;
     private final PasswordEncoder passwordEncoder;
+    private final R2StorageService r2StorageService;
+
+    private static final long MAX_AVATAR_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> AVATAR_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     public ProfileResponse getProfile(UUID userId) {
         return toResponse(findUser(userId));
@@ -70,6 +81,35 @@ public class UserService {
         User user = findUser(userId);
         user.revokeTokens();
         userRepository.save(user);
+    }
+
+    // Ảnh lưu ở R2 theo key cố định nên không cần cột trong DB; tải lại là ghi đè.
+    public void uploadAvatar(UUID userId, MultipartFile file) {
+        findUser(userId);
+        if (file == null || file.isEmpty()) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "AVATAR_REQUIRED", "Chưa chọn ảnh");
+        }
+        if (file.getSize() > MAX_AVATAR_BYTES) {
+            throw new AppError(HttpStatus.PAYLOAD_TOO_LARGE, "AVATAR_TOO_LARGE", "Ảnh tối đa 5 MB");
+        }
+        String type = file.getContentType();
+        if (type == null || !AVATAR_TYPES.contains(type)) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "AVATAR_TYPE", "Chỉ nhận ảnh JPG, PNG hoặc WEBP");
+        }
+        try {
+            r2StorageService.uploadBytes(avatarKey(userId), file.getBytes(), type);
+        } catch (IOException e) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "AVATAR_READ", "Không đọc được ảnh");
+        }
+    }
+
+    // Chưa có ảnh thì R2StorageService ném 404
+    public ResponseInputStream<GetObjectResponse> avatar(UUID userId) {
+        return r2StorageService.getObject(avatarKey(userId));
+    }
+
+    private static String avatarKey(UUID userId) {
+        return "avatars/" + userId;
     }
 
     private void setEmail(User user, String rawEmail) {
