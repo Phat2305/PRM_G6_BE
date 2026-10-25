@@ -32,12 +32,13 @@ class VideoStatusTest {
 
     @Test
     void workerMarksProcessingThenReady() {
-        when(processing.convertToHls("in.mp4")).thenReturn("hls1");
+        when(processing.convert("in.mp4"))
+                .thenReturn(new VideoProcessingService.HlsResult("hls1", 125));
 
         worker.processVideo(message);
 
         verify(lessons).markProcessing(lessonId);
-        verify(lessons).completeLessonVideo(lessonId, "hls1");
+        verify(lessons).completeLessonVideo(lessonId, "hls1", 125);
         verify(lessons, never()).markFailed(any(), any());
     }
 
@@ -45,12 +46,12 @@ class VideoStatusTest {
     void workerMarksFailedAndRethrows() {
         ResponseStatusException error = new ResponseStatusException(
                 HttpStatus.GATEWAY_TIMEOUT, "Video processing timed out");
-        when(processing.convertToHls("in.mp4")).thenThrow(error);
+        when(processing.convert("in.mp4")).thenThrow(error);
 
         assertThrows(ResponseStatusException.class, () -> worker.processVideo(message));
 
         verify(lessons).markFailed(lessonId, error);
-        verify(lessons, never()).completeLessonVideo(any(), any());
+        verify(lessons, never()).completeLessonVideo(any(), any(), any());
     }
 
     @Test

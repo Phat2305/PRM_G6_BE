@@ -11,6 +11,6 @@ public class UpdateStaffRequest {
     @Size(max = 255, message = "Username tối đa 255 ký tự")
     private String username;
 
-    @Size(min = 6, max = 20, message = "Password gồm 6-20 ký tự")
+    // Rỗng hoặc null nghĩa là giữ mật khẩu cũ; AdminUserService kiểm 6-20 ký tự khi có giá trị.
     private String password;
 }

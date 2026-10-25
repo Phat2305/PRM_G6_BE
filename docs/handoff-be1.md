@@ -111,3 +111,9 @@ BE2 cung cấp package contracts để đồng bộ giữa hai bên:
 ## Cờ "cho giáo viên xem thông tin" của con (shareInfo)
 - FE màn "Con của tôi" có tuỳ chọn bật/tắt cho giáo viên xem thông tin của con, hiện chỉ lưu trong phiên vì `child_profiles` chưa có cột tương ứng.
 - Đề xuất: thêm cột `share_info boolean not null default false` vào `child_profiles`, trả `shareInfo` trong `ChildResponse` và nhận trong `UpdateChildRequest`. Bảng thuộc BE1 nên BE2 không tự sửa.
+
+## Thời lượng bài học (xác thực "đã học xong")
+- Đã thêm cột `lessons.duration_seconds integer` (entity `Lesson`, `docs/ART_COUSE.sql`, script `docs/migrations/05_lesson_duration.sql`). **Cần BE1 xác nhận và chạy script này trên Supabase trước khi deploy bản có `Lesson.durationSeconds`**, nếu không mọi truy vấn `lessons` sẽ lỗi vì thiếu cột.
+- `VideoProcessingService.convert` đọc thời lượng từ `ffmpeg -i` (cùng lần đọc kiểm tiếng) và `VideoLessonService.completeLessonVideo` ghi vào cột khi video `READY`.
+- `PUT /api/child-progress/.../lesson/{id}`: `isCompleted=true` chỉ được lưu khi `max(giây đã xem trước đó, giây vừa báo)` đạt 90% thời lượng; chưa đủ thì chỉ lưu giây xem và trả `isCompleted=false`. Bài chưa có thời lượng (video cũ, `NULL`) không bị kiểm; xử lý lại video thì cột được điền.
+- Giới hạn còn lại: `watchedSeconds` là vị trí phát do client báo, nên kéo thanh tua tới cuối vẫn vượt ngưỡng. Muốn chặn thì cần gửi thời gian xem thực (tích lũy) từ trình phát.

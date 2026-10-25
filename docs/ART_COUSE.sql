@@ -208,7 +208,8 @@ CREATE TABLE public.lessons (
     has_assignment boolean NOT NULL,
     status character varying(20) NOT NULL,
     video_status character varying(20),
-    video_error text
+    video_error text,
+    duration_seconds integer
 );
 
 

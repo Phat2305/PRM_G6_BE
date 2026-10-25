@@ -23,10 +23,16 @@ public interface PaymentGateway {
             String message
     ) {}
 
+    // cancelled: người dùng hủy (hoặc link hết hạn) ở trang cổng, chưa trả tiền. Thanh toán vẫn PENDING để thử lại bằng link mới.
     record GatewayQueryResult(
             boolean exists,
             boolean paid,
             String gatewayTransactionId,
-            BigDecimal amount
-    ) {}
+            BigDecimal amount,
+            boolean cancelled
+    ) {
+        public GatewayQueryResult(boolean exists, boolean paid, String gatewayTransactionId, BigDecimal amount) {
+            this(exists, paid, gatewayTransactionId, amount, false);
+        }
+    }
 }

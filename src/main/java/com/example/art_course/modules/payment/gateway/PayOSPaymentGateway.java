@@ -135,8 +135,10 @@ public class PayOSPaymentGateway implements PaymentGateway {
         if (data == null) {
             return new GatewayQueryResult(false, false, null, payment.getAmount());
         }
-        boolean paid = "PAID".equals(String.valueOf(data.get("status")));
-        return new GatewayQueryResult(true, paid, String.valueOf(data.get("id")), payment.getAmount());
+        String status = String.valueOf(data.get("status"));
+        boolean paid = "PAID".equals(status);
+        boolean cancelled = "CANCELLED".equals(status) || "EXPIRED".equals(status);
+        return new GatewayQueryResult(true, paid, String.valueOf(data.get("id")), payment.getAmount(), cancelled);
     }
 
     private void requireConfigured() {

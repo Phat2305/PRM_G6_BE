@@ -245,6 +245,13 @@ public class PaymentService {
      */
     @Transactional
     public void processSuccessfulPayment(Payment payment, String gatewayTransactionId, String gatewayCode) {
+        // Webhook, hỏi trạng thái và job đối soát có thể cùng thấy PENDING: chỉ nơi giành được dòng này mới xử lý tiếp,
+        // nếu không tồn kho, sổ cái HOLD sẽ bị ghi hai lần.
+        if (paymentRepository.transition(payment.getId(), PaymentStatus.PENDING, PaymentStatus.HELD) == 0) {
+            log.info("[PAYMENT] Bỏ qua, giao dịch {} đã được xử lý ở nơi khác", payment.getId());
+            return;
+        }
+
         Order order = orderRepository.findById(payment.getOrderId())
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng của thanh toán"));
 
@@ -338,11 +345,15 @@ public class PaymentService {
             throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không có quyền truy vấn giao dịch này");
         }
 
+        boolean cancelled = false;
         if (payment.getStatus() == PaymentStatus.PENDING) {
             PaymentGateway gateway = paymentGatewayFactory.getGateway(payment.getGateway());
             PaymentGateway.GatewayQueryResult queryResult = gateway.queryTransaction(payment);
             if (queryResult.paid()) {
                 processSuccessfulPayment(payment, queryResult.gatewayTransactionId(), payment.getGateway());
+            } else {
+                // Hủy ở cổng không đổi trạng thái: payment vẫn PENDING, đơn giữ chỗ tới khi hết hạn hoặc bị hủy
+                cancelled = queryResult.cancelled();
             }
         }
 
@@ -353,35 +364,41 @@ public class PaymentService {
                 .amount(payment.getAmount())
                 .gatewayTransactionId(payment.getGatewayTransactionId())
                 .paidAt(payment.getPaidAt())
+                .cancelled(cancelled)
                 .build();
     }
 
     /**
-     * Đối soát thanh toán hằng ngày (PAY-11).
+     * Id các thanh toán còn PENDING tạo trong 24 giờ qua, để job đối soát (PAY-11) xử lý từng cái.
      */
-    public int reconcileDailyPayments() {
-        log.info("[RECONCILE] Bắt đầu đối soát giao dịch cổng thanh toán...");
-        List<Payment> pendingPayments = paymentRepository.findByStatus(PaymentStatus.PENDING);
-        int reconciledCount = 0;
+    @Transactional(readOnly = true)
+    public List<UUID> findReconcilablePaymentIds() {
+        Instant since = Instant.now().minus(24, ChronoUnit.HOURS);
+        return paymentRepository.findByStatus(PaymentStatus.PENDING).stream()
+                .filter(payment -> payment.getCreatedAt().isAfter(since))
+                .map(Payment::getId)
+                .toList();
+    }
 
-        for (Payment payment : pendingPayments) {
-            // Chỉ kiểm tra các thanh toán trong vòng 24 giờ qua
-            if (payment.getCreatedAt().isAfter(Instant.now().minus(24, ChronoUnit.HOURS))) {
-                try {
-                    PaymentGateway gateway = paymentGatewayFactory.getGateway(payment.getGateway());
-                    PaymentGateway.GatewayQueryResult query = gateway.queryTransaction(payment);
-                    if (query.paid()) {
-                        processSuccessfulPayment(payment, query.gatewayTransactionId(), payment.getGateway());
-                        reconciledCount++;
-                        log.info("[RECONCILE] Khớp thành công đơn hàng {}", payment.getOrderId());
-                    }
-                } catch (Exception ex) {
-                    log.warn("[RECONCILE] Lỗi đối soát cho payment {}: {}", payment.getId(), ex.getMessage());
-                }
-            }
+    /**
+     * Đối soát MỘT thanh toán trong một transaction riêng: bước nào lỗi thì rollback cả trạng thái thanh toán,
+     * đơn, tồn kho và sổ cái, nên thử lại lần sau vẫn thấy PENDING. Job phải gọi qua bean (không gọi nội bộ)
+     * thì @Transactional mới có hiệu lực. Trả true nếu đã đồng bộ được.
+     */
+    @Transactional
+    public boolean reconcilePayment(UUID paymentId) {
+        Payment payment = paymentRepository.findById(paymentId).orElse(null);
+        if (payment == null || payment.getStatus() != PaymentStatus.PENDING) {
+            return false;
         }
-        log.info("[RECONCILE] Kết thúc đối soát. Số giao dịch được đồng bộ: {}", reconciledCount);
-        return reconciledCount;
+        PaymentGateway gateway = paymentGatewayFactory.getGateway(payment.getGateway());
+        PaymentGateway.GatewayQueryResult query = gateway.queryTransaction(payment);
+        if (!query.paid()) {
+            return false;
+        }
+        processSuccessfulPayment(payment, query.gatewayTransactionId(), payment.getGateway());
+        log.info("[RECONCILE] Khớp thành công đơn hàng {}", payment.getOrderId());
+        return true;
     }
 
     private UUID resolvePaymentIdFromParams(String gatewayCode, Map<String, String> params) {

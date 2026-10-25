@@ -149,9 +149,10 @@ Danh sách đầy đủ xem Swagger. Bảng dưới cho biết app Flutter (`PRM
 | Bài nộp | `/api/submissions` | Một phần: giáo viên `GET /lesson/{id}` và `PUT /{id}/grade`. Nộp bài (`POST`) chưa |
 | Tùy biến | `/api/customize-requests`, `/api/offers` | Một phần (phía giáo viên): `customize-requests` `status/pending` và `{id}`, `offers` `POST`, `request/{id}`, `teacher/{id}`. Phụ huynh tạo/sửa yêu cầu chưa |
 | Tin nhắn | `/api/conversations`, `/api/messages` | Một phần: `POST /conversations`, `teacher/{id}`, `context`, `POST /messages`, `messages/conversation/{id}`. Hộp thư của phụ huynh (`conversations/parent/{id}`) chưa |
-| Giao hàng | `/api/v1/fulfillment` | Một phần: `teacher/items/{id}/confirm-or-reject`, `teacher/items/{id}/shipping`, `delivered/{id}`. Chưa: `parent/.../confirm-received`, `parent/.../cancel`, `staff/.../handle-failure` |
+| Giao hàng | `/api/v1/fulfillment` | Một phần: giáo viên (`confirm-or-reject`, `shipping`, `delivered`) và phụ huynh (`parent/.../confirm-received`, `parent/.../cancel`). Chưa: `staff/.../handle-failure` |
 | Tài chính giáo viên | `/api/v1/teacher/finance` (`balance`, `withdrawals` GET/POST) | Đã nối |
-| Học tập | `/api/enrollments`, `/api/child-progress`, `/api/v1/course-reviews` | Chưa |
+| Tiến độ học | `/api/child-progress` (`child/{id}`, `child/{id}/lesson/{id}`, `child/{id}/course/{id}`, `course/{id}`) | Đã nối: bé đăng nhập nạp tiến độ và tự gửi `PUT` khi xem video (mỗi ~15 giây, khi xem hết, khi đóng; mất mạng thì xếp hàng gửi lại; mở lại bài thì tua tới chỗ dừng); phụ huynh xem tiến độ từng con và tải lại mỗi khi mở màn; giáo viên xem học viên của khóa qua `course/{id}` (chỉ có mã bé, chưa có tên). Dùng kèm `GET /api/enrollments/child/{id}` để biết bé đang học khóa nào |
+| Học tập khác | `/api/enrollments` (các endpoint còn lại), `/api/v1/course-reviews` | Chưa |
 | Hoàn tiền | `/api/v1/refunds` | Chưa |
 | Thông báo | `/api/v1/notifications` | Chưa |
 | Tài chính admin | `/api/v1/admin/finance`, `/api/v1/admin/analytics` | Chưa |
@@ -190,6 +191,7 @@ src/main/java/com/example/art_course/
   - Tồn kho về 0 thì `ACTIVE` tự chuyển `OUT_OF_STOCK`; có hàng lại (giáo viên nhập thêm, hủy/hoàn đơn) thì tự về `ACTIVE`, không cần duyệt lại. `PENDING_REVIEW`, `REJECTED`, `HIDDEN` không bị đổi theo tồn kho.
   - Danh mục `/api/v1/supplies` trả cả `ACTIVE` và `OUT_OF_STOCK` (FE hiện "Hết hàng"); giỏ và đặt hàng từ chối dụng cụ không ở `ACTIVE`.
   - Thanh toán trừ `stock_quantity` (giữ chỗ → đã bán); tồn khả dụng = `stock_quantity - reserved_quantity`.
+- Tiến độ học (`/api/child-progress`): chỉ chính bé ghi được tiến độ của mình (`PUT`), và chỉ cho bài học thử hoặc bài của khóa bé đã ghi danh (`NOT_ENROLLED` nếu không). Xem được: bé, phụ huynh của bé, và giáo viên của khóa (chỉ theo bài hoặc theo khóa); `GET /course/{id}` trả cả danh sách bé đang học khóa kèm số bài xong, chỉ cho giáo viên sở hữu khóa. `isCompleted=true` chỉ được lưu khi bé đã xem ít nhất 90% thời lượng bài (`lessons.duration_seconds`, điền khi FFmpeg xử lý xong; bài chưa có thời lượng thì không kiểm; áp cột bằng `docs/migrations/05_lesson_duration.sql`). Ghi bằng một câu `INSERT ... ON CONFLICT`: giây xem không bao giờ giảm, bài đã hoàn thành không quay lại chưa hoàn thành, hai yêu cầu đầu tiên cùng lúc không đụng khóa chính. `watchedSeconds` tối đa 86400.
 - Loại dòng đơn hàng (`COURSE` / `SUPPLY` / `CUSTOMIZE`) suy ra từ cột khóa ngoại, không lưu cột riêng. `OrderDetail.getProductType()` vẫn có trong JSON trả về.
 
 ## Tài liệu

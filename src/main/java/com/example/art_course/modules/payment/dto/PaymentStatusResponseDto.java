@@ -19,4 +19,6 @@ public class PaymentStatusResponseDto {
     private BigDecimal amount;
     private String gatewayTransactionId;
     private Instant paidAt;
+    // Cổng báo người dùng đã hủy (hoặc link hết hạn); status vẫn PENDING, đơn còn thanh toán lại được.
+    private boolean cancelled;
 }

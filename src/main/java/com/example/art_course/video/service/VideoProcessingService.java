@@ -15,6 +15,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @Service
@@ -27,6 +29,15 @@ public class VideoProcessingService {
 
     // Chiều cao các mức xuất ra; nguồn thấp hơn thì giữ nguyên (không phóng to).
     static final int[] HEIGHTS = {360, 720};
+
+    // "Duration: 00:01:23.45," in the output of `ffmpeg -i`.
+    private static final Pattern DURATION =
+            Pattern.compile("Duration:\\s*(\\d+):(\\d{2}):(\\d{2})(?:\\.(\\d+))?");
+
+    // hlsId is the folder under hls/ on R2; durationSeconds is null when ffmpeg could not tell the length.
+    public record HlsResult(String hlsId, Integer durationSeconds) {}
+
+    record Probe(boolean hasAudio, Integer durationSeconds) {}
 
     private final String ffmpegPath;
     private final Path hlsDirectory;
@@ -45,6 +56,10 @@ public class VideoProcessingService {
     }
 
     public String convertToHls(String inputPath) {
+        return convert(inputPath).hlsId();
+    }
+
+    public HlsResult convert(String inputPath) {
         if (inputPath == null || inputPath.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -78,8 +93,10 @@ public class VideoProcessingService {
             Path playlist = outputDirectory.resolve("master.m3u8");
             Path logFile = outputDirectory.resolve("ffmpeg.log");
 
+            Probe probe = probe(input);
+
             ProcessBuilder builder = new ProcessBuilder(
-                    buildHlsCommand(ffmpegPath, input, outputDirectory, hasAudio(input)));
+                    buildHlsCommand(ffmpegPath, input, outputDirectory, probe.hasAudio()));
 
             builder.redirectErrorStream(true);
             builder.redirectOutput(logFile.toFile());
@@ -140,7 +157,7 @@ public class VideoProcessingService {
                                 "application/vnd.apple.mpegurl"));
             }
 
-            return outputId;
+            return new HlsResult(outputId, probe.durationSeconds());
 
         } catch (IOException e) {
             throw new ResponseStatusException(
@@ -242,20 +259,35 @@ public class VideoProcessingService {
     }
 
     // var_stream_map phải khớp đúng số luồng tiếng; video không tiếng mà map a:0 thì ffmpeg báo lỗi.
-    private boolean hasAudio(Path input) {
+    // Cùng một lần đọc thông tin lấy luôn thời lượng (dùng để kiểm "đã học xong" ở child_progress).
+    private Probe probe(Path input) {
         try {
             Process probe = new ProcessBuilder(ffmpegPath, "-hide_banner", "-i", input.toString())
                     .redirectErrorStream(true)
                     .start();
             String info = new String(probe.getInputStream().readAllBytes());
             probe.waitFor(1, TimeUnit.MINUTES);
-            return info.contains("Audio:");
+            return new Probe(info.contains("Audio:"), parseDurationSeconds(info));
         } catch (IOException e) {
-            return true;
+            return new Probe(true, null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return true;
+            return new Probe(true, null);
         }
+    }
+
+    // Whole seconds, rounded; null when the output has no usable "Duration:" (for example "N/A" or 0).
+    static Integer parseDurationSeconds(String ffmpegInfo) {
+        Matcher m = DURATION.matcher(ffmpegInfo == null ? "" : ffmpegInfo);
+        if (!m.find()) {
+            return null;
+        }
+        double seconds = Integer.parseInt(m.group(1)) * 3600.0
+                + Integer.parseInt(m.group(2)) * 60.0
+                + Integer.parseInt(m.group(3))
+                + (m.group(4) == null ? 0 : Double.parseDouble("0." + m.group(4)));
+        long rounded = Math.round(seconds);
+        return rounded > 0 && rounded <= Integer.MAX_VALUE ? (int) rounded : null;
     }
 
     private boolean sizeIsPositive(Path path) {

@@ -39,6 +39,10 @@ public class Lesson {
     @Column(name = "video_error", columnDefinition = "text")
     private String videoError;
 
+    // Video length in seconds, set when FFmpeg finishes; null while there is no processed video.
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds;
+
     @Column(name = "is_trial")
     private Boolean isTrial;
 

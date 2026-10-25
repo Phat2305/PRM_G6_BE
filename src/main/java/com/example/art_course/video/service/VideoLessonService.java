@@ -162,7 +162,7 @@ public class VideoLessonService {
     }
 
     @Transactional
-    public void completeLessonVideo(UUID lessonId, String hlsId) {
+    public void completeLessonVideo(UUID lessonId, String hlsId, Integer durationSeconds) {
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -171,6 +171,7 @@ public class VideoLessonService {
         lesson.setVideoUrl("/api/videos/hls/" + hlsId + "/master.m3u8");
         lesson.setVideoStatus("READY");
         lesson.setVideoError(null);
+        lesson.setDurationSeconds(durationSeconds);
         lessonRepository.save(lesson);
     }
 }

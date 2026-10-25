@@ -42,9 +42,11 @@ public class VideoProcessingWorker {
         } else {
             videoLessonService.markProcessing(lessonId);
             try {
-                hlsId = videoProcessingService.convertToHls(
-                        message.getInputPath());
-                videoLessonService.completeLessonVideo(lessonId, hlsId);
+                VideoProcessingService.HlsResult result =
+                        videoProcessingService.convert(message.getInputPath());
+                hlsId = result.hlsId();
+                videoLessonService.completeLessonVideo(
+                        lessonId, hlsId, result.durationSeconds());
             } catch (RuntimeException e) {
                 // Ghi FAILED rồi ném lại để container reject message như cũ.
                 videoLessonService.markFailed(lessonId, e);
