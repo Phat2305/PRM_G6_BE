@@ -54,6 +54,10 @@ public class PaymentService {
     private final NotificationService notificationService;
     private final ConfigService configService;
 
+    // Inject qua field để các test dựng PaymentService bằng constructor không phải đổi; null thì bỏ qua bước customize.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.art_course.customize_request.repository.CustomizeRequestRepository customizeRequestRepository;
+
     /**
      * Tạo yêu cầu thanh toán và lấy link URL cổng thanh toán (PAY-01).
      */
@@ -85,7 +89,8 @@ public class PaymentService {
         BigDecimal supplyRate = configService.getCommissionRateSupply();
 
         for (OrderDetail detail : details) {
-            BigDecimal rate = "COURSE".equalsIgnoreCase(detail.getProductType()) ? courseRate : supplyRate;
+            // Customize là khóa học làm riêng nên tính như khóa học
+            BigDecimal rate = "SUPPLY".equalsIgnoreCase(detail.getProductType()) ? supplyRate : courseRate;
             BigDecimal comm = detail.getSubTotal().multiply(rate).setScale(0, RoundingMode.HALF_UP);
             BigDecimal net = detail.getSubTotal().subtract(comm);
 
@@ -279,6 +284,12 @@ public class PaymentService {
                         supplyRepository.save(supply);
                     }
                 }
+            } else if ("CUSTOMIZE".equalsIgnoreCase(detail.getProductType()) && customizeRequestRepository != null) {
+                // CUS-09: đã trả tiền thì yêu cầu chuyển FUNDED, giáo viên bắt đầu làm khóa
+                customizeRequestRepository.findById(detail.getCustomizeRequestId()).ifPresent(r -> {
+                    r.setStatus("FUNDED");
+                    customizeRequestRepository.save(r);
+                });
             }
             orderDetailRepository.save(detail);
         }

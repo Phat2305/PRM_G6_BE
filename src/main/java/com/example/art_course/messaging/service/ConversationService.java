@@ -1,5 +1,8 @@
 package com.example.art_course.messaging.service;
 
+import com.example.art_course.customize_request.entity.CustomizeRequest;
+import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
+import com.example.art_course.customize_request.service.CustomizeRequestService;
 import com.example.art_course.messaging.dto.ConversationResponse;
 import com.example.art_course.messaging.dto.CreateConversationRequest;
 import com.example.art_course.messaging.entity.Conversation;
@@ -20,12 +23,17 @@ public class ConversationService {
 
     private final ConversationRepository repository;
     private final UserRepository userRepository;
+    private final CustomizeRequestRepository requestRepository;
+
+    static final String CUSTOMIZE_CONTEXT = "CUSTOMIZE_REQUEST";
 
     public ConversationService(
             ConversationRepository repository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            CustomizeRequestRepository requestRepository) {
         this.repository = repository;
         this.userRepository = userRepository;
+        this.requestRepository = requestRepository;
     }
 
     @Transactional
@@ -68,11 +76,37 @@ public class ConversationService {
                     "Missing required conversation information");
         }
 
+        String contextType = request.getContextType().trim();
+
+        // CUS-04: mỗi giáo viên một hội thoại cho một ngữ cảnh; gọi lại thì trả hội thoại cũ.
+        var existing = repository.findFirstByContextTypeAndContextIdAndTeacherId(
+                contextType, request.getContextId(), request.getTeacherId());
+        if (existing.isPresent()) {
+            checkAccess(existing.get(), user);
+            return toResponse(existing.get());
+        }
+
+        if (CUSTOMIZE_CONTEXT.equalsIgnoreCase(contextType)) {
+            CustomizeRequest customize = requestRepository.findById(request.getContextId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Customize request not found"));
+            if (!customize.getParentId().equals(request.getParentId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Parent does not own this request");
+            }
+            if (!CustomizeRequestService.OPEN.equalsIgnoreCase(customize.getStatus())) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "This request is no longer open");
+            }
+        }
+
         Conversation conversation = Conversation.builder()
                 .parentId(request.getParentId())
                 .teacherId(request.getTeacherId())
                 .lessonId(request.getLessonId())
-                .contextType(request.getContextType().trim())
+                .contextType(contextType)
                 .contextId(request.getContextId())
                 .build();
 

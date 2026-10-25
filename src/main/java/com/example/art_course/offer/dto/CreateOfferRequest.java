@@ -2,6 +2,8 @@ package com.example.art_course.offer.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -26,4 +28,13 @@ public class CreateOfferRequest {
 
     @JsonAlias({"message", "note", "description"})
     private String message;
+
+    // Hội thoại để gửi kèm tin báo giá; null thì chỉ tạo báo giá.
+    @JsonAlias({"conversationId", "conversation_id"})
+    private UUID conversationId;
+
+    @Min(1)
+    @Max(60)
+    @JsonAlias({"deliveryDays", "delivery_days", "days"})
+    private Integer deliveryDays;
 }

@@ -19,4 +19,7 @@ public class OfferResponse {
     private BigDecimal price;
     private String message;
     private String status;
+    private Integer deliveryDays;
+    // Tin báo giá vừa tạo trong hội thoại (null nếu không gửi kèm hội thoại).
+    private UUID messageId;
 }
