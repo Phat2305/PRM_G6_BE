@@ -39,6 +39,10 @@ public class OfferService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
 
+    // Inject qua field để test dựng service bằng constructor không phải đổi; null thì không gửi thông báo.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.art_course.modules.notification.NotificationService notificationService;
+
     public OfferService(
             OfferRepository offerRepository,
             CustomizeRequestRepository requestRepository,
@@ -133,6 +137,10 @@ public class OfferService {
                     .offerId(offer.getId())
                     .build());
             response.setMessageId(message.getId());
+        }
+        if (notificationService != null) {
+            notificationService.notifyNewOffer(customizeRequest.getId(),
+                    customizeRequest.getParentId(), offer.getPrice(), offer.getDeliveryDays());
         }
         return response;
     }
@@ -268,6 +276,9 @@ public class OfferService {
         }
         request.setStatus("ACCEPTED");
         requestRepository.save(request);
+        if (notificationService != null) {
+            notificationService.notifyOfferAccepted(request.getId(), accepted.getTeacherId(), accepted.getPrice());
+        }
 
         for (Offer other : offerRepository.findAllByRequestId(request.getId())) {
             if (!other.getId().equals(accepted.getId())

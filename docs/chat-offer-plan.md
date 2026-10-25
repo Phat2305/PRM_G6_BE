@@ -76,6 +76,7 @@ Schema hiện tại: `conversations(id, parent_id, teacher_id, lesson_id, contex
 - Hộp thư: nhãn số tin chưa đọc trên từng hội thoại và trên tab "Tin nhắn". Ẩn các thao tác xóa/ghim/lưu trữ giả (hoặc giữ SnackBar nhưng ghi rõ "sắp có").
 
 ### GĐ C: Cập nhật gần thời gian thực và thông báo (BE ~0,5 ngày, FE ~0,5 ngày)
+> **Đã làm (25/10):** BE `GET /api/messages/conversation/{id}?after=` (ISO-8601); `NotificationService.notifyNewMessage` (gộp: còn thông báo NEW_MESSAGE chưa đọc của hội thoại thì không tạo thêm), `notifyNewOffer`, `notifyOfferAccepted` (đều `@Async`, lỗi ghi thông báo không rollback báo giá); FE đọc qua API có sẵn `GET /api/v1/notifications/my-notifications`. Test: `ChatNotificationTest`. FE: chat hỏi tin mới 5 giây/lần, hộp thư 30 giây/lần, dừng khi app vào nền, tự cuộn, lọc trùng. **Còn lại:** màn danh sách thông báo phía FE (API đã có).
 **BE**
 - `GET /api/messages/conversation/{id}?after=<createdAt>`: chỉ trả tin mới, để hỏi lại nhẹ.
 - `NotificationService` thêm 3 loại, ghi vào bảng `notifications` có sẵn:

@@ -30,6 +30,10 @@ public class MessageService {
     private final UserRepository userRepository;
     private final OfferRepository offerRepository;
 
+    // Inject qua field để test dựng service bằng constructor không phải đổi; null thì không gửi thông báo.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.art_course.modules.notification.NotificationService notificationService;
+
     // MSG-05: giới hạn độ dài một tin nhắn
     static final int MAX_CONTENT = 2000;
 
@@ -77,7 +81,16 @@ public class MessageService {
                 .isOffer(false)
                 .build();
 
-        return toResponse(messageRepository.save(message));
+        MessageResponse saved = toResponse(messageRepository.save(message));
+        if (notificationService != null) {
+            UUID recipient = user.getId().equals(conversation.getParentId())
+                    ? conversation.getTeacherId()
+                    : conversation.getParentId();
+            String text = message.getContent();
+            notificationService.notifyNewMessage(recipient, conversation.getId(),
+                    text.length() > 100 ? text.substring(0, 100) + "…" : text);
+        }
+        return saved;
     }
 
     public MessageResponse getById(UUID id, String username) {
@@ -94,14 +107,21 @@ public class MessageService {
 
     public List<MessageResponse> getByConversationId(
             UUID conversationId, String username) {
+        return getByConversationId(conversationId, null, username);
+    }
+
+    public List<MessageResponse> getByConversationId(
+            UUID conversationId, java.time.OffsetDateTime after, String username) {
 
         User user = findUser(username);
         Conversation conversation = findConversation(conversationId);
 
         checkAccess(conversation, user);
 
-        return toResponses(messageRepository
-                .findAllByConversationIdOrderByCreatedAtAsc(conversationId));
+        return toResponses(after == null
+                ? messageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
+                : messageRepository.findAllByConversationIdAndCreatedAtAfterOrderByCreatedAtAsc(
+                        conversationId, after));
     }
 
     public List<MessageResponse> getBySenderId(

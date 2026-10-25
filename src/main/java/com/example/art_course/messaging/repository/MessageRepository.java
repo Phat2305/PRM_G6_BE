@@ -14,4 +14,10 @@ public interface MessageRepository
     );
 
     List<Message> findAllBySenderId(UUID senderId);
+
+    // Hỏi tin mới khi đang mở chat (?after=)
+    List<Message> findAllByConversationIdAndCreatedAtAfterOrderByCreatedAtAsc(
+            UUID conversationId,
+            java.time.OffsetDateTime after
+    );
 }

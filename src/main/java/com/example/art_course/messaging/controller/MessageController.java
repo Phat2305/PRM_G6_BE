@@ -42,10 +42,15 @@ public class MessageController {
     @GetMapping("/conversation/{conversationId}")
     public ResponseEntity<List<MessageResponse>> getByConversationId(
             @PathVariable UUID conversationId,
+            // Chỉ lấy tin tạo sau mốc này (ISO-8601), dùng khi app hỏi tin mới định kỳ.
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
+            java.time.OffsetDateTime after,
             Authentication authentication) {
         return ResponseEntity.ok(
                 service.getByConversationId(
-                        conversationId, authentication.getName()));
+                        conversationId, after, authentication.getName()));
     }
 
     @GetMapping("/sender/{senderId}")

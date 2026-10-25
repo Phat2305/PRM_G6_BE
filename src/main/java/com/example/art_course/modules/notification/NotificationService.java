@@ -37,6 +37,38 @@ public class NotificationService {
         }
     }
 
+    // MSG-05: tin nhắn mới cho bên còn lại. Còn thông báo tin mới chưa đọc của hội thoại này thì không tạo thêm.
+    @Async
+    public void notifyNewMessage(UUID recipientId, UUID conversationId, String preview) {
+        if (notificationRepository.existsByRecipientIdAndTypeAndReferenceIdAndIsReadFalse(
+                recipientId, "NEW_MESSAGE", conversationId)) {
+            return;
+        }
+        sendNotificationAsync(recipientId, "Tin nhắn mới", preview, "NEW_MESSAGE", conversationId);
+    }
+
+    // CUS-05: giáo viên gửi báo giá; tham chiếu là yêu cầu customize.
+    // Chạy luồng riêng: lỗi ghi thông báo không được làm rollback báo giá.
+    @Async
+    public void notifyNewOffer(UUID requestId, UUID parentId, BigDecimal price, Integer deliveryDays) {
+        String days = deliveryDays == null ? "" : ", bàn giao trong " + deliveryDays + " ngày";
+        sendNotificationAsync(parentId, "Báo giá mới",
+                "Giáo viên gửi báo giá " + vnd(price) + days + ".", "NEW_OFFER", requestId);
+    }
+
+    // CUS-08: phụ huynh chấp nhận báo giá; giáo viên chờ phụ huynh thanh toán.
+    // Chạy luồng riêng: lỗi ghi thông báo không được làm rollback báo giá.
+    @Async
+    public void notifyOfferAccepted(UUID requestId, UUID teacherId, BigDecimal price) {
+        sendNotificationAsync(teacherId, "Báo giá được chấp nhận",
+                "Phụ huynh đã chấp nhận báo giá " + vnd(price) + ", đang chờ thanh toán.", "OFFER_ACCEPTED", requestId);
+    }
+
+    private static String vnd(BigDecimal amount) {
+        return String.format("%,d", amount.setScale(0, java.math.RoundingMode.HALF_UP).longValue())
+                .replace(',', '.') + "đ";
+    }
+
     public void notifyOrderPaid(UUID orderId, UUID parentId, UUID teacherId) {
         sendNotificationAsync(parentId, "Thanh toán thành công",
                 "Đơn hàng " + orderId + " đã được thanh toán thành công", "ORDER_PAID", orderId);
