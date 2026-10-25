@@ -1,10 +1,10 @@
 # ART_COURSE — Backend (PRM_G6_BE)
 
 Backend cho **Nền tảng khóa học vẽ và dụng cụ vẽ**: Teacher bán khóa học video và dụng cụ vẽ, Parent mua cho Child.
-Hai nhóm backend dùng chung một codebase và một database:
+Một backend duy nhất (một codebase, một database), gồm:
 
-- **BE1:** người dùng, hồ sơ, khóa học, bài học, tin nhắn, bài nộp, yêu cầu tùy biến.
-- **BE2:** giỏ hàng, đơn hàng, thanh toán, hoàn tiền, rút tiền, sổ cái tiền, kiểm duyệt, thông báo.
+- Tài khoản và nội dung: người dùng, hồ sơ, khóa học, bài học, tin nhắn, bài nộp, yêu cầu tùy biến.
+- Mua bán và vận hành: giỏ hàng, đơn hàng, thanh toán, hoàn tiền, rút tiền, sổ cái tiền, kiểm duyệt, thông báo.
 
 ## Công nghệ
 
@@ -171,9 +171,9 @@ Backend đang chạy tại <https://prm-g6-be.onrender.com>. Gói miễn phí t�
 
 ```
 src/main/java/com/example/art_course/
-├─ auth, user, child, course, lesson, video, ...      # BE1
-├─ modules/{cart,order,payment,refund,withdrawal,finance,...}   # BE2
-├─ contracts/        # interface + sự kiện dùng chung BE1 <-> BE2
+├─ auth, user, child, course, lesson, video, ...      # tài khoản, nội dung
+├─ modules/{cart,order,payment,refund,withdrawal,finance,...}   # mua bán, vận hành
+├─ contracts/        # interface + sự kiện dùng chung giữa các module
 ├─ common/           # máy trạng thái, xử lý lỗi chung
 ├─ config/           # Security, CORS, JWT, ShedLock, ...
 └─ jobs/             # job nền (ShedLock)
@@ -199,6 +199,6 @@ src/main/java/com/example/art_course/
 - `AGENTS.md` — quy tắc bắt buộc cho dự án
 - `docs/decisions.md` — các quyết định đã chốt
 - `docs/api/README.md` — hướng dẫn Swagger
-- `docs/contracts/jwt-contract.md` — hợp đồng JWT giữa BE1 và BE2
-- `docs/open-questions.md`, `docs/handoff-be1.md` — câu hỏi mở và yêu cầu chuyển cho BE1
+- `docs/contracts/jwt-contract.md` — hợp đồng JWT
+- `docs/open-questions.md` — câu hỏi mở (`docs/handoff-be1.md` là ghi chép cũ từ thời còn chia BE1/BE2)
 - `docs/ops/backup-restore-guide.md` — sao lưu và khôi phục

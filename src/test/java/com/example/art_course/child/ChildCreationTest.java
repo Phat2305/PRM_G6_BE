@@ -77,7 +77,7 @@ class ChildCreationTest {
         request.setDisplayName("Bé Bo");
         request.setBirthYear((short) 2018);
 
-        when(userRepository.existsByUsername("be_bo_01")).thenReturn(false);
+        when(userRepository.existsByUsernameIgnoreCase("be_bo_01")).thenReturn(false);
 
         Child child = childService.createChild(parentId, request);
 
@@ -120,7 +120,7 @@ class ChildCreationTest {
         request.setDisplayName("Bé Na");
         request.setBirthYear((short) 2020);
 
-        when(userRepository.existsByUsername("be_na")).thenReturn(false);
+        when(userRepository.existsByUsernameIgnoreCase("be_na")).thenReturn(false);
 
         Child child = childService.createChild(parentId, request);
 

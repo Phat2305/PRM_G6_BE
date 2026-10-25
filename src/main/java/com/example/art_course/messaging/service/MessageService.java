@@ -6,6 +6,8 @@ import com.example.art_course.messaging.entity.Conversation;
 import com.example.art_course.messaging.entity.Message;
 import com.example.art_course.messaging.repository.ConversationRepository;
 import com.example.art_course.messaging.repository.MessageRepository;
+import com.example.art_course.offer.entity.Offer;
+import com.example.art_course.offer.repository.OfferRepository;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 
@@ -15,7 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class MessageService {
@@ -23,14 +28,20 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final UserRepository userRepository;
+    private final OfferRepository offerRepository;
+
+    // MSG-05: giới hạn độ dài một tin nhắn
+    static final int MAX_CONTENT = 2000;
 
     public MessageService(
             MessageRepository messageRepository,
             ConversationRepository conversationRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            OfferRepository offerRepository) {
         this.messageRepository = messageRepository;
         this.conversationRepository = conversationRepository;
         this.userRepository = userRepository;
+        this.offerRepository = offerRepository;
     }
 
     @Transactional
@@ -52,11 +63,18 @@ public class MessageService {
                     "Message content cannot be empty");
         }
 
+        if (request.getContent().trim().length() > MAX_CONTENT) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Message is too long (max " + MAX_CONTENT + " characters)");
+        }
+
         Message message = Message.builder()
                 .conversationId(conversation.getId())
                 .senderId(user.getId())
                 .content(request.getContent().trim())
-                .isOffer(Boolean.TRUE.equals(request.getIsOffer()))
+                // Tin báo giá chỉ tạo qua POST /api/offers (có offer_id); bỏ qua cờ isOffer từ client.
+                .isOffer(false)
                 .build();
 
         return toResponse(messageRepository.save(message));
@@ -82,11 +100,8 @@ public class MessageService {
 
         checkAccess(conversation, user);
 
-        return messageRepository
-                .findAllByConversationIdOrderByCreatedAtAsc(conversationId)
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(messageRepository
+                .findAllByConversationIdOrderByCreatedAtAsc(conversationId));
     }
 
     public List<MessageResponse> getBySenderId(
@@ -149,8 +164,29 @@ public class MessageService {
                 "You cannot access this conversation");
     }
 
+    // Gắn trạng thái/giá/số ngày của báo giá vào tin báo giá; đọc mọi báo giá một lần, không N+1.
+    private List<MessageResponse> toResponses(List<Message> messages) {
+        Map<UUID, Offer> offers = offerRepository.findAllById(messages.stream()
+                        .map(Message::getOfferId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(Offer::getId, o -> o));
+        return messages.stream().map(m -> {
+            MessageResponse response = toResponse(m);
+            Offer offer = m.getOfferId() == null ? null : offers.get(m.getOfferId());
+            if (offer != null) {
+                response.setOfferStatus(offer.getStatus());
+                response.setOfferPrice(offer.getPrice());
+                response.setDeliveryDays(offer.getDeliveryDays());
+            }
+            return response;
+        }).toList();
+    }
+
     private MessageResponse toResponse(Message message) {
         return MessageResponse.builder()
+                .offerId(message.getOfferId())
                 .id(message.getId())
                 .conversationId(message.getConversationId())
                 .senderId(message.getSenderId())

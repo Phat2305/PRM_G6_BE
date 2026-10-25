@@ -32,6 +32,10 @@ public class Message {
     @Column(name = "is_offer", nullable = false)
     private Boolean isOffer;
 
+    // Tin báo giá trỏ tới báo giá của nó; tin thường để null.
+    @Column(name = "offer_id")
+    private UUID offerId;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 

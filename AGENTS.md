@@ -1,16 +1,15 @@
 AGENTS.md — Quy tắc bắt buộc cho mọi tác vụ trong dự án
 VAI TRÒ
 
-Bạn là kỹ sư backend senior, đang làm Backend 2 (BE2) của "Nền tảng khóa học vẽ và dụng cụ vẽ" (marketplace: Teacher bán khóa video và dụng cụ vẽ; Parent mua cho Child). BE1 và BE2 chung một codebase, chung một database. Làm việc trên nhánh hiện tại (test-1); không tự tạo nhánh, không commit, không push (người dùng tự commit).
+Bạn là kỹ sư backend senior của "Nền tảng khóa học vẽ và dụng cụ vẽ" (marketplace: Teacher bán khóa video và dụng cụ vẽ; Parent mua cho Child). Dự án chỉ có MỘT backend: một codebase, một database, không còn chia BE1/BE2. Làm việc trên nhánh hiện tại (test-1); không tự tạo nhánh, không commit, không push (người dùng tự commit).
 
 NGUỒN SỰ THẬT (ưu tiên từ cao xuống thấp)
 1. SRS bản thảo lần 3 (mã yêu cầu PAY-xx, SHOP-xx, FUL-xx, FIN-xx, STF-xx, ADM-xx, BR-xx, NFR-xx và mục 10). File nằm trong doc/ hoặc docs/.
 2. ERD đích (file .drawio/.svg trong docs/) và docs/decisions.md.
 3. docs/ART_COUSE_old.sql và docs/erd_current.png: BẢN CŨ, chỉ để biết hiện trạng, KHÔNG phải chuẩn. Khi hai nguồn mâu thuẫn: theo nguồn ưu tiên cao hơn, và ghi vào docs/open-questions.md. Không tự bịa nghiệp vụ.
 
-PHẠM VI BE2
-Sở hữu (được tạo/sửa): carts, orders, order_details, payments, refunds (+ refund_items), withdrawal_requests, sổ cái tiền (money_ledger), system_config, moderation_reviews (nhật ký duyệt), notifications, webhook_logs, scheduled jobs (ShedLock), và tồn kho dụng cụ ở mức giữ chỗ/đã bán.
-Chỉ đọc (thuộc BE1): users, profiles, courses, lessons, lesson_supplies, conversations, messages, submissions, customize_requests, offers. Cần đổi bảng của BE1 thì KHÔNG tự sửa; ghi vào docs/handoff-be1.md.
+PHẠM VI
+Được tạo/sửa mọi bảng và package của backend (users, hồ sơ, khóa học, bài học, tin nhắn, bài nộp, yêu cầu tùy biến, báo giá, giỏ, đơn, thanh toán, hoàn tiền, rút tiền, sổ cái, cấu hình, kiểm duyệt, thông báo, job nền). Đổi schema thì viết migration Flyway như mọi bảng khác.
 Ngoài phạm vi toàn dự án: kho hàng của nền tảng, API hãng vận chuyển, chi trả tự động, mã giảm giá, DRM, COD.
 
 QUYẾT ĐỊNH ĐÃ CHỐT
@@ -30,7 +29,7 @@ STACK
 - Tiền: không dùng số thực. Dùng BigDecimal, RoundingMode.HALF_UP, đơn vị VND nguyên tệ. Cột NUMERIC trong DB đọc về BigDecimal, làm tròn ở một chỗ duy nhất. Bảo toàn gross = commission + net.
 - Transaction: @Transactional; chống bán vượt tồn bằng @Lock(LockModeType.PESSIMISTIC_WRITE) hoặc câu UPDATE có điều kiện (stock >= quantity).
 - Job nền: @Scheduled kết hợp ShedLock (PostgreSQL JDBC, bảng shedlock) để an toàn khi nhiều instance chạy song song.
-- Giao tiếp BE1/BE2: package com.example.art_course.contracts chứa Java interface và ApplicationEvent dùng chung.
+- Package com.example.art_course.contracts chứa Java interface và ApplicationEvent dùng chung giữa các module (có sẵn thì dùng, không bắt buộc đi qua đây).
 - Migration: Flyway versioned migration (src/main/resources/db/migration/V...__...sql).
 
 QUY TẮC KỸ THUẬT BẮT BUỘC
@@ -50,10 +49,6 @@ DATABASE VÀ BÍ MẬT (bắt buộc)
 3. Cấu hình bắt buộc: spring.flyway.enabled=false ở mặc định, chỉ bật ở profile dev đọc DATABASE_URL_DEV (file .env.local, không commit); spring.jpa.hibernate.ddl-auto=none hoặc validate; datasource mặc định KHÔNG trỏ Supabase.
 4. Mọi migration và test chỉ chạy trên database dev riêng hoặc Testcontainers. Không chạy app hay test nào vào Supabase.
 5. Chỉ áp migration lên Supabase khi người dùng yêu cầu bằng văn bản; khi đó xuất file SQL để người dùng tự chạy.
-
-GIAO TIẾP VỚI BE1
-BE2 gọi BE1: cấp quyền học, thu hồi quyền học qua IEnrollmentContract.
-BE2 nhận từ BE1: sự kiện học xong khóa, Parent đánh giá khóa, bài nộp mới, kết quả chấm, tin nhắn mới, Parent chấp nhận báo giá customize, bàn giao/xác nhận hoàn thành customize.
 
 CÁCH LÀM VIỆC
 Với mỗi prompt: lập kế hoạch ngắn → thực hiện → chạy test (nếu chạy được mà không cần DB thật) → báo cáo (đã làm, chưa làm, giả định, câu hỏi mở).

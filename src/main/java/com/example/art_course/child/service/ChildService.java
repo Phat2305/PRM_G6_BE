@@ -82,12 +82,12 @@ public class ChildService {
         String username = request.getUsername();
         if (username == null || username.trim().isEmpty()) {
             username = "child_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-            while (userRepository.existsByUsername(username)) {
+            while (userRepository.existsByUsernameIgnoreCase(username)) {
                 username = "child_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
             }
         } else {
             username = username.trim();
-            if (userRepository.existsByUsername(username)) {
+            if (userRepository.existsByUsernameIgnoreCase(username)) {
                 throw new ResponseStatusException(
                         HttpStatus.CONFLICT,
                         "Username already exists: " + username

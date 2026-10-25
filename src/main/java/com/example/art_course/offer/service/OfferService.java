@@ -3,6 +3,11 @@ package com.example.art_course.offer.service;
 
 import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
+import com.example.art_course.customize_request.service.CustomizeRequestService;
+import com.example.art_course.messaging.entity.Conversation;
+import com.example.art_course.messaging.entity.Message;
+import com.example.art_course.messaging.repository.ConversationRepository;
+import com.example.art_course.messaging.repository.MessageRepository;
 import com.example.art_course.offer.dto.CreateOfferRequest;
 import com.example.art_course.offer.dto.OfferResponse;
 import com.example.art_course.offer.dto.UpdateOfferStatusRequest;
@@ -24,20 +29,27 @@ import java.util.UUID;
 @Service
 public class OfferService {
 
+    // superseded: bị báo giá mới hơn của cùng giáo viên thay thế (CUS-05)
     private static final Set<String> ALLOWED_STATUSES =
-            Set.of("pending", "accepted", "rejected", "cancelled");
+            Set.of("pending", "accepted", "rejected", "cancelled", "superseded");
 
     private final OfferRepository offerRepository;
     private final CustomizeRequestRepository requestRepository;
     private final UserRepository userRepository;
+    private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
 
     public OfferService(
             OfferRepository offerRepository,
             CustomizeRequestRepository requestRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            ConversationRepository conversationRepository,
+            MessageRepository messageRepository) {
         this.offerRepository = offerRepository;
         this.requestRepository = requestRepository;
         this.userRepository = userRepository;
+        this.conversationRepository = conversationRepository;
+        this.messageRepository = messageRepository;
     }
 
     @Transactional
@@ -63,22 +75,66 @@ public class OfferService {
         CustomizeRequest customizeRequest =
                 findCustomizeRequest(request.getRequestId());
 
-        if (!"pending".equalsIgnoreCase(
+        if (!CustomizeRequestService.OPEN.equalsIgnoreCase(
                 customizeRequest.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Cannot create an offer for this request");
         }
 
-        Offer offer = Offer.builder()
+        Integer days = request.getDeliveryDays();
+        if (days != null && (days < 1 || days > 60)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Delivery days must be between 1 and 60");
+        }
+
+        // Gửi kèm hội thoại: hội thoại phải của chính giáo viên và đúng yêu cầu này.
+        Conversation conversation = null;
+        if (request.getConversationId() != null) {
+            conversation = conversationRepository.findById(request.getConversationId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Conversation not found"));
+            if (!user.getId().equals(conversation.getTeacherId())
+                    || !customizeRequest.getId().equals(conversation.getContextId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Conversation does not belong to this request");
+            }
+        }
+
+        // CUS-05: báo giá mới thay mọi báo giá đang chờ của cùng giáo viên cho yêu cầu này.
+        for (Offer old : offerRepository.findAllByRequestIdAndTeacherId(
+                customizeRequest.getId(), user.getId())) {
+            if ("pending".equalsIgnoreCase(old.getStatus())) {
+                old.setStatus("superseded");
+                offerRepository.save(old);
+            }
+        }
+
+        Offer offer = offerRepository.save(Offer.builder()
                 .requestId(customizeRequest.getId())
                 .teacherId(user.getId())
                 .price(request.getPrice())
                 .message(request.getMessage())
+                .deliveryDays(days)
                 .status("pending")
-                .build();
+                .build());
 
-        return toResponse(offerRepository.save(offer));
+        // Tin báo giá tạo cùng transaction: lỗi thì không có báo giá "mồ côi" thiếu tin, hay ngược lại.
+        OfferResponse response = toResponse(offer);
+        if (conversation != null) {
+            String note = request.getMessage();
+            Message message = messageRepository.save(Message.builder()
+                    .conversationId(conversation.getId())
+                    .senderId(user.getId())
+                    .content(note == null || note.isBlank() ? "Báo giá" : note.trim())
+                    .isOffer(true)
+                    .offerId(offer.getId())
+                    .build());
+            response.setMessageId(message.getId());
+        }
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -180,6 +236,10 @@ public class OfferService {
                         "Only pending offers can be accepted or rejected");
             }
 
+            if ("accepted".equals(status)) {
+                acceptForRequest(offer, customizeRequest);
+            }
+
             offer.setStatus(status);
         } else if (hasRole(user, "TEACHER")
                 && user.getId().equals(offer.getTeacherId())) {
@@ -196,6 +256,26 @@ public class OfferService {
         }
 
         return toResponse(offerRepository.save(offer));
+    }
+
+    // CUS-05/08: chỉ chấp nhận một báo giá cho yêu cầu đang OPEN; yêu cầu sang ACCEPTED (chờ thanh toán),
+    // các báo giá còn chờ của yêu cầu đó bị từ chối.
+    private void acceptForRequest(Offer accepted, CustomizeRequest request) {
+        if (!CustomizeRequestService.OPEN.equalsIgnoreCase(request.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "This request already has an accepted offer");
+        }
+        request.setStatus("ACCEPTED");
+        requestRepository.save(request);
+
+        for (Offer other : offerRepository.findAllByRequestId(request.getId())) {
+            if (!other.getId().equals(accepted.getId())
+                    && "pending".equalsIgnoreCase(other.getStatus())) {
+                other.setStatus("rejected");
+                offerRepository.save(other);
+            }
+        }
     }
 
     @Transactional
@@ -305,6 +385,7 @@ public class OfferService {
                 .price(offer.getPrice())
                 .message(offer.getMessage())
                 .status(offer.getStatus())
+                .deliveryDays(offer.getDeliveryDays())
                 .build();
     }
 }

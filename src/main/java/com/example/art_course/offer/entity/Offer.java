@@ -33,6 +33,9 @@ public class Offer {
     @Column(name = "message", columnDefinition = "text")
     private String message;
 
+    @Column(name = "delivery_days")
+    private Integer deliveryDays;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status;
 }

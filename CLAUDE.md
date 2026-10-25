@@ -25,15 +25,14 @@ No lint task is configured. `scripts/*.ps1` manage the local dev DB (`dev-up`, `
 - Never read `.env` (real Supabase credentials); never run the app, tests or migrations against Supabase (details in `AGENTS.md`).
 - Only the `dev` profile enables Flyway (`DATABASE_URL_DEV` in `.env`); `supabase` is runtime-only. Only `.env` is loaded; real OS env vars win over it.
 - Migrations: `src/main/resources/db/migration/V*__*.sql`, applied on top of base schema `docs/ART_COUSE.sql`.
-
 ## Architecture
 
-Two backend teams share one codebase and DB:
+One backend, one codebase, one DB. There is no BE1/BE2 split any more: any table or package may be changed (schema changes go through Flyway migrations).
 
-- **BE1** (read-only for BE2 work): users, profiles, courses, lessons, lesson_supplies, conversations, messages, submissions, customize_requests, offers — packages like `auth`, `child`, `course`, `lesson`, `customize_request`, `enrollment`, `video`, etc.
-- **BE2** (owned): carts, orders/order_details, payments, refunds, withdrawals, money ledger, system_config, moderation, notifications, webhook logs, scheduled jobs — under `modules/*` plus `common/statemachine`, `jobs`.
-- Needed BE1 table changes are NOT made directly; record them in `docs/handoff-be1.md`.
-- BE1↔BE2 coupling goes only through `contracts/` (`IEnrollmentContract`, `IModerationContract`, `IVideoAccessContract`, and `contracts/events` ApplicationEvents).
+- Accounts and content: `auth`, `user`, `child`, `course`, `lesson`, `video`, `enrollment`, `customize_request`, `offer`, `messaging`, etc.
+- Commerce and operations: carts, orders/order_details, payments, refunds, withdrawals, money ledger, system_config, moderation, notifications, webhook logs, scheduled jobs — under `modules/*` plus `common/statemachine`, `jobs`.
+- `contracts/` (`IEnrollmentContract`, `IModerationContract`, `IVideoAccessContract`, `contracts/events`) holds shared interfaces/events; reuse them where they fit, calling a service directly is also fine.
+- Older docs (`docs/handoff-be1.md`, `docs/audit/*`, `docs/prompts/*`) still say BE1/BE2; treat that as history.
 
 Business invariants to preserve:
 
@@ -57,4 +56,4 @@ Work on the current branch; do not create branches, commit, or push unless the u
 
 ## API docs
 
-OpenAPI is generated from code by springdoc (`/swagger-ui.html`, `/v3/api-docs` when running); sample requests in `docs/api/requests.http`; JWT contract with BE1 in `docs/contracts/jwt-contract.md`. `docs/legacy-ts/` is the abandoned Node/TS implementation, reference only.
+OpenAPI is generated from code by springdoc (`/swagger-ui.html`, `/v3/api-docs` when running); sample requests in `docs/api/requests.http`; JWT contract in `docs/contracts/jwt-contract.md`. `docs/legacy-ts/` is the abandoned Node/TS implementation, reference only.

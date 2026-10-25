@@ -46,6 +46,14 @@ public class ConfigService {
                 .orElse(15);
     }
 
+    // #20: hạn thanh toán sau khi chấp nhận báo giá customize, mặc định 24 giờ
+    @Transactional(readOnly = true)
+    public int getQuotePaymentTimeoutHours() {
+        return systemConfigRepository.findByKey("quote_payment_timeout_hours")
+                .map(sc -> Integer.parseInt(sc.getValue()))
+                .orElse(24);
+    }
+
     @Transactional(readOnly = true)
     public int getAutoConfirmDeliveryDays() {
         return systemConfigRepository.findByKey("auto_confirm_delivery_days")

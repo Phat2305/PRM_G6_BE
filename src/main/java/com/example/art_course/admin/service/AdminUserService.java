@@ -27,7 +27,7 @@ public class AdminUserService {
     @Transactional
     public StaffResponse createStaff(CreateStaffRequest request) {
         String username = request.getUsername().trim();
-        if (userRepository.existsByUsername(username)) {
+        if (userRepository.existsByUsernameIgnoreCase(username)) {
             throw usernameTaken();
         }
         User user = new User();
@@ -51,7 +51,9 @@ public class AdminUserService {
 
         String username = request.getUsername();
         if (username != null && !username.isBlank() && !username.trim().equals(user.getUsername())) {
-            if (userRepository.existsByUsername(username.trim())) {
+            // Chỉ đổi hoa/thường tên của chính mình thì không coi là trùng
+            if (!username.trim().equalsIgnoreCase(user.getUsername())
+                    && userRepository.existsByUsernameIgnoreCase(username.trim())) {
                 throw usernameTaken();
             }
             user.setUsername(username.trim());

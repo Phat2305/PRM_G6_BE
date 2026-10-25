@@ -18,4 +18,9 @@ public class MessageResponse {
     private String content;
     private Boolean isOffer;
     private OffsetDateTime createdAt;
+    // Chỉ có ở tin báo giá: trạng thái hiện tại của báo giá (pending/accepted/superseded/rejected/cancelled).
+    private UUID offerId;
+    private String offerStatus;
+    private java.math.BigDecimal offerPrice;
+    private Integer deliveryDays;
 }

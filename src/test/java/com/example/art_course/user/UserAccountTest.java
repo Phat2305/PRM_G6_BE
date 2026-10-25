@@ -121,7 +121,7 @@ class UserAccountTest {
 
     @Test
     void createStaff_usernameRace_returns409NotServerError() {
-        when(repo.existsByUsername("nv1")).thenReturn(false);
+        when(repo.existsByUsernameIgnoreCase("nv1")).thenReturn(false);
         when(encoder.encode("password123")).thenReturn("h");
         when(repo.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("users_username_key"));
         CreateStaffRequest req = new CreateStaffRequest();
