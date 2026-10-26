@@ -90,6 +90,7 @@ Schema hiện tại: `conversations(id, parent_id, teacher_id, lesson_id, contex
 - Có tin mới khi đang ở cuối danh sách thì tự cuộn xuống.
 
 ### GĐ D: Hoàn thiện (~0,5 ngày)
+> **Đã làm (25/10):** gửi tin lỗi mạng thì chữ vẫn trong ô nhập để gửi lại; test FE `test/chat_flow_test.dart` (chat có thẻ báo giá ở 400×900 và 360×640 cho cả hai vai trò, giáo viên gửi báo giá mới thì báo giá cũ hết hiệu lực, lỗi mạng giữ chữ, badge chưa đọc, tab Báo giá ở 360×640). E2E chạy BE thật với Postgres tạm (schema Supabase): 40/40 điểm kiểm tra từ đăng yêu cầu tới tạo đơn thanh toán. Bước PayOS → FUNDED kiểm bằng `CustomizePaymentFundedTest` (cần khóa PayOS thật để chạy qua HTTP).
 - Trạng thái lỗi: mạng lỗi khi gửi thì tin hiện "Gửi lại", chứ không mất chữ đã gõ.
 - Kiểm tra giao diện ở 400×900 và 360×640: thẻ báo giá, bàn phím, thanh điều hướng nổi.
 - Test widget cho cả hai vai trò (`MockClient`):

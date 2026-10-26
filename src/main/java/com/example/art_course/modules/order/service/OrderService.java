@@ -99,7 +99,7 @@ public class OrderService {
                 Course course = courseRepository.findById(item.getCourseId())
                         .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
 
-                if (!"PUBLISHED".equalsIgnoreCase(course.getStatus())) {
+                if (!"PUBLISHED".equalsIgnoreCase(course.getStatus()) || course.getCustomizeRequestId() != null) {
                     throw new AppError(HttpStatus.BAD_REQUEST, "COURSE_UNAVAILABLE", "Khóa học chưa được công khai");
                 }
 

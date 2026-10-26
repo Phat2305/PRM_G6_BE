@@ -139,12 +139,16 @@ public class EscrowReleaseService {
         }
 
         if ("CUSTOMIZE".equalsIgnoreCase(type)) {
+            // CUS-12: phụ huynh xác nhận hoàn thành là đủ; mốc X ngày (nếu Admin bật) là đường tự giải ngân thêm.
+            if (detail.getDeliveryStatus() == DeliveryStatus.COMPLETED) {
+                return true;
+            }
             Optional<Integer> autoConfirmDays = configService.getCustomizeAutoConfirmDays();
             if (autoConfirmDays.isPresent() && autoConfirmDays.get() > 0) {
                 Instant deadline = order.getCreatedAt().plus(autoConfirmDays.get(), ChronoUnit.DAYS);
                 return Instant.now().isAfter(deadline);
             }
-            return detail.getDeliveryStatus() == DeliveryStatus.COMPLETED;
+            return false;
         }
 
         return false;
