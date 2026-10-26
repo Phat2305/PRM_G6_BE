@@ -123,6 +123,38 @@ class UserAccountTest {
     }
 
     @Test
+    void updateProfile_teacher_savesPhoneBioAndCertificatesAsLines() {
+        User u = user("TEACHER");
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, "0901234567", "Dạy vẽ 8 năm",
+                "Chứng chỉ A\nChứng chỉ B")).thenReturn(1);
+        when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(new AuthRepository.ProfileRow(
+                "Lan", null, "VCB 1234", "0901234567", "Dạy vẽ 8 năm", "Chứng chỉ A\nChứng chỉ B")));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setPhone("0901234567");
+        req.setBio("Dạy vẽ 8 năm");
+        req.setCertificates(java.util.List.of(" Chứng chỉ A ", "", "Chứng chỉ B"));
+
+        var res = userService.updateProfile(u.getId(), req);
+
+        assertEquals("0901234567", res.getPhone());
+        assertEquals(java.util.List.of("Chứng chỉ A", "Chứng chỉ B"), res.getCertificates());
+    }
+
+    @Test
+    void updateProfile_teacher_emptyCertificatesClearsAndNullKeeps() {
+        User u = user("TEACHER");
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, "")).thenReturn(1);
+        when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("Lan", null, "", null, null, null)));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setCertificates(java.util.List.of());
+
+        var res = userService.updateProfile(u.getId(), req);
+
+        assertEquals(java.util.List.of(), res.getCertificates());
+    }
+
+    @Test
     void updateProfile_parent_goesThroughRepository() {
         User u = user("PARENT");
         when(authRepo.updateParentProfile(u.getId(), "An", "HCM")).thenReturn(1);

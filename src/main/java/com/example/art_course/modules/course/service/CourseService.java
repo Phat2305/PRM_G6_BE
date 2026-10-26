@@ -42,7 +42,10 @@ public class CourseService {
      */
     @Transactional(readOnly = true)
     public List<CourseSummaryDto> listCourses() {
-        List<Course> published = courseRepository.findByStatusIgnoreCase("PUBLISHED");
+        // CUS-10: khóa học làm riêng cho một yêu cầu customize không bán công khai
+        List<Course> published = courseRepository.findByStatusIgnoreCase("PUBLISHED").stream()
+                .filter(c -> c.getCustomizeRequestId() == null)
+                .toList();
         java.util.Map<UUID, String> names = teacherNames.byIds(
                 published.stream().map(Course::getTeacherId).distinct().toList());
         java.util.Map<UUID, CourseReviewRepository.RatingSummary> ratings = ratingsOf(
@@ -90,6 +93,7 @@ public class CourseService {
     @Transactional(readOnly = true)
     public CourseDetailDto getCourseDetail(UUID courseId) {
         Course course = courseRepository.findById(courseId)
+                .filter(c -> c.getCustomizeRequestId() == null)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
 
         List<Lesson> lessons = entityManager.createQuery(

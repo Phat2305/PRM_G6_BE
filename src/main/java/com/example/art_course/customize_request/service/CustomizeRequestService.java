@@ -25,7 +25,7 @@ public class CustomizeRequestService {
     // Tên trạng thái theo SRS; dữ liệu trong DB cũng lưu dạng này.
     public static final String OPEN = "OPEN";
     private static final Set<String> ALLOWED_STATUSES =
-            Set.of(OPEN, "ACCEPTED", "FUNDED", "REJECTED", "CANCELLED");
+            Set.of(OPEN, "ACCEPTED", "FUNDED", "DELIVERED", "COMPLETED", "REJECTED", "CANCELLED");
 
     private final CustomizeRequestRepository repository;
     private final UserRepository userRepository;

@@ -1,6 +1,10 @@
 
 package com.example.art_course.course.service;
 
+import com.example.art_course.customize_request.entity.CustomizeRequest;
+import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
+import com.example.art_course.offer.repository.OfferRepository;
+
 import com.example.art_course.course.dto.CreateCourseRequest;
 import com.example.art_course.course.dto.UpdateCourseRequest;
 import com.example.art_course.course.entity.Course;
@@ -21,18 +25,27 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final CustomizeRequestRepository customizeRequestRepository;
+    private final OfferRepository offerRepository;
 
     public CourseService(
             CourseRepository courseRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            CustomizeRequestRepository customizeRequestRepository,
+            OfferRepository offerRepository
     ) {
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
+        this.customizeRequestRepository = customizeRequestRepository;
+        this.offerRepository = offerRepository;
     }
 
     @Transactional(readOnly = true)
     public List<Course> getAllCourses() {
-        return courseRepository.findAll();
+        // Khóa làm riêng cho một yêu cầu customize không hiện công khai.
+        return courseRepository.findAll().stream()
+                .filter(c -> c.getCustomizeRequestId() == null)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -77,6 +90,7 @@ public class CourseService {
         }
 
         User currentUser = getUserById(userId);
+        requireCustomizeTeacher(request.getCustomizeRequestId(), currentUser.getId());
         Course course = Course.builder()
                 // Never trust teacherId from the request body.
                 .teacherId(currentUser.getId())
@@ -113,7 +127,9 @@ public class CourseService {
             course.setName(request.getName().trim());
         }
 
-        if (request.getCustomizeRequestId() != null) {
+        if (request.getCustomizeRequestId() != null
+                && !request.getCustomizeRequestId().equals(course.getCustomizeRequestId())) {
+            requireCustomizeTeacher(request.getCustomizeRequestId(), currentUser.getId());
             course.setCustomizeRequestId(
                     request.getCustomizeRequestId()
             );
@@ -169,6 +185,26 @@ public class CourseService {
                         "User not found"
                 ));
     }
+    // CUS-11: khóa học riêng chỉ do giáo viên có báo giá được chấp nhận làm, khi phụ huynh đã thanh toán (FUNDED).
+    private void requireCustomizeTeacher(UUID requestId, UUID teacherId) {
+        if (requestId == null) {
+            return;
+        }
+        CustomizeRequest customize = customizeRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Customize request not found"));
+        if (!"FUNDED".equalsIgnoreCase(customize.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Customize request is not paid yet");
+        }
+        boolean accepted = offerRepository.findAllByRequestIdAndTeacherId(requestId, teacherId).stream()
+                .anyMatch(o -> "accepted".equalsIgnoreCase(o.getStatus()));
+        if (!accepted) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "You do not have the accepted offer for this request");
+        }
+    }
+
     private void checkOwnership(Course course, User user) {
         if (course.getTeacherId() == null
                 || !course.getTeacherId().equals(user.getId())) {

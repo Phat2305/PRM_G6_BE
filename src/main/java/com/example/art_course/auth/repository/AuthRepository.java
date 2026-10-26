@@ -14,8 +14,13 @@ public class AuthRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    // Mỗi role chỉ dùng một trong hai trường cuối; trường còn lại là null
-    public record ProfileRow(String fullName, String shippingAddress, String bankAccountInfo) {}
+    // Parent chỉ dùng shippingAddress; Teacher dùng bankAccountInfo, phone, bio, certificatesText (mỗi dòng một chứng chỉ)
+    public record ProfileRow(String fullName, String shippingAddress, String bankAccountInfo,
+                             String phone, String bio, String certificatesText) {
+        public ProfileRow(String fullName, String shippingAddress, String bankAccountInfo) {
+            this(fullName, shippingAddress, bankAccountInfo, null, null, null);
+        }
+    }
 
     // Teacher chưa có thông tin ngân hàng khi đăng ký (cột NOT NULL nên để rỗng)
     public void insertTeacherProfile(UUID userId, String fullName) {
@@ -39,8 +44,9 @@ public class AuthRepository {
 
     public Optional<ProfileRow> findTeacherProfile(UUID userId) {
         return jdbcTemplate.query(
-                "SELECT full_name, bank_account_info FROM teacher_profiles WHERE user_id = ?",
-                (rs, i) -> new ProfileRow(rs.getString(1), null, rs.getString(2)), userId)
+                "SELECT full_name, bank_account_info, phone, bio, certificates_text FROM teacher_profiles WHERE user_id = ?",
+                (rs, i) -> new ProfileRow(rs.getString(1), null, rs.getString(2),
+                        rs.getString(3), rs.getString(4), rs.getString(5)), userId)
                 .stream().findFirst();
     }
 
@@ -52,10 +58,14 @@ public class AuthRepository {
                 fullName, shippingAddress, userId);
     }
 
-    public int updateTeacherProfile(UUID userId, String fullName, String bankAccountInfo) {
+    // Chuỗi rỗng xóa giá trị (phone, bio, certificatesText); null giữ nguyên.
+    public int updateTeacherProfile(UUID userId, String fullName, String bankAccountInfo,
+                                    String phone, String bio, String certificatesText) {
         return jdbcTemplate.update(
                 "UPDATE teacher_profiles SET full_name = COALESCE(?, full_name), "
-                        + "bank_account_info = COALESCE(?, bank_account_info) WHERE user_id = ?",
-                fullName, bankAccountInfo, userId);
+                        + "bank_account_info = COALESCE(?, bank_account_info), "
+                        + "phone = COALESCE(?, phone), bio = COALESCE(?, bio), "
+                        + "certificates_text = COALESCE(?, certificates_text) WHERE user_id = ?",
+                fullName, bankAccountInfo, phone, bio, certificatesText, userId);
     }
 }

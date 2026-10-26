@@ -92,4 +92,17 @@ public class CustomizeOrderService {
                 .build());
         return order;
     }
+
+    /** Hủy các đơn còn chờ thanh toán của yêu cầu (khi phụ huynh thu hồi báo giá đã chấp nhận). */
+    @Transactional
+    public void cancelPending(UUID requestId) {
+        for (OrderDetail detail : orderDetailRepository.findByCustomizeRequestId(requestId)) {
+            orderRepository.findById(detail.getOrderId())
+                    .filter(o -> o.getStatus() == OrderStatus.PENDING_PAYMENT)
+                    .ifPresent(o -> {
+                        o.setStatus(OrderStatus.CANCELLED);
+                        orderRepository.save(o);
+                    });
+        }
+    }
 }

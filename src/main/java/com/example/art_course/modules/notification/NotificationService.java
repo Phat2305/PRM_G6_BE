@@ -64,6 +64,22 @@ public class NotificationService {
                 "Phụ huynh đã chấp nhận báo giá " + vnd(price) + ", đang chờ thanh toán.", "OFFER_ACCEPTED", requestId);
     }
 
+    // CUS-11: giáo viên bàn giao khóa học riêng; phụ huynh vào xem và gán cho bé.
+    @Async
+    public void notifyCustomizeDelivered(UUID requestId, UUID parentId, String courseName) {
+        sendNotificationAsync(parentId, "Khóa học riêng đã bàn giao",
+                "Giáo viên đã bàn giao \"" + courseName + "\". Mở yêu cầu để xem và gán cho bé.",
+                "CUSTOMIZE_DELIVERED", requestId);
+    }
+
+    // CUS-12: phụ huynh xác nhận hoàn thành; tiền ký quỹ được xét giải ngân.
+    @Async
+    public void notifyCustomizeCompleted(UUID requestId, UUID teacherId, String courseName) {
+        sendNotificationAsync(teacherId, "Phụ huynh đã nhận khóa học",
+                "Phụ huynh đã xác nhận hoàn thành \"" + courseName + "\".",
+                "CUSTOMIZE_COMPLETED", requestId);
+    }
+
     private static String vnd(BigDecimal amount) {
         return String.format("%,d", amount.setScale(0, java.math.RoundingMode.HALF_UP).longValue())
                 .replace(',', '.') + "đ";

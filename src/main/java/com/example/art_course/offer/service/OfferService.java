@@ -43,6 +43,10 @@ public class OfferService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.example.art_course.modules.notification.NotificationService notificationService;
 
+    // Hủy đơn chờ thanh toán khi phụ huynh thu hồi chấp nhận; null (test) thì bỏ qua.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.example.art_course.modules.order.service.CustomizeOrderService customizeOrderService;
+
     public OfferService(
             OfferRepository offerRepository,
             CustomizeRequestRepository requestRepository,
@@ -287,6 +291,37 @@ public class OfferService {
                 offerRepository.save(other);
             }
         }
+    }
+
+    // Phụ huynh thu hồi báo giá đã chấp nhận (chưa thanh toán): yêu cầu về OPEN, báo giá này và các báo giá
+    // bị từ chối khi chấp nhận về pending để chọn lại.
+    @Transactional
+    public OfferResponse revoke(UUID id, String username) {
+        User user = getUser(username);
+        Offer offer = findById(id);
+        CustomizeRequest request = findCustomizeRequest(offer.getRequestId());
+        if (!isRequestOwner(request, user)) {
+            throw forbidden();
+        }
+        if (!"accepted".equalsIgnoreCase(offer.getStatus())
+                || !"ACCEPTED".equalsIgnoreCase(request.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Only an accepted offer that is not paid yet can be revoked");
+        }
+        if (customizeOrderService != null) {
+            customizeOrderService.cancelPending(request.getId());
+        }
+        request.setStatus(CustomizeRequestService.OPEN);
+        requestRepository.save(request);
+        for (Offer other : offerRepository.findAllByRequestId(request.getId())) {
+            if ("rejected".equalsIgnoreCase(other.getStatus())) {
+                other.setStatus("pending");
+                offerRepository.save(other);
+            }
+        }
+        offer.setStatus("pending");
+        return toResponse(offerRepository.save(offer));
     }
 
     @Transactional

@@ -74,3 +74,20 @@ Mỗi giai đoạn dùng được ngay khi xong:
   4. Phụ huynh nhận thông báo; bé thấy khóa; phụ huynh xác nhận rồi giải ngân.
 
 **Chưa kiểm tra:** chưa chạy app hay gọi API thật cho luồng này; phần `PaymentService` và module video/lesson mới đọc lướt. Thời gian ước lượng là thô, giả định một người quen codebase.
+
+## Trạng thái ngày 25/10 (sau GĐ1, GĐ2 và chat GĐ A–D)
+
+Kiểm chứng: E2E 40/40 điểm trên BE chạy thật + Postgres tạm (chi tiết trong `docs/chat-offer-plan.md`, GĐ D); test BE 143 (7 test Testcontainers hỏng sẵn vì thư mục migration bị xóa ở commit `9194e89`); test FE 184/184.
+
+| Bước | Trạng thái |
+|---|---|
+| 1. Phụ huynh đăng yêu cầu | **Xong** (BE + FE; banner trang chủ, nút "+" tab Không gian, danh sách thật) |
+| 2. Chat thương lượng | **Xong** (hộp thư `/me` cả hai vai trò, chưa đọc, tin mới 5 giây/lần, thông báo NEW_MESSAGE) |
+| 3a. Báo giá trong chat | **Xong** (một transaction tạo báo giá + tin, thay báo giá cũ, thông báo NEW_OFFER) |
+| 3b. Chấp nhận báo giá | **Xong** (chat hoặc màn chi tiết; yêu cầu ACCEPTED, từ chối báo giá khác, chặn chấp nhận lần hai, OFFER_ACCEPTED) |
+| 3c. Thanh toán | **Xong** (đơn CUSTOMIZE theo giá báo giá, hạn 24h, hoa hồng như khóa học, PayOS, xong thì FUNDED). Chưa chạy thật với PayOS sandbox |
+| 4. Giáo viên làm khóa và bàn giao | **Xong (25/10, tối)**: khóa gắn `customizeRequestId` chỉ khi yêu cầu FUNDED và đúng giáo viên có báo giá được chấp nhận; `POST /api/customize-requests/{id}/deliver` (khóa ≥ 1 bài) → DELIVERED, khóa PUBLISHED nhưng ẩn khỏi danh mục công khai (CUS-10); thông báo CUSTOMIZE_DELIVERED |
+| 5. Staff duyệt khóa | **Thiếu** (khóa riêng được công khai cho bé ngay khi bàn giao, chưa qua Staff) |
+| 6. Thông báo hoàn thành, bé được học, giải ngân | **Xong (25/10, tối)**: `GET .../delivery` + `POST .../complete` (bé của chính phụ huynh) → cấp `child_enroll`, dòng đơn COMPLETED, `tryReleaseEscrow` (payment RELEASED, sổ cái RELEASE), yêu cầu COMPLETED, thông báo CUSTOMIZE_COMPLETED. Sửa lỗi: bật `customize_auto_confirm_days` thì trước đây xác nhận của phụ huynh bị bỏ qua. FE: `CustomizeDeliveryScreen`, `NotificationsScreen` + nút chuông. E2E 62/62 |
+
+Còn mở từ GĐ0: giáo viên vẫn tự đặt `status` khóa học (bỏ qua duyệt); `PATCH /api/customize-requests/{id}/status` vẫn cho mọi Teacher/Admin đổi trạng thái bất kỳ.

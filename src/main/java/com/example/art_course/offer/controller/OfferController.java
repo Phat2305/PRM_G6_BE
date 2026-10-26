@@ -85,6 +85,15 @@ public class OfferController {
                         id, request, authentication.getName()));
     }
 
+    @PostMapping("/{id}/revoke")
+    public ResponseEntity<OfferResponse> revoke(
+            @PathVariable UUID id,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                offerService.revoke(id, authentication.getName()));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable UUID id,
