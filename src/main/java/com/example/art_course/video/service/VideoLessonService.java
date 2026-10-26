@@ -3,6 +3,7 @@ package com.example.art_course.video.service;
 
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.course.service.CourseReviewPolicy;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
 import com.example.art_course.user.entity.User;
@@ -62,6 +63,14 @@ public class VideoLessonService {
         }
 
         Lesson lesson = ownedLesson(lessonId, userId);
+        // Đổi video là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.
+        courseRepository.findById(lesson.getCourseId()).ifPresent(course -> {
+            String before = course.getStatus();
+            CourseReviewPolicy.onContentChanged(course);
+            if (before == null ? course.getStatus() != null : !before.equals(course.getStatus())) {
+                courseRepository.save(course);
+            }
+        });
 
         VideoStorageService.StoredVideo storedVideo =
                 videoStorageService.store(file);

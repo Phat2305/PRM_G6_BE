@@ -74,6 +74,49 @@ public class NotificationService {
 
     // CUS-12: phụ huynh xác nhận hoàn thành; tiền ký quỹ được xét giải ngân.
     @Async
+    // Staff duyệt khóa học thường: báo giáo viên khóa đã công khai.
+    public void notifyCourseApproved(UUID courseId, UUID teacherId, String courseName) {
+        sendNotificationAsync(teacherId, "Khóa học đã được duyệt",
+                "Khóa \"" + courseName + "\" đã được Staff duyệt và công khai.", "COURSE_APPROVED", courseId);
+    }
+
+    // Staff từ chối khóa: kèm lý do và số lần được gửi lại còn lại.
+    public void notifyCourseRejected(UUID courseId, UUID teacherId, String courseName, String reason, int remaining) {
+        String tail = remaining > 0
+                ? "Bạn còn " + remaining + " lần gửi lại."
+                : "Khóa đã bị từ chối 3 lần nên không gửi lại được nữa.";
+        sendNotificationAsync(teacherId, "Khóa học bị từ chối",
+                "Khóa \"" + courseName + "\" bị từ chối: " + reason + ". " + tail, "COURSE_REJECTED", courseId);
+    }
+
+    // Staff duyệt bài đăng: bài đã lên bảng yêu cầu cho giáo viên báo giá.
+    public void notifyRequestApproved(UUID requestId, UUID parentId, String title) {
+        sendNotificationAsync(parentId, "Bài đăng đã được duyệt",
+                "Bài đăng \"" + title + "\" đã được duyệt và hiện cho giáo viên báo giá.", "REQUEST_APPROVED", requestId);
+    }
+
+    public void notifyRequestRejected(UUID requestId, UUID parentId, String title, String reason, int remaining) {
+        String tail = remaining > 0
+                ? "Bạn sửa lại và gửi lại được " + remaining + " lần nữa."
+                : "Bài đăng đã bị từ chối 3 lần nên không gửi lại được nữa.";
+        sendNotificationAsync(parentId, "Bài đăng bị từ chối",
+                "Bài đăng \"" + title + "\" bị từ chối: " + reason + ". " + tail, "REQUEST_REJECTED", requestId);
+    }
+
+    // Phụ huynh chưa đồng ý với bản bàn giao: báo giáo viên kèm lý do (lý do cũng được gửi vào cuộc trò chuyện).
+    public void notifyCustomizeDeliveryRejected(UUID requestId, UUID teacherId, String courseName, String reason) {
+        sendNotificationAsync(teacherId, "Phụ huynh chưa đồng ý với bản bàn giao",
+                "Phụ huynh chưa đồng ý với \"" + courseName + "\": " + reason + ". Hãy sửa rồi bàn giao lại.",
+                "CUSTOMIZE_DELIVERY_REJECTED", requestId);
+    }
+
+    // Khóa riêng bị Staff từ chối đủ số lần: yêu cầu bị hủy, phụ huynh có thể xin hoàn tiền.
+    public void notifyCustomizeFailed(UUID requestId, UUID parentId, String courseName) {
+        sendNotificationAsync(parentId, "Khóa học riêng không bàn giao được",
+                "Khóa \"" + courseName + "\" không qua được kiểm duyệt. Bạn có thể gửi yêu cầu hoàn tiền cho đơn này.",
+                "CUSTOMIZE_FAILED", requestId);
+    }
+
     public void notifyCustomizeCompleted(UUID requestId, UUID teacherId, String courseName) {
         sendNotificationAsync(teacherId, "Phụ huynh đã nhận khóa học",
                 "Phụ huynh đã xác nhận hoàn thành \"" + courseName + "\".",

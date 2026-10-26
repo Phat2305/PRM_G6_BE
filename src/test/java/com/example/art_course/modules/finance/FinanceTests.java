@@ -24,8 +24,11 @@ import com.example.art_course.modules.refund.dto.CreateRefundRequest;
 import com.example.art_course.modules.refund.entity.Refund;
 import com.example.art_course.modules.refund.repository.RefundItemRepository;
 import com.example.art_course.modules.refund.repository.RefundRepository;
+import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
 import com.example.art_course.modules.moderation.service.ModerationService;
 import com.example.art_course.modules.refund.dto.RefundResponseDto;
+import com.example.art_course.modules.refund.entity.RefundItem;
 import com.example.art_course.modules.refund.service.RefundService;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import com.example.art_course.modules.withdrawal.dto.CreateWithdrawalRequest;
@@ -266,7 +269,7 @@ public class FinanceTests {
         RefundService refundService = new RefundService(
                 refundRepo, refundItemRepo, orderRepo, orderDetailRepo,
                 paymentRepo, supplyRepo, enrollmentContract, ledgerService, notifService,
-                mock(ModerationService.class)
+                mock(ModerationService.class), mock(CustomizeRequestRepository.class), mock(CourseRepository.class)
         );
 
         UUID orderId = UUID.randomUUID();
@@ -324,7 +327,8 @@ public class FinanceTests {
     private RefundService refundServiceWith(RefundRepository refundRepo, NotificationService notif, ModerationService moderation) {
         return new RefundService(refundRepo, mock(RefundItemRepository.class), mock(OrderRepository.class),
                 mock(OrderDetailRepository.class), mock(PaymentRepository.class), mock(SupplyRepository.class),
-                mock(IEnrollmentContract.class), mock(LedgerService.class), notif, moderation);
+                mock(IEnrollmentContract.class), mock(LedgerService.class), notif, moderation,
+                mock(CustomizeRequestRepository.class), mock(CourseRepository.class));
     }
 
     @Test
@@ -368,6 +372,51 @@ public class FinanceTests {
 
         AppError error = assertThrows(AppError.class, () -> refundService.listRefunds("bogus", 0, 50));
         assertEquals("INVALID_STATUS", error.getErrorCode());
+    }
+
+    @Test
+    @DisplayName("5d. Duyệt hoàn tiền đơn khóa riêng: yêu cầu bị hủy, bé đã được gán thì thu hồi quyền học")
+    void testRefund_ApproveCustomizeLine_CancelsRequestAndRevokesAccess() {
+        RefundRepository refundRepo = mock(RefundRepository.class);
+        RefundItemRepository refundItemRepo = mock(RefundItemRepository.class);
+        OrderDetailRepository orderDetailRepo = mock(OrderDetailRepository.class);
+        IEnrollmentContract enrollmentContract = mock(IEnrollmentContract.class);
+        CustomizeRequestRepository requestRepo = mock(CustomizeRequestRepository.class);
+        CourseRepository courseRepo = mock(CourseRepository.class);
+        RefundService refundService = new RefundService(refundRepo, refundItemRepo, mock(OrderRepository.class),
+                orderDetailRepo, mock(PaymentRepository.class), mock(SupplyRepository.class), enrollmentContract,
+                mock(LedgerService.class), mock(NotificationService.class), mock(ModerationService.class),
+                requestRepo, courseRepo);
+
+        UUID requestId = UUID.randomUUID();
+        UUID childId = UUID.randomUUID();
+        com.example.art_course.course.entity.Course course = com.example.art_course.course.entity.Course.builder()
+                .id(UUID.randomUUID()).customizeRequestId(requestId).build();
+        com.example.art_course.customize_request.entity.CustomizeRequest request =
+                com.example.art_course.customize_request.entity.CustomizeRequest.builder()
+                        .id(requestId).status("DELIVERED").build();
+        OrderDetail line = OrderDetail.builder().id(UUID.randomUUID()).customizeRequestId(requestId).childId(childId).build();
+        Refund refund = Refund.builder().id(UUID.randomUUID()).status("PENDING").totalAmount(new BigDecimal("500000")).build();
+        when(refundRepo.findByIdForUpdate(refund.getId())).thenReturn(Optional.of(refund));
+        when(refundRepo.save(any(Refund.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(refundItemRepo.findByRefundId(refund.getId())).thenReturn(List.of(
+                RefundItem.builder().refundId(refund.getId()).orderDetailId(line.getId()).build()));
+        when(orderDetailRepo.findById(line.getId())).thenReturn(Optional.of(line));
+        when(requestRepo.findById(requestId)).thenReturn(Optional.of(request));
+        when(courseRepo.findFirstByCustomizeRequestId(requestId)).thenReturn(Optional.of(course));
+
+        refundService.approveRefund(refund.getId(), UUID.randomUUID());
+
+        assertEquals("CANCELLED", request.getStatus());
+        assertEquals(DeliveryStatus.REFUNDED, line.getDeliveryStatus());
+        verify(enrollmentContract).revokeAccess(childId, course.getId(), refund.getId());
+
+        // Chưa gán cho bé (chưa nhận khóa) thì không có quyền học nào để thu hồi.
+        line.setChildId(null);
+        reset(enrollmentContract);
+        refund.setStatus("PENDING");
+        refundService.approveRefund(refund.getId(), UUID.randomUUID());
+        verify(enrollmentContract, never()).revokeAccess(any(), any(), any());
     }
 
     // =========================================================================

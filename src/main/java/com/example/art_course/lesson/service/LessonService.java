@@ -3,6 +3,7 @@ package com.example.art_course.lesson.service;
 
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.course.service.CourseReviewPolicy;
 import com.example.art_course.lesson.dto.UpdateLessonRequest;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
@@ -91,6 +92,12 @@ public class LessonService {
         checkCourseOwnership(course, user);
 
         lesson.setId(null);
+        // Video chỉ do đường tải lên + xử lý đặt (quyết định #2); không nhận đường dẫn/trạng thái video từ client.
+        lesson.setVideoUrl(null);
+        lesson.setVideoStatus(null);
+        lesson.setVideoError(null);
+        lesson.setDurationSeconds(null);
+        touchCourse(course);
 
         return lessonRepository.save(lesson);
     }
@@ -118,10 +125,6 @@ public class LessonService {
             lesson.setTitle(request.getTitle().trim());
         }
 
-        if (request.getVideoUrl() != null) {
-            lesson.setVideoUrl(request.getVideoUrl());
-        }
-
         if (request.getIsTrial() != null) {
             lesson.setIsTrial(request.getIsTrial());
         }
@@ -133,6 +136,7 @@ public class LessonService {
         if (request.getStatus() != null) {
             lesson.setStatus(request.getStatus());
         }
+        touchCourse(course);
 
         return lessonRepository.save(lesson);
     }
@@ -144,8 +148,18 @@ public class LessonService {
         Course course = getCourseById(lesson.getCourseId());
         User user = getUserById(userId);
         checkCourseOwnership(course, user);
+        touchCourse(course);
 
         lessonRepository.delete(lesson);
+    }
+
+    // Sửa bài học là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.
+    private void touchCourse(Course course) {
+        String before = course.getStatus();
+        CourseReviewPolicy.onContentChanged(course);
+        if (before == null ? course.getStatus() != null : !before.equals(course.getStatus())) {
+            courseRepository.save(course);
+        }
     }
 
     private Course getCourseById(UUID courseId) {

@@ -20,4 +20,7 @@ public class CourseResponse {
     private String coverImageUrl;
     private BigDecimal price;
     private String status;
+    // Số lần Staff đã từ chối (tối đa 3 thì không gửi lại được) và lý do gần nhất.
+    private int rejectionCount;
+    private String reviewNote;
 }

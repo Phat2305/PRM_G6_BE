@@ -59,6 +59,8 @@ Hệ thống sử dụng **JWT HS256** theo hợp đồng với BE1 ([`docs/cont
 | `POST` | `/api/v1/fulfillment/parent/items/{id}/confirm-received` | Phụ huynh xác nhận đã nhận hàng | FUL-03 |
 | `POST` | `/api/v1/fulfillment/parent/items/{id}/cancel` | Hủy dòng dụng cụ khi GV chưa xác nhận | FUL-06 |
 | `POST` | `/api/v1/refunds/request` | Yêu cầu hoàn tiền theo dòng chi tiết | FIN-07 |
+| `GET` | `/api/customize-requests/{id}/delivery` | Xem khóa riêng đã được Staff duyệt (yêu cầu `DELIVERED`/`COMPLETED`); kèm `orderId`, `orderDetailId` để xin hoàn tiền | PARENT |
+| `POST` | `/api/customize-requests/{id}/reject-delivery` | Chưa đồng ý với bản bàn giao, body `reason`: gửi cho giáo viên qua tin nhắn, yêu cầu về `FUNDED` để sửa. Không thống nhất được thì xin hoàn tiền (`/refunds/request`) | PARENT |
 | `GET` | `/api/v1/refunds/my` | Xem các yêu cầu hoàn tiền của mình | FIN-07 |
 
 ### 3. Giáo viên (Role: `TEACHER`)
@@ -79,6 +81,13 @@ Hệ thống sử dụng **JWT HS256** theo hợp đồng với BE1 ([`docs/cont
 | `GET` | `/api/v1/payments/{paymentId}/status` | Truy vấn trạng thái thanh toán | PARENT, TEACHER, STAFF, ADMIN |
 | `POST` | `/api/v1/fulfillment/delivered/{id}` | Báo giao hàng tới nơi | TEACHER, STAFF, ADMIN |
 | `POST` | `/api/v1/fulfillment/staff/items/{id}/handle-failure` | Xử lý giao thất bại (giao lại / hoàn tiền) | STAFF, ADMIN |
+| `GET` | `/api/v1/staff/courses/pending` | Khóa học chờ duyệt (`PENDING_REVIEW`) kèm số bài và số video đã xử lý xong; `customize` = khóa riêng | STAFF, ADMIN |
+| `GET` | `/api/v1/staff/courses/{id}` | Chi tiết khóa kèm bài học và `videoUrl` để Staff xem trước khi duyệt | STAFF, ADMIN |
+| `POST` | `/api/v1/staff/courses/{id}/approve` | Duyệt khóa (cần mọi video `READY`). Khóa thường công khai; khóa customize thì yêu cầu sang `DELIVERED` và báo phụ huynh | STAFF, ADMIN |
+| `POST` | `/api/v1/staff/courses/{id}/reject` | Từ chối khóa, body `reason`. Giáo viên sửa và gửi lại, tối đa 3 lần từ chối; khóa customize bị từ chối đủ 3 lần thì yêu cầu `CANCELLED` để phụ huynh xin hoàn tiền | STAFF, ADMIN |
+| `GET` | `/api/v1/staff/customize-requests/pending` | Bài đăng yêu cầu customize chờ duyệt | STAFF, ADMIN |
+| `POST` | `/api/v1/staff/customize-requests/{id}/approve` | Duyệt bài đăng: `PENDING_REVIEW → OPEN` (hiện cho giáo viên báo giá) | STAFF, ADMIN |
+| `POST` | `/api/v1/staff/customize-requests/{id}/reject` | Từ chối bài đăng, body `reason`; chủ bài sửa và gửi lại, đủ 3 lần từ chối thì từ chối hẳn | STAFF, ADMIN |
 | `POST` | `/api/v1/staff/supplies/{id}/moderate` | Kiểm duyệt dụng cụ vi phạm | STAFF, ADMIN |
 | `GET` | `/api/v1/staff/complaints` | Việc cần xử lý: hoàn tiền chờ duyệt (`REFUND_REQUEST`) và dòng dụng cụ giao thất bại (`DELIVERY_FAILED`), kèm tên phụ huynh/giáo viên | STAFF, ADMIN |
 | `GET` | `/api/v1/staff/complaints/{orderId}/conversations` | Xem tin nhắn giải quyết khiếu nại (`messages`: chỉ chat customize thuộc đơn, giữa đúng phụ huynh và giáo viên) | STAFF, ADMIN (MSG-06) |

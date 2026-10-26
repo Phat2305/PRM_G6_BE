@@ -15,6 +15,11 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
 
     List<Course> findAllByStatus(String status);
 
+    // Khóa dòng khi Staff duyệt/từ chối để hai Staff cùng xử lý một khóa thì chạy lần lượt.
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT c FROM Course c WHERE c.id = :id")
+    java.util.Optional<Course> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") UUID id);
+
     List<Course> findAllByTeacherIdAndStatus(
             UUID teacherId,
             String status

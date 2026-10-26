@@ -12,4 +12,7 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
     List<Lesson> findAllByCourseId(UUID courseId);
 
     List<Lesson> findAllByCourseIdAndStatus(UUID courseId, String status);
+
+    // Tìm bài học dùng một video HLS (kiểm quyền xem video).
+    List<Lesson> findAllByVideoUrlContaining(String fragment);
 }

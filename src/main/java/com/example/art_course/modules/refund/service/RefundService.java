@@ -3,6 +3,8 @@ package com.example.art_course.modules.refund.service;
 import com.example.art_course.common.AppError;
 import com.example.art_course.common.statemachine.DeliveryStatus;
 import com.example.art_course.contracts.IEnrollmentContract;
+import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
 import com.example.art_course.modules.finance.service.LedgerService;
 import com.example.art_course.modules.moderation.service.ModerationService;
 import com.example.art_course.modules.notification.NotificationService;
@@ -53,6 +55,8 @@ public class RefundService {
     private final LedgerService ledgerService;
     private final NotificationService notificationService;
     private final ModerationService moderationService;
+    private final CustomizeRequestRepository customizeRequestRepository;
+    private final CourseRepository courseRepository;
 
     /**
      * Parent gửi yêu cầu hoàn tiền cho 1 dòng chi tiết trong đơn hàng (FIN-07).
@@ -147,6 +151,20 @@ public class RefundService {
                     }
                     detail.setDeliveryStatus(DeliveryStatus.REFUNDED);
                     orderDetailRepository.save(detail);
+                } else if ("CUSTOMIZE".equalsIgnoreCase(detail.getProductType())) {
+                    // Hoàn tiền đơn khóa riêng (phụ huynh không thống nhất với giáo viên hoặc khóa không qua kiểm duyệt):
+                    // yêu cầu bị hủy, không bàn giao/nhận nữa; bé đã được gán thì thu hồi quyền học.
+                    detail.setDeliveryStatus(DeliveryStatus.REFUNDED);
+                    orderDetailRepository.save(detail);
+                    customizeRequestRepository.findById(detail.getCustomizeRequestId()).ifPresent(request -> {
+                        request.setStatus("CANCELLED");
+                        customizeRequestRepository.save(request);
+                    });
+                    if (detail.getChildId() != null) {
+                        courseRepository.findFirstByCustomizeRequestId(detail.getCustomizeRequestId())
+                                .ifPresent(course -> enrollmentContract.revokeAccess(
+                                        detail.getChildId(), course.getId(), refund.getId()));
+                    }
                 }
             }
         }

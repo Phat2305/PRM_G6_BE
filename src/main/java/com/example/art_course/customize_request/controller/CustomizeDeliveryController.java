@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
-// CUS-11/12: bàn giao khóa học riêng và xác nhận hoàn thành.
+// CUS-11/12: gửi khóa riêng cho Staff duyệt, phụ huynh nhận hoặc chưa đồng ý, xác nhận hoàn thành.
 @RestController
 @RequestMapping("/api/customize-requests/{requestId}")
 @RequiredArgsConstructor
@@ -20,7 +20,9 @@ public class CustomizeDeliveryController {
 
     public record CompleteBody(UUID childId) {}
 
-    // Giáo viên có báo giá được chấp nhận bàn giao khóa đã làm (FUNDED → DELIVERED).
+    public record RejectBody(String reason) {}
+
+    // Giáo viên có báo giá được chấp nhận gửi khóa đã làm cho Staff duyệt (yêu cầu vẫn FUNDED tới khi Staff duyệt thì DELIVERED).
     @PostMapping("/deliver")
     public DeliveryView deliver(@PathVariable UUID requestId, @RequestBody DeliverBody body, Authentication auth) {
         return service.deliver(requestId, body.courseId(), auth.getName());
@@ -30,6 +32,12 @@ public class CustomizeDeliveryController {
     @GetMapping("/delivery")
     public DeliveryView delivery(@PathVariable UUID requestId, Authentication auth) {
         return service.delivery(requestId, auth.getName());
+    }
+
+    // Phụ huynh chưa đồng ý với bản bàn giao: nêu lý do, gửi cho giáo viên qua tin nhắn, yêu cầu về FUNDED để sửa.
+    @PostMapping("/reject-delivery")
+    public DeliveryView rejectDelivery(@PathVariable UUID requestId, @RequestBody RejectBody body, Authentication auth) {
+        return service.rejectDelivery(requestId, body.reason(), auth.getName());
     }
 
     // Phụ huynh gán cho bé và xác nhận hoàn thành (DELIVERED → COMPLETED).

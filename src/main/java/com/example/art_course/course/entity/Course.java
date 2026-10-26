@@ -44,4 +44,12 @@ public class Course {
 
     @Column(name = "status", length = 20)
     private String status;
+
+    // Số lần Staff từ chối trong lượt duyệt hiện tại (đặt lại về 0 khi được duyệt) và lý do gần nhất.
+    @Column(name = "rejection_count", nullable = false)
+    @Builder.Default
+    private int rejectionCount = 0;
+
+    @Column(name = "review_note", columnDefinition = "text")
+    private String reviewNote;
 }

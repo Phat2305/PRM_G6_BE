@@ -90,6 +90,15 @@ public class CustomizeRequestController {
                 service.updateStatus(id, status, authentication.getName()));
     }
 
+    // Chủ bài đóng yêu cầu: giáo viên không báo giá thêm được nữa.
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<CustomizeRequestResponse> cancel(
+            @PathVariable UUID id,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(service.cancel(id, authentication.getName()));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
             @PathVariable UUID id,

@@ -23,4 +23,7 @@ public class CustomizeRequestResponse {
     private BigDecimal budget;
     private OffsetDateTime deadline;
     private String status;
+    // Số lần Staff đã từ chối (tối đa 3 thì bài bị từ chối hẳn) và lý do gần nhất.
+    private int rejectionCount;
+    private String reviewNote;
 }

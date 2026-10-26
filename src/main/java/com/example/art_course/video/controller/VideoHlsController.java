@@ -2,6 +2,7 @@
 package com.example.art_course.video.controller;
 
 import com.example.art_course.video.service.R2StorageService;
+import com.example.art_course.video.service.VideoAccessService;
 import com.example.art_course.video.service.VideoProcessingService;
 
 import org.springframework.core.io.InputStreamResource;
@@ -10,6 +11,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,19 +28,23 @@ import java.util.UUID;
 public class VideoHlsController {
 
     private final R2StorageService r2StorageService;
+    private final VideoAccessService videoAccessService;
 
-    public VideoHlsController(R2StorageService r2StorageService) {
+    public VideoHlsController(R2StorageService r2StorageService, VideoAccessService videoAccessService) {
         this.r2StorageService = r2StorageService;
+        this.videoAccessService = videoAccessService;
     }
 
     @GetMapping("/{hlsId}/{fileName}")
     public ResponseEntity<Resource> getHlsFile(
             @PathVariable String hlsId,
-            @PathVariable String fileName) {
+            @PathVariable String fileName,
+            Authentication authentication) {
 
         // Validate video ID.
+        UUID videoId;
         try {
-            UUID.fromString(hlsId);
+            videoId = UUID.fromString(hlsId);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -51,6 +58,17 @@ public class VideoHlsController {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Invalid HLS file name");
+        }
+
+        // LRN-03: chỉ người có quyền xem khóa này mới lấy được playlist/đoạn video (xem VideoAccessService).
+        UUID userId = authentication != null && authentication.getPrincipal() instanceof UUID id ? id : null;
+        String role = authentication == null ? null : authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(a -> a.startsWith("ROLE_"))
+                .map(a -> a.substring("ROLE_".length()))
+                .findFirst().orElse(null);
+        if (!videoAccessService.canStream(videoId, userId, role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem video này");
         }
 
         String objectKey = "hls/" + hlsId + "/" + fileName;

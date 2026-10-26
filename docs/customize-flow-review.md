@@ -91,3 +91,11 @@ Kiểm chứng: E2E 40/40 điểm trên BE chạy thật + Postgres tạm (chi t
 | 6. Thông báo hoàn thành, bé được học, giải ngân | **Xong (25/10, tối)**: `GET .../delivery` + `POST .../complete` (bé của chính phụ huynh) → cấp `child_enroll`, dòng đơn COMPLETED, `tryReleaseEscrow` (payment RELEASED, sổ cái RELEASE), yêu cầu COMPLETED, thông báo CUSTOMIZE_COMPLETED. Sửa lỗi: bật `customize_auto_confirm_days` thì trước đây xác nhận của phụ huynh bị bỏ qua. FE: `CustomizeDeliveryScreen`, `NotificationsScreen` + nút chuông. E2E 62/62 |
 
 Còn mở từ GĐ0: giáo viên vẫn tự đặt `status` khóa học (bỏ qua duyệt); `PATCH /api/customize-requests/{id}/status` vẫn cho mọi Teacher/Admin đổi trạng thái bất kỳ.
+
+## Cập nhật 26/10: Staff duyệt khóa học và bài đăng
+Đã làm (xem `docs/decisions.md` mục 9-12): bịt lỗi giáo viên tự đặt khóa `PUBLISHED`; `PATCH /customize-requests/{id}/status` chỉ còn cho Admin;
+bài đăng đi qua `PENDING_REVIEW` (Staff duyệt/từ chối, tối đa 3 lần từ chối); khóa customize được Staff duyệt trước khi phụ huynh thấy
+(`/deliver` chỉ gửi duyệt, `DELIVERED` do Staff duyệt đặt); phụ huynh chưa đồng ý thì gửi lý do cho giáo viên qua tin nhắn (`/reject-delivery`) hoặc xin hoàn tiền;
+video HLS kiểm quyền xem. Cần chạy `docs/migrations/07_review_workflow.sql` (thêm `rejection_count`, `review_note` cho `courses` và `customize_requests`) trước khi chạy BE bản mới.
+**Chưa làm:** khóa thường bị từ chối đủ 3 lần chưa có đường nào khác ngoài tạo khóa mới; khóa customize bị phụ huynh từ chối nhiều lần chưa có giới hạn
+(chỉ có đường xin hoàn tiền); bài đăng đang OPEN đã có báo giá mà chủ bài sửa thì báo giá cũ vẫn giữ nguyên khi bài mở lại.

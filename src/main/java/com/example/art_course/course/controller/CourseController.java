@@ -99,7 +99,9 @@ public class CourseController {
                 course.getCategory(),
                 course.getCoverImageUrl(),
                 course.getPrice(),
-                course.getStatus()
+                course.getStatus(),
+                course.getRejectionCount(),
+                course.getReviewNote()
         );
     }
 }

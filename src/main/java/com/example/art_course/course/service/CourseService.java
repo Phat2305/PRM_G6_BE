@@ -9,6 +9,7 @@ import com.example.art_course.course.dto.CreateCourseRequest;
 import com.example.art_course.course.dto.UpdateCourseRequest;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.lesson.repository.LessonRepository;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 
@@ -27,23 +28,26 @@ public class CourseService {
     private final UserRepository userRepository;
     private final CustomizeRequestRepository customizeRequestRepository;
     private final OfferRepository offerRepository;
+    private final LessonRepository lessonRepository;
 
     public CourseService(
             CourseRepository courseRepository,
             UserRepository userRepository,
             CustomizeRequestRepository customizeRequestRepository,
-            OfferRepository offerRepository
+            OfferRepository offerRepository,
+            LessonRepository lessonRepository
     ) {
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
         this.customizeRequestRepository = customizeRequestRepository;
         this.offerRepository = offerRepository;
+        this.lessonRepository = lessonRepository;
     }
 
     @Transactional(readOnly = true)
     public List<Course> getAllCourses() {
-        // Khóa làm riêng cho một yêu cầu customize không hiện công khai.
-        return courseRepository.findAll().stream()
+        // Chỉ khóa đã được Staff duyệt; khóa làm riêng cho một yêu cầu customize không hiện công khai.
+        return courseRepository.findAllByStatus(CourseReviewPolicy.PUBLISHED).stream()
                 .filter(c -> c.getCustomizeRequestId() == null)
                 .toList();
     }
@@ -90,7 +94,18 @@ public class CourseService {
         }
 
         User currentUser = getUserById(userId);
+        requireTeacher(currentUser);
         requireCustomizeTeacher(request.getCustomizeRequestId(), currentUser.getId());
+        // Khóa mới luôn là bản nháp: chưa có bài học nên chưa gửi duyệt được, PUBLISHED/REJECTED chỉ Staff đặt.
+        String status = request.getStatus() == null || request.getStatus().isBlank()
+                ? CourseReviewPolicy.DRAFT : request.getStatus().trim().toUpperCase();
+        if (CourseReviewPolicy.PUBLISHED.equals(status) || CourseReviewPolicy.REJECTED.equals(status)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ Staff được công khai hoặc từ chối khóa học");
+        }
+        if (!CourseReviewPolicy.DRAFT.equals(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Khóa mới phải ở trạng thái DRAFT, thêm bài học rồi mới gửi duyệt");
+        }
         Course course = Course.builder()
                 // Never trust teacherId from the request body.
                 .teacherId(currentUser.getId())
@@ -100,7 +115,7 @@ public class CourseService {
                 .category(request.getCategory())
                 .coverImageUrl(request.getCoverImageUrl())
                 .price(request.getPrice())
-                .status(request.getStatus())
+                .status(status)
                 .build();
 
         return courseRepository.save(course);
@@ -116,6 +131,8 @@ public class CourseService {
         User currentUser = getUserById(userId);
         checkOwnership(course, currentUser);
 
+        boolean changed = false;
+
         if (request.getName() != null) {
             if (request.getName().isBlank()) {
                 throw new ResponseStatusException(
@@ -124,6 +141,7 @@ public class CourseService {
                 );
             }
 
+            changed |= !request.getName().trim().equals(course.getName());
             course.setName(request.getName().trim());
         }
 
@@ -133,26 +151,33 @@ public class CourseService {
             course.setCustomizeRequestId(
                     request.getCustomizeRequestId()
             );
+            changed = true;
         }
 
         if (request.getDescription() != null) {
+            changed |= !request.getDescription().equals(course.getDescription());
             course.setDescription(request.getDescription());
         }
 
         if (request.getCategory() != null) {
+            changed |= !request.getCategory().equals(course.getCategory());
             course.setCategory(request.getCategory());
         }
 
         if (request.getCoverImageUrl() != null) {
+            changed |= !request.getCoverImageUrl().equals(course.getCoverImageUrl());
             course.setCoverImageUrl(request.getCoverImageUrl());
         }
 
         if (request.getPrice() != null) {
+            changed |= course.getPrice() == null || request.getPrice().compareTo(course.getPrice()) != 0;
             course.setPrice(request.getPrice());
         }
 
-        if (request.getStatus() != null) {
-            course.setStatus(request.getStatus());
+        if (request.getStatus() != null && !request.getStatus().isBlank()) {
+            applyTeacherStatus(course, request.getStatus().trim().toUpperCase(), changed);
+        } else if (changed) {
+            CourseReviewPolicy.onContentChanged(course);
         }
 
         return courseRepository.save(course);
@@ -165,6 +190,38 @@ public class CourseService {
         checkOwnership(course, currentUser);
 
         courseRepository.delete(course);
+    }
+
+    // Giáo viên chỉ được đặt DRAFT (nháp/rút lại/gỡ) hoặc PENDING_REVIEW (gửi duyệt); PUBLISHED, REJECTED chỉ Staff đặt.
+    private void applyTeacherStatus(Course course, String target, boolean contentChanged) {
+        if (CourseReviewPolicy.DRAFT.equals(target)) {
+            if (CourseReviewPolicy.isFinallyRejected(course)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Khóa đã bị từ chối " + CourseReviewPolicy.MAX_REJECTIONS + " lần nên không đổi trạng thái được");
+            }
+            if (CourseReviewPolicy.is(course, CourseReviewPolicy.PUBLISHED) && CourseReviewPolicy.isCustomize(course)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Khóa đã được bàn giao cho phụ huynh nên không gỡ về bản nháp được");
+            }
+            course.setStatus(CourseReviewPolicy.DRAFT);
+        } else if (CourseReviewPolicy.PENDING_REVIEW.equals(target)) {
+            if (CourseReviewPolicy.is(course, CourseReviewPolicy.PUBLISHED) && !contentChanged) {
+                return; // đang công khai và không đổi gì: không cần duyệt lại
+            }
+            if (!CourseReviewPolicy.is(course, CourseReviewPolicy.PENDING_REVIEW)) {
+                CourseReviewPolicy.requireSubmittable(course, lessonRepository.findAllByCourseId(course.getId()));
+            }
+            course.setStatus(CourseReviewPolicy.PENDING_REVIEW);
+        } else {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ Staff được công khai hoặc từ chối khóa học");
+        }
+    }
+
+    private void requireTeacher(User user) {
+        if (user.getRole() == null || !"TEACHER".equalsIgnoreCase(user.getRole().trim())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ giáo viên được tạo khóa học");
+        }
     }
 
     private User getUserById(String userId) {

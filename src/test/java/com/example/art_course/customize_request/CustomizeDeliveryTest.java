@@ -13,6 +13,10 @@ import com.example.art_course.customize_request.repository.CustomizeRequestRepos
 import com.example.art_course.customize_request.service.CustomizeDeliveryService;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
+import com.example.art_course.messaging.entity.Conversation;
+import com.example.art_course.messaging.entity.Message;
+import com.example.art_course.messaging.repository.ConversationRepository;
+import com.example.art_course.messaging.repository.MessageRepository;
 import com.example.art_course.modules.finance.service.EscrowReleaseService;
 import com.example.art_course.modules.notification.NotificationService;
 import com.example.art_course.modules.order.entity.Order;
@@ -24,6 +28,7 @@ import com.example.art_course.offer.repository.OfferRepository;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -32,9 +37,10 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-// CUS-11/12: bàn giao (FUNDED → DELIVERED) và xác nhận hoàn thành (DELIVERED → COMPLETED).
+// CUS-11/12: giáo viên gửi khóa cho Staff duyệt, phụ huynh nhận hoặc chưa đồng ý, xác nhận hoàn thành.
 class CustomizeDeliveryTest {
 
     private final CustomizeRequestRepository requests = mock(CustomizeRequestRepository.class);
@@ -48,8 +54,11 @@ class CustomizeDeliveryTest {
     private final EscrowReleaseService escrow = mock(EscrowReleaseService.class);
     private final NotificationService notifications = mock(NotificationService.class);
     private final UserRepository users = mock(UserRepository.class);
+    private final ConversationRepository conversations = mock(ConversationRepository.class);
+    private final MessageRepository messages = mock(MessageRepository.class);
     private final CustomizeDeliveryService service = new CustomizeDeliveryService(requests, offers, courses,
-            lessons, children, details, orders, enrollment, escrow, notifications, users, mock(TeacherNames.class));
+            lessons, children, details, orders, enrollment, escrow, notifications, users, mock(TeacherNames.class),
+            conversations, messages);
 
     private final UUID parentId = UUID.randomUUID();
     private final UUID teacherId = UUID.randomUUID();
@@ -64,29 +73,34 @@ class CustomizeDeliveryTest {
         return id.toString();
     }
 
+    private Lesson readyLesson() {
+        return Lesson.builder().title("Bài 1").isTrial(true).hasAssignment(false).videoStatus("READY").build();
+    }
+
     private void setup() {
         when(requests.findById(request.getId())).thenReturn(Optional.of(request));
         when(courses.findById(course.getId())).thenReturn(Optional.of(course));
         when(offers.findAllByRequestIdAndTeacherId(request.getId(), teacherId))
                 .thenReturn(List.of(Offer.builder().teacherId(teacherId).status("accepted").build()));
-        when(lessons.findAllByCourseId(course.getId()))
-                .thenReturn(List.of(Lesson.builder().title("Bài 1").isTrial(true).hasAssignment(false).build()));
+        when(lessons.findAllByCourseId(course.getId())).thenReturn(List.of(readyLesson()));
     }
 
     @Test
-    void deliver_linksCourse_publishesIt_andMovesRequestToDelivered() {
+    void deliver_sendsCourseToStaffReview_andRequestStaysFunded() {
         setup();
         var view = service.deliver(request.getId(), course.getId(), login(teacherId, "TEACHER"));
 
-        assertEquals("DELIVERED", request.getStatus());
+        assertEquals("FUNDED", request.getStatus());
         assertEquals(request.getId(), course.getCustomizeRequestId());
-        assertEquals("PUBLISHED", course.getStatus());
+        assertEquals("PENDING_REVIEW", course.getStatus());
+        assertEquals("PENDING_REVIEW", view.reviewStatus());
         assertEquals(1, view.lessons().size());
-        verify(notifications).notifyCustomizeDelivered(request.getId(), parentId, "Vẽ mèo cho bé");
+        // Phụ huynh chỉ được báo sau khi Staff duyệt.
+        verify(notifications, never()).notifyCustomizeDelivered(any(), any(), anyString());
     }
 
     @Test
-    void deliver_rejectsOtherTeacher_unpaidRequest_andEmptyCourse() {
+    void deliver_rejectsOtherTeacher_unpaidRequest_emptyCourse_andVideosNotReady() {
         setup();
         String other = login(UUID.randomUUID(), "TEACHER");
         assertThrows(ResponseStatusException.class, () -> service.deliver(request.getId(), course.getId(), other));
@@ -98,7 +112,105 @@ class CustomizeDeliveryTest {
         request.setStatus("FUNDED");
         when(lessons.findAllByCourseId(course.getId())).thenReturn(List.of());
         assertThrows(ResponseStatusException.class, () -> service.deliver(request.getId(), course.getId(), teacher));
+
+        when(lessons.findAllByCourseId(course.getId())).thenReturn(List.of(
+                Lesson.builder().title("Bài 2").videoStatus("PROCESSING").build()));
+        assertThrows(ResponseStatusException.class, () -> service.deliver(request.getId(), course.getId(), teacher));
+        assertEquals("DRAFT", course.getStatus());
+    }
+
+    @Test
+    void deliver_rejectsCourseAlreadyInReviewOrPublished_andFinallyRejectedCourse() {
+        setup();
+        String teacher = login(teacherId, "TEACHER");
+        course.setStatus("PENDING_REVIEW");
+        assertThrows(ResponseStatusException.class, () -> service.deliver(request.getId(), course.getId(), teacher));
+        course.setStatus("PUBLISHED");
+        assertThrows(ResponseStatusException.class, () -> service.deliver(request.getId(), course.getId(), teacher));
+
+        course.setStatus("REJECTED");
+        course.setRejectionCount(3);
+        assertThrows(ResponseStatusException.class, () -> service.deliver(request.getId(), course.getId(), teacher));
+
+        // Bị từ chối chưa đủ 3 lần thì sửa rồi gửi lại được.
+        course.setRejectionCount(2);
+        service.deliver(request.getId(), course.getId(), teacher);
+        assertEquals("PENDING_REVIEW", course.getStatus());
+    }
+
+    @Test
+    void delivery_parentSeesCourseOnlyAfterStaffApproval() {
+        setup();
+        course.setCustomizeRequestId(request.getId());
+        when(courses.findFirstByCustomizeRequestId(request.getId())).thenReturn(Optional.of(course));
+        String parent = login(parentId, "PARENT");
+
+        assertThrows(ResponseStatusException.class, () -> service.delivery(request.getId(), parent)); // còn FUNDED
+        request.setStatus("DELIVERED");
+        assertEquals("DELIVERED", service.delivery(request.getId(), parent).status());
+
+        // Giáo viên thì xem được cả khi đang chờ duyệt.
+        request.setStatus("FUNDED");
+        assertEquals("FUNDED", service.delivery(request.getId(), login(teacherId, "TEACHER")).status());
+    }
+
+    @Test
+    void delivery_parentOfACancelledButPaidRequestSeesItToAskForRefund() {
+        setup();
+        course.setCustomizeRequestId(request.getId());
+        when(courses.findFirstByCustomizeRequestId(request.getId())).thenReturn(Optional.of(course));
+        String parent = login(parentId, "PARENT");
+        request.setStatus("CANCELLED");
+        assertThrows(ResponseStatusException.class, () -> service.delivery(request.getId(), parent)); // chưa trả tiền
+
+        Order paid = Order.builder().id(UUID.randomUUID()).status(OrderStatus.PAID).build();
+        OrderDetail line = OrderDetail.builder().id(UUID.randomUUID()).orderId(paid.getId()).customizeRequestId(request.getId()).build();
+        when(details.findByCustomizeRequestId(request.getId())).thenReturn(List.of(line));
+        when(orders.findById(paid.getId())).thenReturn(Optional.of(paid));
+
+        var view = service.delivery(request.getId(), parent);
+
+        assertEquals(paid.getId(), view.orderId());
+        assertEquals(line.getId(), view.orderDetailId());
+    }
+
+    @Test
+    void rejectDelivery_sendsReasonToTeacherByMessage_andReturnsRequestToFunded() {
+        setup();
+        request.setStatus("DELIVERED");
+        course.setStatus("PUBLISHED");
+        course.setCustomizeRequestId(request.getId());
+        when(courses.findFirstByCustomizeRequestId(request.getId())).thenReturn(Optional.of(course));
+        Conversation conversation = Conversation.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(teacherId).build();
+        when(conversations.findFirstByContextTypeAndContextIdAndTeacherId("CUSTOMIZE_REQUEST", request.getId(), teacherId))
+                .thenReturn(Optional.of(conversation));
+
+        service.rejectDelivery(request.getId(), "Thiếu bài tô màu", login(parentId, "PARENT"));
+
         assertEquals("FUNDED", request.getStatus());
+        assertEquals("DRAFT", course.getStatus()); // giáo viên sửa rồi gửi Staff duyệt lại
+        assertTrue(course.getReviewNote().contains("Thiếu bài tô màu"));
+        ArgumentCaptor<Message> message = ArgumentCaptor.forClass(Message.class);
+        verify(messages).save(message.capture());
+        assertEquals(parentId, message.getValue().getSenderId());
+        assertEquals(conversation.getId(), message.getValue().getConversationId());
+        assertTrue(message.getValue().getContent().contains("Thiếu bài tô màu"));
+        verify(notifications).notifyCustomizeDeliveryRejected(request.getId(), teacherId, "Vẽ mèo cho bé", "Thiếu bài tô màu");
+    }
+
+    @Test
+    void rejectDelivery_requiresOwnerParent_deliveredRequest_andReason() {
+        setup();
+        String parent = login(parentId, "PARENT");
+        // còn FUNDED
+        assertThrows(ResponseStatusException.class, () -> service.rejectDelivery(request.getId(), "x", parent));
+
+        request.setStatus("DELIVERED");
+        assertThrows(ResponseStatusException.class, () -> service.rejectDelivery(request.getId(), " ", parent));
+        String stranger = login(UUID.randomUUID(), "PARENT");
+        assertThrows(ResponseStatusException.class, () -> service.rejectDelivery(request.getId(), "x", stranger));
+        verify(messages, never()).save(any());
+        assertEquals("DELIVERED", request.getStatus());
     }
 
     @Test
