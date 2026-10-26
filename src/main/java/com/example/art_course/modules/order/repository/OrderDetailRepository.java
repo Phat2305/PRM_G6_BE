@@ -15,5 +15,6 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, UUID> 
     List<OrderDetail> findByOrderIdAndSupplyIdIsNotNull(UUID orderId);
     List<OrderDetail> findByOrderIdAndCustomizeRequestIdIsNotNull(UUID orderId);
     List<OrderDetail> findByCustomizeRequestId(UUID customizeRequestId);
+    List<OrderDetail> findByDeliveryStatus(DeliveryStatus deliveryStatus);
     List<OrderDetail> findByDeliveryStatusAndDeliveredAtBefore(DeliveryStatus deliveryStatus, Instant threshold);
 }

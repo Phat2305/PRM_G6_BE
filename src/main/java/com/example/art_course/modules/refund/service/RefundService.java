@@ -4,6 +4,7 @@ import com.example.art_course.common.AppError;
 import com.example.art_course.common.statemachine.DeliveryStatus;
 import com.example.art_course.contracts.IEnrollmentContract;
 import com.example.art_course.modules.finance.service.LedgerService;
+import com.example.art_course.modules.moderation.service.ModerationService;
 import com.example.art_course.modules.notification.NotificationService;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.entity.OrderDetail;
@@ -22,18 +23,25 @@ import com.example.art_course.modules.refund.repository.RefundItemRepository;
 import com.example.art_course.modules.refund.repository.RefundRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
 @Service("be2RefundService")
 @RequiredArgsConstructor
 public class RefundService {
+
+    private static final Set<String> STATUSES = Set.of("PENDING", "APPROVED", "REJECTED", "COMPLETED", "FAILED");
 
     private final RefundRepository refundRepository;
     private final RefundItemRepository refundItemRepository;
@@ -44,6 +52,7 @@ public class RefundService {
     private final IEnrollmentContract enrollmentContract;
     private final LedgerService ledgerService;
     private final NotificationService notificationService;
+    private final ModerationService moderationService;
 
     /**
      * Parent gửi yêu cầu hoàn tiền cho 1 dòng chi tiết trong đơn hàng (FIN-07).
@@ -147,6 +156,28 @@ public class RefundService {
     }
 
     /**
+     * Staff/Admin từ chối yêu cầu hoàn tiền đang chờ duyệt, bắt buộc lý do (FIN-08).
+     * Lý do ghi vào nhật ký kiểm duyệt (REFUND) và gửi cho Parent; chưa duyệt nên chưa có quyền học/tồn kho cần hoàn lại.
+     */
+    @Transactional
+    public RefundResponseDto rejectRefund(UUID refundId, UUID staffId, String reason) {
+        Refund refund = findRefund(refundId);
+
+        if (!"PENDING".equalsIgnoreCase(refund.getStatus())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Chỉ từ chối được yêu cầu hoàn tiền đang chờ duyệt (PENDING)");
+        }
+
+        refund.setStatus("REJECTED");
+        refund.setHandledBy(staffId);
+        Refund updated = refundRepository.save(refund);
+
+        moderationService.recordModerationReview(staffId, "REFUND", refundId, "REJECTED", reason);
+        notificationService.notifyRefundRejected(refundId, refund.getParentId(), refund.getTotalAmount(), reason);
+        log.info("[REFUND-REJECT] Staff {} đã từ chối yêu cầu hoàn tiền {}", staffId, refundId);
+        return mapToDto(updated);
+    }
+
+    /**
      * Staff ghi nhận chuyển khoản hoàn tiền thành công kèm mã GD + ảnh ủy nhiệm chi (FIN-08, FIN-09).
      * Ghi sổ cái REFUND.
      */
@@ -186,8 +217,34 @@ public class RefundService {
         return mapToDto(updated);
     }
 
+    /**
+     * Staff/Admin xem danh sách yêu cầu hoàn tiền, mới nhất trước, lọc theo trạng thái nếu có (FIN-08).
+     */
+    @Transactional(readOnly = true)
+    public List<RefundResponseDto> listRefunds(String status, int page, int size) {
+        String wanted = status == null || status.isBlank() ? null : status.trim().toUpperCase();
+        if (wanted != null && !STATUSES.contains(wanted)) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Trạng thái hoàn tiền không hợp lệ: " + status);
+        }
+        // id làm khóa phụ để các dòng cùng createdAt không bị lặp hoặc sót giữa các trang.
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
+        Page<Refund> result = wanted == null
+                ? refundRepository.findAll(pageable)
+                : refundRepository.findByStatus(wanted, pageable);
+        return result.stream().map(this::mapToDto).toList();
+    }
+
+    /**
+     * Parent xem các yêu cầu hoàn tiền của chính mình (FIN-07).
+     */
+    @Transactional(readOnly = true)
+    public List<RefundResponseDto> listMyRefunds(UUID parentId) {
+        return refundRepository.findByParentIdOrderByCreatedAtDesc(parentId).stream().map(this::mapToDto).toList();
+    }
+
     private Refund findRefund(UUID refundId) {
-        return refundRepository.findById(refundId)
+        return refundRepository.findByIdForUpdate(refundId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "REFUND_NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền: " + refundId));
     }
 

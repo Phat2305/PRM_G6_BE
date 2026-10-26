@@ -101,6 +101,11 @@ public class NotificationService {
                 "Khoản tiền hoàn " + amount + " VND đã được chuyển khoản (Mã GD: " + transactionCode + ")", "REFUND_COMPLETED", refundId);
     }
 
+    public void notifyRefundRejected(UUID refundId, UUID parentId, BigDecimal amount, String reason) {
+        sendNotificationAsync(parentId, "Yêu cầu hoàn tiền bị từ chối",
+                "Yêu cầu hoàn " + amount + " VND bị từ chối: " + reason, "REFUND_REJECTED", refundId);
+    }
+
     public void notifyEscrowReleased(UUID paymentId, UUID teacherId, BigDecimal amount) {
         sendNotificationAsync(teacherId, "Tiền ký quỹ đã được giải phóng",
                 "Khoản tiền " + amount + " VND đã được giải phóng vào số dư có thể rút của bạn", "ESCROW_RELEASED", paymentId);

@@ -59,6 +59,7 @@ Hệ thống sử dụng **JWT HS256** theo hợp đồng với BE1 ([`docs/cont
 | `POST` | `/api/v1/fulfillment/parent/items/{id}/confirm-received` | Phụ huynh xác nhận đã nhận hàng | FUL-03 |
 | `POST` | `/api/v1/fulfillment/parent/items/{id}/cancel` | Hủy dòng dụng cụ khi GV chưa xác nhận | FUL-06 |
 | `POST` | `/api/v1/refunds/request` | Yêu cầu hoàn tiền theo dòng chi tiết | FIN-07 |
+| `GET` | `/api/v1/refunds/my` | Xem các yêu cầu hoàn tiền của mình | FIN-07 |
 
 ### 3. Giáo viên (Role: `TEACHER`)
 | Method | Endpoint | Mô tả | Mã SRS |
@@ -79,15 +80,17 @@ Hệ thống sử dụng **JWT HS256** theo hợp đồng với BE1 ([`docs/cont
 | `POST` | `/api/v1/fulfillment/delivered/{id}` | Báo giao hàng tới nơi | TEACHER, STAFF, ADMIN |
 | `POST` | `/api/v1/fulfillment/staff/items/{id}/handle-failure` | Xử lý giao thất bại (giao lại / hoàn tiền) | STAFF, ADMIN |
 | `POST` | `/api/v1/staff/supplies/{id}/moderate` | Kiểm duyệt dụng cụ vi phạm | STAFF, ADMIN |
-| `GET` | `/api/v1/staff/complaints` | Danh sách đơn hàng có khiếu nại | STAFF, ADMIN |
-| `GET` | `/api/v1/staff/complaints/{id}/conversations` | Xem tin nhắn giải quyết khiếu nại | STAFF, ADMIN (MSG-06) |
+| `GET` | `/api/v1/staff/complaints` | Việc cần xử lý: hoàn tiền chờ duyệt (`REFUND_REQUEST`) và dòng dụng cụ giao thất bại (`DELIVERY_FAILED`), kèm tên phụ huynh/giáo viên | STAFF, ADMIN |
+| `GET` | `/api/v1/staff/complaints/{orderId}/conversations` | Xem tin nhắn giải quyết khiếu nại (`messages`: chỉ chat customize thuộc đơn, giữa đúng phụ huynh và giáo viên) | STAFF, ADMIN (MSG-06) |
 | `GET` | `/api/v1/admin/finance/withdrawals` | Danh sách yêu cầu rút tiền | STAFF, ADMIN |
 | `POST` | `/api/v1/admin/finance/withdrawals/{id}/approve` | Duyệt yêu cầu rút tiền | ADMIN |
 | `POST` | `/api/v1/admin/finance/withdrawals/{id}/reject` | Từ chối yêu cầu rút tiền | ADMIN |
 | `POST` | `/api/v1/admin/finance/withdrawals/{id}/paid` | Xác nhận chi trả thủ công | STAFF, ADMIN |
 | `GET` | `/api/v1/admin/finance/configs` | Xem danh sách cấu hình hệ thống | STAFF, ADMIN |
 | `PUT` | `/api/v1/admin/finance/configs/{key}` | Cập nhật cấu hình hệ thống | ADMIN |
+| `GET` | `/api/v1/refunds` | Danh sách hoàn tiền kèm `parentName` (`status`, `page` từ 0, `size` 1-200), mới nhất trước | STAFF, ADMIN |
 | `POST` | `/api/v1/refunds/{id}/approve` | Phê duyệt yêu cầu hoàn tiền | STAFF, ADMIN |
+| `POST` | `/api/v1/refunds/{id}/reject` | Từ chối yêu cầu hoàn tiền đang chờ duyệt (body `reason`) | STAFF, ADMIN |
 | `POST` | `/api/v1/refunds/{id}/complete` | Xác nhận hoàn tất chuyển tiền hoàn | STAFF, ADMIN |
 | `GET` | `/api/v1/admin/analytics/finance` | Thống kê phân tích tài chính toàn sàn | ADMIN |
 | `GET` | `/api/v1/admin/analytics/ledger-audit` | Tra cứu sổ cái tài chính kiểm toán | ADMIN |

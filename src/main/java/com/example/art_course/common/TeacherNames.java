@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-// Tra họ tên giáo viên (teacher_profiles.full_name, bảng của BE1, chỉ đọc) để gắn vào API mua sắm.
+// Tra họ tên giáo viên/phụ huynh (teacher_profiles, parent_profiles .full_name, chỉ đọc) để gắn vào API.
 @Component
 @RequiredArgsConstructor
 public class TeacherNames {
@@ -17,13 +17,23 @@ public class TeacherNames {
     private final EntityManager entityManager;
 
     public Map<UUID, String> byIds(Collection<UUID> ids) {
+        return namesFrom("teacher_profiles", ids);
+    }
+
+    // Cùng cách tra cho phụ huynh (parent_profiles.full_name), dùng cho màn Staff xem hoàn tiền.
+    public Map<UUID, String> parentsByIds(Collection<UUID> ids) {
+        return namesFrom("parent_profiles", ids);
+    }
+
+    // table chỉ nhận hằng số nội bộ ở trên, không bao giờ từ input người dùng.
+    private Map<UUID, String> namesFrom(String table, Collection<UUID> ids) {
         Map<UUID, String> names = new HashMap<>();
         if (ids == null || ids.isEmpty()) {
             return names;
         }
         @SuppressWarnings("unchecked")
         java.util.List<Object[]> rows = entityManager
-                .createNativeQuery("SELECT user_id, full_name FROM teacher_profiles WHERE user_id IN (:ids)")
+                .createNativeQuery("SELECT user_id, full_name FROM " + table + " WHERE user_id IN (:ids)")
                 .setParameter("ids", ids)
                 .getResultList();
         for (Object[] row : rows) {

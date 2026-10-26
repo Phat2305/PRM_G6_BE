@@ -221,9 +221,22 @@ Content-Type: application/json
   "proofImageUrl": "https://storage.artcourse.com/proofs/transfer_receipt.jpg"
 }
 
+### 5.4b Staff xem danh sách hoàn tiền đang chờ (FIN-08)
+GET {{baseUrl}}/api/v1/refunds?status=PENDING&page=0&size=50
+Authorization: Bearer {{staffToken}}
+
 ### 5.5 Staff phê duyệt hoàn tiền (FIN-08: thu hồi quyền học BE1, hoàn kho)
 POST {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/approve
 Authorization: Bearer {{staffToken}}
+
+### 5.5b Staff từ chối yêu cầu hoàn tiền đang chờ duyệt (FIN-08)
+POST {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/reject
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "reason": "Dụng cụ đã giao đúng và đủ"
+}
 
 ### 5.6 Staff hoàn tất chi tiền hoàn cho phụ huynh (FIN-09: ghi sổ cái REFUND)
 POST {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/complete

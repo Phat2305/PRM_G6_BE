@@ -1,8 +1,8 @@
 package com.example.art_course.modules.staff.controller;
 
 import com.example.art_course.common.ApiResponse;
-import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.product.entity.Supply;
+import com.example.art_course.modules.staff.dto.ComplaintDto;
 import com.example.art_course.modules.staff.service.StaffService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,12 +38,12 @@ public class StaffController {
     }
 
     /**
-     * Danh sách đơn hàng có khiếu nại hoặc tranh chấp (STF-04).
+     * Việc khiếu nại/sự cố cần xử lý: hoàn tiền chờ duyệt và dòng dụng cụ giao thất bại, kèm tên hai bên (STF-04).
      */
     @GetMapping("/complaints")
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
-    public ApiResponse<List<Order>> getComplaintOrders() {
-        return ApiResponse.ok(staffService.getComplaintOrders());
+    public ApiResponse<List<ComplaintDto>> getComplaints() {
+        return ApiResponse.ok(staffService.getComplaints());
     }
 
     /**

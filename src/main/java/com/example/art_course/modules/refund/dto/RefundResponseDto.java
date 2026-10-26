@@ -16,6 +16,7 @@ public class RefundResponseDto {
     private UUID orderId;
     private UUID paymentId;
     private UUID parentId;
+    private String parentName;
     private BigDecimal totalAmount;
     private String bankInfo;
     private String reason;

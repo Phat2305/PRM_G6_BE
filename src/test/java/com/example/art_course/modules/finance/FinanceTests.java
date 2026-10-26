@@ -24,6 +24,8 @@ import com.example.art_course.modules.refund.dto.CreateRefundRequest;
 import com.example.art_course.modules.refund.entity.Refund;
 import com.example.art_course.modules.refund.repository.RefundItemRepository;
 import com.example.art_course.modules.refund.repository.RefundRepository;
+import com.example.art_course.modules.moderation.service.ModerationService;
+import com.example.art_course.modules.refund.dto.RefundResponseDto;
 import com.example.art_course.modules.refund.service.RefundService;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import com.example.art_course.modules.withdrawal.dto.CreateWithdrawalRequest;
@@ -37,6 +39,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -260,7 +265,8 @@ public class FinanceTests {
 
         RefundService refundService = new RefundService(
                 refundRepo, refundItemRepo, orderRepo, orderDetailRepo,
-                paymentRepo, supplyRepo, enrollmentContract, ledgerService, notifService
+                paymentRepo, supplyRepo, enrollmentContract, ledgerService, notifService,
+                mock(ModerationService.class)
         );
 
         UUID orderId = UUID.randomUUID();
@@ -309,6 +315,59 @@ public class FinanceTests {
         assertTrue(error.getMessage().contains("vượt quá số tiền đã thanh toán"));
 
         verify(refundRepo, never()).save(any());
+    }
+
+    private RefundService refundServiceWith(RefundRepository refundRepo) {
+        return refundServiceWith(refundRepo, mock(NotificationService.class), mock(ModerationService.class));
+    }
+
+    private RefundService refundServiceWith(RefundRepository refundRepo, NotificationService notif, ModerationService moderation) {
+        return new RefundService(refundRepo, mock(RefundItemRepository.class), mock(OrderRepository.class),
+                mock(OrderDetailRepository.class), mock(PaymentRepository.class), mock(SupplyRepository.class),
+                mock(IEnrollmentContract.class), mock(LedgerService.class), notif, moderation);
+    }
+
+    @Test
+    @DisplayName("5c. Từ chối hoàn tiền: PENDING -> REJECTED, ghi nhật ký kiểm duyệt và báo Parent; không ở PENDING thì từ chối")
+    void testRefund_Reject() {
+        RefundRepository refundRepo = mock(RefundRepository.class);
+        NotificationService notif = mock(NotificationService.class);
+        ModerationService moderation = mock(ModerationService.class);
+        RefundService refundService = refundServiceWith(refundRepo, notif, moderation);
+        UUID staffId = UUID.randomUUID();
+        UUID parentId = UUID.randomUUID();
+        Refund pending = Refund.builder().id(UUID.randomUUID()).parentId(parentId)
+                .totalAmount(new BigDecimal("105000")).status("PENDING").build();
+        Refund approved = Refund.builder().id(UUID.randomUUID()).parentId(parentId)
+                .totalAmount(new BigDecimal("105000")).status("APPROVED").build();
+        when(refundRepo.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+        when(refundRepo.findByIdForUpdate(approved.getId())).thenReturn(Optional.of(approved));
+        when(refundRepo.save(any(Refund.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RefundResponseDto dto = refundService.rejectRefund(pending.getId(), staffId, "Không đủ điều kiện");
+
+        assertEquals("REJECTED", dto.getStatus());
+        assertEquals(staffId, dto.getHandledBy());
+        verify(moderation).recordModerationReview(staffId, "REFUND", pending.getId(), "REJECTED", "Không đủ điều kiện");
+        verify(notif).notifyRefundRejected(pending.getId(), parentId, new BigDecimal("105000"), "Không đủ điều kiện");
+
+        AppError error = assertThrows(AppError.class, () -> refundService.rejectRefund(approved.getId(), staffId, "x"));
+        assertEquals("INVALID_STATUS", error.getErrorCode());
+        assertEquals("APPROVED", approved.getStatus());
+    }
+
+    @Test
+    @DisplayName("5b. Danh sách hoàn tiền: status chữ thường được chuẩn hóa, status lạ bị từ chối")
+    void testRefund_ListByStatus() {
+        RefundRepository refundRepo = mock(RefundRepository.class);
+        RefundService refundService = refundServiceWith(refundRepo);
+        Refund pending = Refund.builder().id(UUID.randomUUID()).totalAmount(new BigDecimal("1000")).status("PENDING").build();
+        when(refundRepo.findByStatus(eq("PENDING"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(pending)));
+
+        assertEquals(1, refundService.listRefunds(" pending ", 0, 50).size());
+
+        AppError error = assertThrows(AppError.class, () -> refundService.listRefunds("bogus", 0, 50));
+        assertEquals("INVALID_STATUS", error.getErrorCode());
     }
 
     // =========================================================================

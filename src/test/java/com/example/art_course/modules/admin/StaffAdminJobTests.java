@@ -15,7 +15,15 @@ import com.example.art_course.modules.order.repository.OrderDetailRepository;
 import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.product.entity.Supply;
 import com.example.art_course.modules.product.repository.SupplyRepository;
+import com.example.art_course.common.statemachine.DeliveryStatus;
+import com.example.art_course.messaging.entity.Conversation;
+import com.example.art_course.messaging.entity.Message;
+import com.example.art_course.messaging.repository.ConversationRepository;
+import com.example.art_course.messaging.repository.MessageRepository;
+import com.example.art_course.modules.order.entity.OrderDetail;
+import com.example.art_course.modules.refund.entity.Refund;
 import com.example.art_course.modules.refund.repository.RefundRepository;
+import com.example.art_course.modules.staff.dto.ComplaintDto;
 import com.example.art_course.modules.staff.service.StaffService;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import com.example.art_course.modules.withdrawal.dto.MarkPaidRequest;
@@ -158,7 +166,8 @@ public class StaffAdminJobTests {
         IModerationContract moderationContract = mock(IModerationContract.class);
 
         StaffService staffService = new StaffService(
-                supplyRepo, orderRepo, orderDetailRepo, refundRepo, moderationContract
+                supplyRepo, orderRepo, orderDetailRepo, refundRepo, moderationContract,
+                mock(TeacherNames.class), mock(ConversationRepository.class), mock(MessageRepository.class)
         );
 
         UUID supplyId = UUID.randomUUID();
@@ -256,7 +265,8 @@ public class StaffAdminJobTests {
         IModerationContract moderationContract = mock(IModerationContract.class);
 
         StaffService staffService = new StaffService(
-                supplyRepo, orderRepo, orderDetailRepo, refundRepo, moderationContract
+                supplyRepo, orderRepo, orderDetailRepo, refundRepo, moderationContract,
+                mock(TeacherNames.class), mock(ConversationRepository.class), mock(MessageRepository.class)
         );
 
         UUID orderId = UUID.randomUUID();
@@ -278,6 +288,84 @@ public class StaffAdminJobTests {
         assertEquals(HttpStatus.FORBIDDEN, error.getStatus());
         assertEquals("NO_COMPLAINT_RELATED", error.getErrorCode());
         assertTrue(error.getMessage().contains("MSG-06"));
+    }
+
+    @Test
+    @DisplayName("4b. Danh sách khiếu nại: hoàn tiền chờ duyệt và dòng giao thất bại, kèm tên hai bên, mới nhất trước")
+    void testStaffComplaints_ListsRefundsAndDeliveryFailures() {
+        OrderRepository orderRepo = mock(OrderRepository.class);
+        OrderDetailRepository orderDetailRepo = mock(OrderDetailRepository.class);
+        RefundRepository refundRepo = mock(RefundRepository.class);
+        TeacherNames names = mock(TeacherNames.class);
+        StaffService staffService = new StaffService(mock(SupplyRepository.class), orderRepo, orderDetailRepo, refundRepo,
+                mock(IModerationContract.class), names, mock(ConversationRepository.class), mock(MessageRepository.class));
+
+        UUID parentId = UUID.randomUUID();
+        UUID teacherId = UUID.randomUUID();
+        Order order = Order.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(teacherId).build();
+        Refund refund = Refund.builder().id(UUID.randomUUID()).orderId(order.getId()).reason("Dụng cụ gãy")
+                .totalAmount(new BigDecimal("105000")).createdAt(java.time.Instant.parse("2026-10-01T00:00:00Z")).build();
+        OrderDetail failed = OrderDetail.builder().id(UUID.randomUUID()).orderId(order.getId()).productName("Cọ vẽ")
+                .subTotal(new BigDecimal("60000")).deliveryStatus(DeliveryStatus.DELIVERY_FAILED)
+                .updatedAt(java.time.Instant.parse("2026-10-02T00:00:00Z")).build();
+        when(refundRepo.findByStatus("PENDING")).thenReturn(List.of(refund));
+        when(orderDetailRepo.findByDeliveryStatus(DeliveryStatus.DELIVERY_FAILED)).thenReturn(List.of(failed));
+        when(orderRepo.findAllById(any())).thenReturn(List.of(order));
+        when(names.parentsByIds(any())).thenReturn(Map.of(parentId, "Chị Mai"));
+        when(names.byIds(any())).thenReturn(Map.of(teacherId, "Cô Lan"));
+
+        List<ComplaintDto> list = staffService.getComplaints();
+
+        assertEquals(2, list.size());
+        assertEquals("DELIVERY_FAILED", list.get(0).kind()); // mới hơn đứng trước
+        assertEquals(failed.getId(), list.get(0).orderDetailId());
+        assertEquals("Cọ vẽ", list.get(0).subject());
+        assertEquals("REFUND_REQUEST", list.get(1).kind());
+        assertEquals(refund.getId(), list.get(1).refundId());
+        assertEquals("Chị Mai", list.get(1).parentName());
+        assertEquals("Cô Lan", list.get(1).teacherName());
+    }
+
+    @Test
+    @DisplayName("4c. Xem trao đổi (MSG-06): chỉ tin của cuộc trò chuyện customize thuộc đơn, giữa đúng phụ huynh và giáo viên")
+    void testStaffComplaintConversation_ReturnsOnlyRelatedMessages() {
+        OrderRepository orderRepo = mock(OrderRepository.class);
+        OrderDetailRepository orderDetailRepo = mock(OrderDetailRepository.class);
+        RefundRepository refundRepo = mock(RefundRepository.class);
+        ConversationRepository conversationRepo = mock(ConversationRepository.class);
+        MessageRepository messageRepo = mock(MessageRepository.class);
+        StaffService staffService = new StaffService(mock(SupplyRepository.class), orderRepo, orderDetailRepo, refundRepo,
+                mock(IModerationContract.class), mock(TeacherNames.class), conversationRepo, messageRepo);
+
+        UUID orderId = UUID.randomUUID();
+        UUID parentId = UUID.randomUUID();
+        UUID teacherId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        Order order = Order.builder().id(orderId).parentId(parentId).teacherId(teacherId).build();
+        OrderDetail detail = OrderDetail.builder().id(UUID.randomUUID()).orderId(orderId).customizeRequestId(requestId)
+                .deliveryStatus(DeliveryStatus.DELIVERY_FAILED).build();
+        Conversation mine = Conversation.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(teacherId).build();
+        // Cùng yêu cầu nhưng giáo viên khác: không được lộ.
+        Conversation other = Conversation.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(UUID.randomUUID()).build();
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(refundRepo.findByOrderId(orderId)).thenReturn(List.of());
+        when(orderDetailRepo.findByOrderId(orderId)).thenReturn(List.of(detail));
+        when(conversationRepo.findAllByContextTypeAndContextId("CUSTOMIZE_REQUEST", requestId)).thenReturn(List.of(mine, other));
+        when(messageRepo.findAllByConversationIdOrderByCreatedAtAsc(mine.getId())).thenReturn(List.of(
+                Message.builder().senderId(teacherId).content("Em kiểm tra với vận chuyển")
+                        .createdAt(java.time.OffsetDateTime.parse("2026-10-02T00:00:00Z")).build(),
+                Message.builder().senderId(parentId).content("Mình chưa nhận đủ hàng")
+                        .createdAt(java.time.OffsetDateTime.parse("2026-10-01T00:00:00Z")).build()));
+
+        Map<String, Object> result = staffService.getComplaintConversation(orderId, UUID.randomUUID());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) result.get("messages");
+        assertEquals(2, messages.size());
+        assertEquals("PARENT", messages.get(0).get("senderRole")); // sắp theo thời gian
+        assertEquals("Mình chưa nhận đủ hàng", messages.get(0).get("content"));
+        assertEquals("TEACHER", messages.get(1).get("senderRole"));
+        verify(messageRepo, never()).findAllByConversationIdOrderByCreatedAtAsc(other.getId());
     }
 
     // =========================================================================
