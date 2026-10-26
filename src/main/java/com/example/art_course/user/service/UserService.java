@@ -53,7 +53,8 @@ public class UserService {
             case "PARENT" -> authRepository.updateParentProfile(
                     userId, request.getFullName(), request.getShippingAddress());
             case "TEACHER" -> authRepository.updateTeacherProfile(
-                    userId, request.getFullName(), request.getBankAccountInfo());
+                    userId, request.getFullName(), request.getBankAccountInfo(),
+                    request.getPhone(), request.getBio(), joinCertificates(request.getCertificates()));
             default -> 0;
         };
         // Staff/Admin không có bảng hồ sơ nhưng vẫn được cập nhật email
@@ -140,6 +141,23 @@ public class UserService {
             default -> java.util.Optional.<ProfileRow>empty();
         }).orElse(new ProfileRow(null, null, null));
         return new ProfileResponse(u.getId(), u.getUsername(), u.getEmail(), u.getRole(), u.getStatus(),
-                p.fullName(), p.shippingAddress(), p.bankAccountInfo());
+                p.fullName(), p.shippingAddress(), p.bankAccountInfo(),
+                p.phone(), p.bio(), splitCertificates(p.certificatesText()));
+    }
+
+    // Chứng chỉ lưu trong certificates_text, mỗi dòng một chứng chỉ; null = giữ nguyên, rỗng = xóa hết.
+    private static String joinCertificates(java.util.List<String> certificates) {
+        if (certificates == null) {
+            return null;
+        }
+        return certificates.stream().map(String::trim).filter(c -> !c.isEmpty())
+                .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    private static java.util.List<String> splitCertificates(String text) {
+        if (text == null || text.isBlank()) {
+            return java.util.List.of();
+        }
+        return text.lines().map(String::trim).filter(c -> !c.isEmpty()).toList();
     }
 }

@@ -3,9 +3,10 @@ package com.example.art_course.user.dto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+import java.util.List;
 import java.util.UUID;
 
-// shippingAddress chỉ có ở Parent, bankAccountInfo chỉ có ở Teacher
+// shippingAddress chỉ có ở Parent; bankAccountInfo, phone, bio, certificates chỉ có ở Teacher
 @Getter
 @AllArgsConstructor
 public class ProfileResponse {
@@ -17,4 +18,7 @@ public class ProfileResponse {
     private String fullName;
     private String shippingAddress;
     private String bankAccountInfo;
+    private String phone;
+    private String bio;
+    private List<String> certificates;
 }
