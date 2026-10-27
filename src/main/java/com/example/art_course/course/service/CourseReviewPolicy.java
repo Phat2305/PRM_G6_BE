@@ -20,6 +20,8 @@ public final class CourseReviewPolicy {
     public static final String PENDING_REVIEW = "PENDING_REVIEW";
     public static final String PUBLISHED = "PUBLISHED";
     public static final String REJECTED = "REJECTED";
+    // Staff gỡ khóa đang công khai vì vi phạm (STF-06): chỉ đổi status, không xóa; giáo viên sửa rồi gửi duyệt lại.
+    public static final String HIDDEN = "HIDDEN";
 
     private CourseReviewPolicy() {
     }
@@ -75,7 +77,7 @@ public final class CourseReviewPolicy {
     }
 
     /**
-     * Khóa đủ điều kiện để duyệt: có tên, giá lớn hơn 0, ít nhất một bài học và mọi video đã xử lý xong (READY).
+     * Khóa đủ điều kiện để duyệt: có tên, giá lớn hơn 0, ảnh bìa (trừ khóa customize), ít nhất một bài học và mọi video đã xử lý xong (READY).
      * Staff cũng bị kiểm tra này khi duyệt, vì video có thể đổi sau lúc gửi.
      */
     public static void requireReviewable(Course course, List<Lesson> lessons) {
@@ -85,6 +87,10 @@ public final class CourseReviewPolicy {
         // Khóa customize bán theo báo giá của yêu cầu, không theo giá khóa.
         if (!isCustomize(course) && (course.getPrice() == null || course.getPrice().signum() <= 0)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khóa học cần có giá lớn hơn 0");
+        }
+        // Khóa công khai cần ảnh bìa để hiện trên danh mục; khóa customize riêng cho một phụ huynh thì không.
+        if (!isCustomize(course) && (course.getCoverImageUrl() == null || course.getCoverImageUrl().isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khóa học cần có ảnh bìa");
         }
         if (lessons == null || lessons.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khóa học cần có ít nhất một bài học");

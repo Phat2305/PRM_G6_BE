@@ -37,7 +37,7 @@ class CourseReviewRulesTest {
 
     private final UUID teacherId = UUID.randomUUID();
     private final Course course = Course.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Màu nước")
-            .price(new BigDecimal("100000")).status("DRAFT").build();
+            .price(new BigDecimal("100000")).coverImageUrl("/api/images/courses/x").status("DRAFT").build();
 
     private String login(UUID id, String role) {
         when(users.findById(id)).thenReturn(Optional.of(new User(id, "u", "h", role, "ACTIVE", null, null)));
@@ -86,6 +86,22 @@ class CourseReviewRulesTest {
         assertThrows(ResponseStatusException.class, () -> service.updateCourse(course.getId(), status("PUBLISHED"), teacher));
         assertThrows(ResponseStatusException.class, () -> service.updateCourse(course.getId(), status("REJECTED"), teacher));
         assertEquals("DRAFT", course.getStatus());
+    }
+
+    @Test
+    void submitNeedsACoverImage_exceptForCustomizeCourses() {
+        stubCourse();
+        String teacher = login(teacherId, "TEACHER");
+
+        course.setCoverImageUrl(null);
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> service.updateCourse(course.getId(), status("PENDING_REVIEW"), teacher));
+        assertEquals("Khóa học cần có ảnh bìa", e.getReason());
+        assertEquals("DRAFT", course.getStatus());
+
+        // Khóa customize chỉ có một người nhận, không lên danh mục nên không cần ảnh bìa.
+        course.setCustomizeRequestId(UUID.randomUUID());
+        assertEquals("PENDING_REVIEW", service.updateCourse(course.getId(), status("PENDING_REVIEW"), teacher).getStatus());
     }
 
     @Test

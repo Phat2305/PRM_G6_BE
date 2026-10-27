@@ -160,6 +160,16 @@ Danh sách đầy đủ xem Swagger. Bảng dưới cho biết app Flutter (`PRM
 | Tài khoản Staff, duyệt giáo viên | `/api/v1/admin/users` (`staff` CRUD, `staff/{id}/status`, `teachers/pending`, `teachers/{id}/approve`) | Đã nối cho Admin: tạo, sửa, khóa, xóa Staff (BE chỉ có tên đăng nhập và mật khẩu, chưa có họ tên, email hay phân quyền chi tiết) và màn Duyệt giáo viên (chỉ có tên đăng nhập, chưa có hồ sơ chứng chỉ) |
 | Kiểm duyệt, Staff | `/api/v1/moderation`, `/api/moderation-reviews`, `/api/v1/staff` | Chưa |
 
+## Cập nhật đợt 27/10/2026
+
+Một số bảng ở trên được viết trước đợt này nên có chỗ cũ (ví dụ trạng thái nối với FE); phần dưới và `docs/api/README.md`, `docs/decisions.md` là bản mới nhất.
+
+- **Gỡ khóa công khai vi phạm (STF-06).** `GET /api/v1/staff/courses/published` liệt kê khóa đang công khai; `POST /api/v1/staff/courses/{id}/hide` (body `reason`) đổi status sang `HIDDEN`, không xóa dữ liệu. Ghi `moderation_reviews` với quyết định `FLAGGED`, gửi thông báo `COURSE_HIDDEN` cho giáo viên. Khóa `HIDDEN` biến khỏi danh mục, giỏ và đặt hàng nhưng người đã mua vẫn học được; giáo viên sửa rồi gửi duyệt lại. Khóa customize không gỡ được (409). Cột `courses.status` là `varchar(20)` không có CHECK trong schema nền nên không cần SQL; nếu database của bạn có thêm ràng buộc trạng thái thì phải thêm `HIDDEN`.
+- **Ảnh bìa khóa học bắt buộc khi gửi duyệt.** `CourseReviewPolicy.requireReviewable` từ chối gửi duyệt và duyệt khóa thường chưa có `cover_image_url` (400 "Khóa học cần có ảnh bìa"); khóa customize được miễn. Ảnh tải bằng `POST /api/courses/{id}/cover` (JPG/PNG/WEBP, tối đa 5 MB) và phải lên trước khi gửi duyệt. Khóa cũ không có ảnh sẽ bị yêu cầu thêm ảnh khi gửi duyệt lại.
+- **Mật khẩu.** `POST /api/v1/users/me/change-password` từ chối mật khẩu mới trùng mật khẩu cũ (`SAME_PASSWORD`) và tài khoản bé (403 `CHILD_PASSWORD_BY_PARENT`, bé do phụ huynh đặt lại). `POST /auth/reset-password` so `newPassword` với `confirmPassword` (400 `PASSWORD_MISMATCH`, không tính vào số lần nhập sai mã).
+- **SQL phải chạy trước** (SQL Editor của Supabase hoặc profile `dev`): `docs/migrations/07_review_workflow.sql` và `docs/migrations/09_fe_gaps_2.sql` (cùng `08_fe_gaps.sql` nếu chưa chạy).
+- **Chưa làm / cần lưu ý:** mã quên mật khẩu còn lưu trong bộ nhớ (`PasswordResetRepository`, mất khi restart); chưa giới hạn số lần đăng nhập sai; chưa lưu việc đồng ý điều khoản và dữ liệu trẻ em (ACC-16/17); quy tắc mật khẩu BE chỉ kiểm độ dài 6–20 (app yêu cầu thêm chữ và số); video lỗi chưa có DLQ/retry; thanh toán chỉ có PayOS; 7 test dùng Testcontainers cần Docker nên chưa chạy được trên máy phát triển; nên bật RLS cho các bảng Supabase.
+
 ## Deploy Render, CORS và ngrok
 
 Backend đang chạy tại <https://prm-g6-be.onrender.com>. Gói miễn phí tự ngủ khi không có request, lần gọi đầu có thể chậm 30–60 giây.

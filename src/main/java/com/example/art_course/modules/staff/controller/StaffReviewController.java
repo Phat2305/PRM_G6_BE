@@ -32,6 +32,12 @@ public class StaffReviewController {
         return ApiResponse.ok(courseModeration.pending());
     }
 
+    // Khóa đang công khai, để Staff gỡ khi vi phạm.
+    @GetMapping("/courses/published")
+    public ApiResponse<List<CourseReviewDtos.Item>> publishedCourses() {
+        return ApiResponse.ok(courseModeration.published());
+    }
+
     @GetMapping("/courses/{courseId}")
     public ApiResponse<CourseReviewDtos.Detail> courseDetail(@PathVariable UUID courseId) {
         return ApiResponse.ok(courseModeration.detail(courseId));
@@ -50,6 +56,16 @@ public class StaffReviewController {
             Authentication auth) {
         courseModeration.reject(courseId, UUID.fromString(auth.getName()), req.getReason());
         return ApiResponse.ok("Từ chối khóa học thành công", null);
+    }
+
+    // STF-06: gỡ khóa công khai vi phạm (đổi status HIDDEN, lý do bắt buộc).
+    @PostMapping("/courses/{courseId}/hide")
+    public ApiResponse<Void> hideCourse(
+            @PathVariable UUID courseId,
+            @Valid @RequestBody RejectReasonRequest req,
+            Authentication auth) {
+        courseModeration.hide(courseId, UUID.fromString(auth.getName()), req.getReason());
+        return ApiResponse.ok("Gỡ khóa học thành công", null);
     }
 
     @GetMapping("/customize-requests/pending")

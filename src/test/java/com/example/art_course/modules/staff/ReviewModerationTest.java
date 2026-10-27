@@ -44,7 +44,7 @@ class ReviewModerationTest {
     private final UUID teacherId = UUID.randomUUID();
     private final UUID parentId = UUID.randomUUID();
     private final Course course = Course.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Màu nước")
-            .price(new BigDecimal("100000")).status("PENDING_REVIEW").build();
+            .price(new BigDecimal("100000")).coverImageUrl("/api/images/courses/x").status("PENDING_REVIEW").build();
     private final CustomizeRequest request = CustomizeRequest.builder().id(UUID.randomUUID()).parentId(parentId)
             .title("Vẽ mèo").status("PENDING_REVIEW").build();
 
@@ -55,6 +55,54 @@ class ReviewModerationTest {
     }
 
     // ---- khóa học ----
+
+    @Test
+    void hidePublishedCourse_setsHiddenWithReason_logsAndNotifiesTeacher() {
+        course.setStatus("PUBLISHED");
+        stubCourse(true);
+
+        courseService.hide(course.getId(), staffId, "Nội dung vi phạm bản quyền");
+
+        assertEquals("HIDDEN", course.getStatus());
+        assertEquals("Nội dung vi phạm bản quyền", course.getReviewNote());
+        verify(courses).save(course);
+        verify(moderation).recordModerationReview(staffId, "COURSE", course.getId(), "FLAGGED", "Nội dung vi phạm bản quyền");
+        verify(notifications).notifyCourseHidden(course.getId(), teacherId, "Màu nước", "Nội dung vi phạm bản quyền");
+    }
+
+    @Test
+    void hide_onlyPublishedNonCustomizeCourses() {
+        stubCourse(true);
+        // đang chờ duyệt: chưa công khai nên không có gì để gỡ
+        assertThrows(AppError.class, () -> courseService.hide(course.getId(), staffId, "x"));
+
+        course.setStatus("PUBLISHED");
+        course.setCustomizeRequestId(UUID.randomUUID());
+        assertThrows(AppError.class, () -> courseService.hide(course.getId(), staffId, "x"));
+
+        assertNotEquals("HIDDEN", course.getStatus());
+        verify(courses, never()).save(any());
+        verifyNoInteractions(notifications);
+    }
+
+    @Test
+    void publishedList_skipsCustomizeCourses() {
+        course.setStatus("PUBLISHED");
+        Course customize = Course.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Riêng")
+                .customizeRequestId(UUID.randomUUID()).status("PUBLISHED").build();
+        when(courses.findAllByStatus("PUBLISHED")).thenReturn(List.of(course, customize));
+        when(lessons.findAllByCourseId(any())).thenReturn(List.of());
+        when(names.byIds(any())).thenReturn(java.util.Map.of());
+
+        assertEquals(1, courseService.published().size());
+    }
+
+    @Test
+    void hiddenCourse_teacherCanResubmitAfterFixing() {
+        course.setStatus("HIDDEN");
+        assertDoesNotThrow(() -> com.example.art_course.course.service.CourseReviewPolicy
+                .requireSubmittable(course, List.of(Lesson.builder().title("Bài 1").videoStatus("READY").build())));
+    }
 
     @Test
     void approveStandardCourse_publishesLogsAndNotifiesTeacher() {

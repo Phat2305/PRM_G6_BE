@@ -41,7 +41,17 @@ public class CourseModerationService {
 
     @Transactional(readOnly = true)
     public List<CourseReviewDtos.Item> pending() {
-        List<Course> courses = courseRepository.findAllByStatus(CourseReviewPolicy.PENDING_REVIEW);
+        return items(courseRepository.findAllByStatus(CourseReviewPolicy.PENDING_REVIEW));
+    }
+
+    // Khóa đang công khai để Staff gỡ khi vi phạm; khóa customize là của riêng một phụ huynh nên không nằm trong danh mục.
+    @Transactional(readOnly = true)
+    public List<CourseReviewDtos.Item> published() {
+        return items(courseRepository.findAllByStatus(CourseReviewPolicy.PUBLISHED).stream()
+                .filter(c -> !CourseReviewPolicy.isCustomize(c)).toList());
+    }
+
+    private List<CourseReviewDtos.Item> items(List<Course> courses) {
         Map<UUID, String> teachers = names.byIds(courses.stream().map(Course::getTeacherId).distinct().toList());
         return courses.stream().map(c -> {
             List<Lesson> lessons = lessonRepository.findAllByCourseId(c.getId());
@@ -120,6 +130,23 @@ public class CourseModerationService {
             });
         }
         log.info("[COURSE-REJECT] Staff {} đã từ chối khóa {} (lần {})", staffId, courseId, course.getRejectionCount());
+    }
+
+    // STF-06: gỡ khóa đang công khai (không xóa): về HIDDEN kèm lý do, khỏi danh mục và không mua mới được;
+    // người đã mua vẫn học được. Giáo viên sửa rồi gửi duyệt lại như khóa bị từ chối.
+    @Transactional
+    public void hide(UUID courseId, UUID staffId, String reason) {
+        Course course = courseRepository.findByIdForUpdate(courseId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
+        if (!CourseReviewPolicy.is(course, CourseReviewPolicy.PUBLISHED) || CourseReviewPolicy.isCustomize(course)) {
+            throw new AppError(HttpStatus.CONFLICT, "INVALID_STATUS", "Chỉ gỡ được khóa đang công khai trên danh mục");
+        }
+        course.setStatus(CourseReviewPolicy.HIDDEN);
+        course.setReviewNote(reason);
+        courseRepository.save(course);
+        moderationContract.recordModerationReview(staffId, "COURSE", courseId, "FLAGGED", reason);
+        notificationService.notifyCourseHidden(course.getId(), course.getTeacherId(), course.getName(), reason);
+        log.info("[COURSE-HIDE] Staff {} đã gỡ khóa {}", staffId, courseId);
     }
 
     // Khóa dòng để hai Staff cùng duyệt một khóa thì chạy lần lượt; chỉ khóa đang chờ duyệt mới quyết định được.

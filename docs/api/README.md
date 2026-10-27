@@ -85,6 +85,8 @@ Hệ thống sử dụng **JWT HS256** theo hợp đồng với BE1 ([`docs/cont
 | `GET` | `/api/v1/staff/courses/{id}` | Chi tiết khóa kèm bài học và `videoUrl` để Staff xem trước khi duyệt | STAFF, ADMIN |
 | `POST` | `/api/v1/staff/courses/{id}/approve` | Duyệt khóa (cần mọi video `READY`). Khóa thường công khai; khóa customize thì yêu cầu sang `DELIVERED` và báo phụ huynh | STAFF, ADMIN |
 | `POST` | `/api/v1/staff/courses/{id}/reject` | Từ chối khóa, body `reason`. Giáo viên sửa và gửi lại, tối đa 3 lần từ chối; khóa customize bị từ chối đủ 3 lần thì yêu cầu `CANCELLED` để phụ huynh xin hoàn tiền | STAFF, ADMIN |
+| `GET` | `/api/v1/staff/courses/published` | Khóa đang công khai (không gồm khóa customize) để Staff gỡ khi vi phạm | STAFF, ADMIN |
+| `POST` | `/api/v1/staff/courses/{id}/hide` | Gỡ khóa công khai, body `reason`. Chỉ đổi status sang `HIDDEN` (không xóa), ghi nhật ký `FLAGGED`, báo giáo viên `COURSE_HIDDEN`; người đã mua vẫn học được | STAFF, ADMIN |
 | `GET` | `/api/v1/staff/customize-requests/pending` | Bài đăng yêu cầu customize chờ duyệt | STAFF, ADMIN |
 | `POST` | `/api/v1/staff/customize-requests/{id}/approve` | Duyệt bài đăng: `PENDING_REVIEW → OPEN` (hiện cho giáo viên báo giá) | STAFF, ADMIN |
 | `POST` | `/api/v1/staff/customize-requests/{id}/reject` | Từ chối bài đăng, body `reason`; chủ bài sửa và gửi lại, đủ 3 lần từ chối thì từ chối hẳn | STAFF, ADMIN |

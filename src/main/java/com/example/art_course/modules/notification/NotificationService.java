@@ -96,6 +96,13 @@ public class NotificationService {
                 "Khóa \"" + courseName + "\" bị từ chối: " + reason + ". " + tail, "COURSE_REJECTED", courseId);
     }
 
+    // Staff gỡ khóa đang công khai: báo giáo viên lý do; người đã mua vẫn học được.
+    public void notifyCourseHidden(UUID courseId, UUID teacherId, String courseName, String reason) {
+        sendNotificationAsync(teacherId, "Khóa học bị gỡ khỏi danh mục",
+                "Khóa \"" + courseName + "\" đã bị gỡ: " + reason + ". Bạn sửa lại rồi gửi duyệt để đăng lại.",
+                "COURSE_HIDDEN", courseId);
+    }
+
     // Staff duyệt bài đăng: bài đã lên bảng yêu cầu cho giáo viên báo giá.
     public void notifyRequestApproved(UUID requestId, UUID parentId, String title) {
         sendNotificationAsync(parentId, "Bài đăng đã được duyệt",
