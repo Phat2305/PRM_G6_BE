@@ -24,7 +24,7 @@ public class UpdateProfileRequest {
     @Size(max = 255, message = "Tài khoản ngân hàng tối đa 255 ký tự")
     private String bankAccountInfo;
 
-    // Chỉ giáo viên; chuỗi rỗng = xóa
+    // Parent và Teacher; chuỗi rỗng = xóa
     @Pattern(regexp = "^$|^(0|\\+84)\\d{9}$", message = "Số điện thoại gồm 10 số, bắt đầu bằng 0 hoặc +84")
     private String phone;
 
@@ -34,4 +34,9 @@ public class UpdateProfileRequest {
     // Danh sách rỗng = xóa hết; null = giữ nguyên
     @Size(max = 10, message = "Tối đa 10 chứng chỉ")
     private List<@Size(min = 1, max = 150, message = "Mỗi chứng chỉ gồm 1-150 ký tự") String> certificates;
+
+    // Chỉ giáo viên: phí ship cố định của đơn có dụng cụ (VND)
+    @jakarta.validation.constraints.Min(value = 0, message = "Phí ship không âm")
+    @jakarta.validation.constraints.Max(value = 1_000_000, message = "Phí ship tối đa 1.000.000đ")
+    private Long shippingFee;
 }

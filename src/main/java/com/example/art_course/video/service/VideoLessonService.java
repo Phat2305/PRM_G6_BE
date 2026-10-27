@@ -11,6 +11,7 @@ import com.example.art_course.user.repository.UserRepository;
 import com.example.art_course.video.dto.VideoProcessingMessage;
 import com.example.art_course.video.messaging.VideoProcessingPublisher;
 
+import com.example.art_course.common.AppError;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,19 +30,22 @@ public class VideoLessonService {
     private final UserRepository userRepository;
     private final VideoStorageService videoStorageService;
     private final VideoProcessingPublisher videoProcessingPublisher;
+    private final R2StorageService r2StorageService;
 
     public VideoLessonService(
             LessonRepository lessonRepository,
             CourseRepository courseRepository,
             UserRepository userRepository,
             VideoStorageService videoStorageService,
-            VideoProcessingPublisher videoProcessingPublisher) {
+            VideoProcessingPublisher videoProcessingPublisher,
+            R2StorageService r2StorageService) {
 
         this.lessonRepository = lessonRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
         this.videoStorageService = videoStorageService;
         this.videoProcessingPublisher = videoProcessingPublisher;
+        this.r2StorageService = r2StorageService;
     }
 
     @Transactional
@@ -91,6 +95,47 @@ public class VideoLessonService {
         videoProcessingPublisher.publish(message);
 
         return videoId;
+    }
+
+    // Gỡ video của bài học (giáo viên của khóa): xóa thư mục HLS trên R2 rồi xóa dấu vết trong DB.
+    // Đang xếp hàng/xử lý thì từ chối vì worker sẽ ghi đè kết quả sau đó.
+    @Transactional
+    public void deleteLessonVideo(UUID lessonId, String userId) {
+        Lesson lesson = ownedLesson(lessonId, userId);
+        String status = lesson.getVideoStatus();
+        if ("QUEUED".equals(status) || "PROCESSING".equals(status)) {
+            throw new AppError(HttpStatus.CONFLICT, "VIDEO_PROCESSING",
+                    "Video đang được xử lý, thử lại sau khi xử lý xong");
+        }
+        String url = lesson.getVideoUrl();
+        String hlsId = hlsIdOf(url);
+        if (hlsId != null) {
+            r2StorageService.deletePrefix("hls/" + hlsId + "/");
+        }
+        lesson.setVideoUrl(null);
+        lesson.setVideoStatus(null);
+        lesson.setVideoError(null);
+        lesson.setDurationSeconds(null);
+        lessonRepository.save(lesson);
+        courseRepository.findById(lesson.getCourseId()).ifPresent(course -> {
+            String before = course.getStatus();
+            CourseReviewPolicy.onContentChanged(course);
+            if (before == null ? course.getStatus() != null : !before.equals(course.getStatus())) {
+                courseRepository.save(course);
+            }
+        });
+    }
+
+    // videoUrl có dạng /api/videos/hls/{hlsId}/master.m3u8; không đúng dạng thì không có gì để xóa trên R2.
+    public static String hlsIdOf(String videoUrl) {
+        String prefix = "/api/videos/hls/";
+        if (videoUrl == null || !videoUrl.startsWith(prefix)) {
+            return null;
+        }
+        String rest = videoUrl.substring(prefix.length());
+        int slash = rest.indexOf('/');
+        String id = slash < 0 ? rest : rest.substring(0, slash);
+        return id.isBlank() || id.contains("..") ? null : id;
     }
 
     @Transactional(readOnly = true)

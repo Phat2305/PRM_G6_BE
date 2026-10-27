@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,17 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     @Modifying
     @Query("UPDATE Payment p SET p.status = :to WHERE p.id = :id AND p.status = :from")
     int transition(@Param("id") UUID id, @Param("from") PaymentStatus from, @Param("to") PaymentStatus to);
+
+    // Giao dịch đã thanh toán từ mốc `since` (paid_at, hoặc created_at nếu chưa ghi paid_at) cho biểu đồ doanh thu.
+    @Query("SELECT p FROM Payment p WHERE p.teacherId = :teacherId AND p.status IN :statuses "
+            + "AND COALESCE(p.paidAt, p.createdAt) >= :since")
+    List<Payment> findPaidByTeacherSince(@Param("teacherId") UUID teacherId,
+                                         @Param("statuses") Collection<PaymentStatus> statuses,
+                                         @Param("since") Instant since);
+
+    @Query("SELECT p FROM Payment p WHERE p.status IN :statuses AND COALESCE(p.paidAt, p.createdAt) >= :since")
+    List<Payment> findPaidSince(@Param("statuses") Collection<PaymentStatus> statuses,
+                                @Param("since") Instant since);
 
     Optional<Payment> findByOrderId(UUID orderId);
     Optional<Payment> findByGatewayOrderCode(Long gatewayOrderCode);

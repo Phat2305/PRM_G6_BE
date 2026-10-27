@@ -16,8 +16,12 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
@@ -160,6 +164,52 @@ public class R2StorageService {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Cloudflare R2 request failed",
+                    e);
+        }
+    }
+
+    // Xóa một tệp; không có thì coi như đã xóa (S3 trả thành công).
+    public void deleteObject(String key) {
+        try {
+            s3Client.deleteObject(b -> b.bucket(bucket).key(key));
+        } catch (SdkException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Cloudflare R2 delete failed",
+                    e);
+        }
+    }
+
+    // Xóa mọi tệp có khóa bắt đầu bằng prefix (ví dụ thư mục HLS của một bài học). prefix phải kết thúc bằng "/".
+    public void deletePrefix(String prefix) {
+        if (prefix == null || prefix.isBlank() || !prefix.endsWith("/")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Prefix must end with /");
+        }
+        try {
+            String token = null;
+            do {
+                ListObjectsV2Response page = s3Client.listObjectsV2(
+                        ListObjectsV2Request.builder()
+                                .bucket(bucket)
+                                .prefix(prefix)
+                                .continuationToken(token)
+                                .build());
+                if (!page.contents().isEmpty()) {
+                    s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                            .bucket(bucket)
+                            .delete(d -> d.objects(page.contents().stream()
+                                    .map(o -> ObjectIdentifier.builder().key(o.key()).build())
+                                    .toList()))
+                            .build());
+                }
+                token = page.isTruncated() ? page.nextContinuationToken() : null;
+            } while (token != null);
+        } catch (SdkException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Cloudflare R2 delete failed",
                     e);
         }
     }

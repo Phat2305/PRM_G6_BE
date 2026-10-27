@@ -168,6 +168,10 @@ public class ChildService {
             child.setBirthYear(birthYear);
         }
 
+        if (request.getShareInfo() != null) {
+            child.setShareInfo(request.getShareInfo());
+        }
+
         return childRepository.save(child);
     }
 

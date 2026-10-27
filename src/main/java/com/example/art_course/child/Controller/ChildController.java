@@ -172,7 +172,8 @@ public class ChildController {
                 childUser.getUsername(),
                 child.getDisplayName(),
                 child.getBirthYear(),
-                "LOCKED".equalsIgnoreCase(childUser.getStatus())
+                "LOCKED".equalsIgnoreCase(childUser.getStatus()),
+                child.isShareInfo()
         );
     }
 }

@@ -92,7 +92,7 @@ public class ChildProgressService {
     }
 
     // Teacher's view of one course: every enrolled child with completed/total lessons.
-    // Only the owner of the course; children appear by id because their names belong to the parent.
+    // Only the owner of the course; children appear by id; name only when the parent enabled shareInfo.
     @Transactional(readOnly = true)
     public List<CourseProgressResponse> getCourseRoster(UUID callerId, UUID courseId) {
         Course course = courseRepository.findById(courseId)
@@ -111,13 +111,20 @@ public class ChildProgressService {
                         .collect(Collectors.groupingBy(p -> p.getId().getChildId(), Collectors.counting()));
         int total = lessonIds.size();
 
-        return enrollmentRepository.findAllByIdCourseId(courseId).stream()
+        List<UUID> childIds = enrollmentRepository.findAllByIdCourseId(courseId).stream()
                 .filter(e -> "active".equalsIgnoreCase(e.getStatus()))
                 .map(e -> e.getId().getChildId())
+                .toList();
+        Map<UUID, String> names = new java.util.HashMap<>();
+        childRepository.findAllById(childIds).stream()
+                .filter(c -> c.isShareInfo())
+                .forEach(c -> names.put(c.getUserId(), c.getDisplayName()));
+        return childIds.stream()
                 .map(childId -> {
                     int completed = completedByChild.getOrDefault(childId, 0L).intValue();
                     return CourseProgressResponse.builder()
                             .childId(childId)
+                            .childName(names.get(childId))
                             .courseId(courseId)
                             .completedLessons(completed)
                             .totalLessons(total)

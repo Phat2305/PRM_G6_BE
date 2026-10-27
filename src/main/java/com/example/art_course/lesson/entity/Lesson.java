@@ -49,6 +49,12 @@ public class Lesson {
     @Column(name = "has_assignment")
     private Boolean hasAssignment;
 
+    @Column(name = "assignment_title", length = 255)
+    private String assignmentTitle;
+
+    @Column(name = "assignment_prompt", columnDefinition = "text")
+    private String assignmentPrompt;
+
     @Column(name = "status", length = 20)
     private String status;
 }

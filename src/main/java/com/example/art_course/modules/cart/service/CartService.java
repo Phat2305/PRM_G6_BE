@@ -50,19 +50,22 @@ public class CartService {
         Cart cart = getOrCreateCart(parentId);
 
         if ("COURSE".equalsIgnoreCase(input.getItemType())) {
-            if (input.getCourseId() == null || input.getChildId() == null) {
-                throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học yêu cầu courseId và childId");
+            if (input.getCourseId() == null) {
+                throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học yêu cầu courseId");
             }
 
-            // 1. Kiểm tra Parent có ít nhất 1 Child (ACC-04)
-            String childSql = "SELECT user_id FROM child_profiles WHERE parent_id = :parentId AND user_id = :childId";
-            List<?> children = entityManager.createNativeQuery(childSql)
-                    .setParameter("parentId", parentId)
-                    .setParameter("childId", input.getChildId())
-                    .getResultList();
+            // Khóa học vào giỏ chưa cần chọn bé: phụ huynh gán sau khi mua (assign-child), nên childId có thể null.
+            if (input.getChildId() != null) {
+                // 1. Bé phải thuộc phụ huynh này (ACC-04)
+                String childSql = "SELECT user_id FROM child_profiles WHERE parent_id = :parentId AND user_id = :childId";
+                List<?> children = entityManager.createNativeQuery(childSql)
+                        .setParameter("parentId", parentId)
+                        .setParameter("childId", input.getChildId())
+                        .getResultList();
 
-            if (children.isEmpty()) {
-                throw new AppError(HttpStatus.BAD_REQUEST, "NO_VALID_CHILD", "Phụ huynh phải có hồ sơ con hợp lệ để mua khóa học (ACC-04)");
+                if (children.isEmpty()) {
+                    throw new AppError(HttpStatus.BAD_REQUEST, "NO_VALID_CHILD", "Phụ huynh phải có hồ sơ con hợp lệ để mua khóa học (ACC-04)");
+                }
             }
 
             // 2. Kiểm tra khóa học tồn tại và PUBLISHED
@@ -74,18 +77,19 @@ public class CartService {
             }
 
             // 3. Chặn mua trùng 1 khóa cho cùng 1 Child (SHOP-04)
-            // Kiểm tra trong child_enroll
-            String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
-            List<?> enrolled = entityManager.createNativeQuery(enrollSql)
-                    .setParameter("childId", input.getChildId())
-                    .setParameter("courseId", input.getCourseId())
-                    .getResultList();
+            if (input.getChildId() != null) {
+                String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
+                List<?> enrolled = entityManager.createNativeQuery(enrollSql)
+                        .setParameter("childId", input.getChildId())
+                        .setParameter("courseId", input.getCourseId())
+                        .getResultList();
 
-            if (!enrolled.isEmpty()) {
-                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+                if (!enrolled.isEmpty()) {
+                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+                }
             }
 
-            // Kiểm tra trong giỏ hàng
+            // Kiểm tra trong giỏ hàng (childId null khớp dòng chưa chọn bé)
             if (cartItemRepository.findByCartIdAndCourseIdAndChildId(cart.getId(), input.getCourseId(), input.getChildId()).isPresent()) {
                 throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_IN_CART", "Khóa học này cho bé đã có trong giỏ hàng (SHOP-04)");
             }

@@ -7,6 +7,7 @@ import com.example.art_course.user.repository.UserRepository;
 import com.example.art_course.video.dto.VideoProcessingMessage;
 import com.example.art_course.video.messaging.VideoProcessingPublisher;
 import com.example.art_course.video.messaging.VideoProcessingWorker;
+import com.example.art_course.video.service.R2StorageService;
 import com.example.art_course.video.service.VideoLessonService;
 import com.example.art_course.video.service.VideoProcessingService;
 import com.example.art_course.video.service.VideoStorageService;
@@ -59,7 +60,8 @@ class VideoStatusTest {
         LessonRepository repo = mock(LessonRepository.class);
         VideoLessonService service = new VideoLessonService(repo,
                 mock(CourseRepository.class), mock(UserRepository.class),
-                mock(VideoStorageService.class), mock(VideoProcessingPublisher.class));
+                mock(VideoStorageService.class), mock(VideoProcessingPublisher.class),
+                mock(R2StorageService.class));
         Lesson lesson = new Lesson();
         lesson.setId(lessonId);
         when(repo.findById(lessonId)).thenReturn(Optional.of(lesson));
@@ -72,5 +74,42 @@ class VideoStatusTest {
 
         service.markFailed(lessonId, new IllegalStateException("secret internals"));
         assertEquals("Video processing failed", lesson.getVideoError());
+    }
+
+    @Test
+    void deleteVideoRemovesHlsFolderAndClearsLesson() {
+        LessonRepository repo = mock(LessonRepository.class);
+        CourseRepository courses = mock(CourseRepository.class);
+        UserRepository users = mock(UserRepository.class);
+        R2StorageService r2 = mock(R2StorageService.class);
+        VideoLessonService service = new VideoLessonService(repo, courses, users,
+                mock(VideoStorageService.class), mock(VideoProcessingPublisher.class), r2);
+        java.util.UUID teacherId = java.util.UUID.randomUUID();
+        java.util.UUID courseId = java.util.UUID.randomUUID();
+        Lesson lesson = new Lesson();
+        lesson.setId(lessonId);
+        lesson.setCourseId(courseId);
+        lesson.setVideoUrl("/api/videos/hls/abc-123/master.m3u8");
+        lesson.setVideoStatus("READY");
+        lesson.setDurationSeconds(90);
+        com.example.art_course.course.entity.Course course = new com.example.art_course.course.entity.Course();
+        course.setTeacherId(teacherId);
+        com.example.art_course.user.entity.User teacher = new com.example.art_course.user.entity.User();
+        teacher.setId(teacherId);
+        when(repo.findById(lessonId)).thenReturn(Optional.of(lesson));
+        when(courses.findById(courseId)).thenReturn(Optional.of(course));
+        when(users.findById(teacherId)).thenReturn(Optional.of(teacher));
+
+        service.deleteLessonVideo(lessonId, teacherId.toString());
+
+        verify(r2).deletePrefix("hls/abc-123/");
+        assertNull(lesson.getVideoUrl());
+        assertNull(lesson.getVideoStatus());
+        assertNull(lesson.getDurationSeconds());
+
+        lesson.setVideoStatus("PROCESSING");
+        assertThrows(com.example.art_course.common.AppError.class,
+                () -> service.deleteLessonVideo(lessonId, teacherId.toString()));
+        assertNull(VideoLessonService.hlsIdOf("/api/videos/hls/../x/master.m3u8"));
     }
 }

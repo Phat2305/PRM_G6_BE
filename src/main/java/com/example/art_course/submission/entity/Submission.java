@@ -3,6 +3,7 @@ package com.example.art_course.submission.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -40,5 +41,11 @@ public class Submission {
     @Column(name = "badge", length = 100)
     private String badge;
 
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "graded_at")
+    private Instant gradedAt;
 
 }

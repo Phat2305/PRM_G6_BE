@@ -24,5 +24,11 @@ public class UpdateLessonRequest {
     @JsonAlias({"hasAssignment", "has_assignment"})
     private Boolean hasAssignment;
 
+    @jakarta.validation.constraints.Size(max = 255)
+    private String assignmentTitle;
+
+    @jakarta.validation.constraints.Size(max = 2000)
+    private String assignmentPrompt;
+
     private String status;
 }

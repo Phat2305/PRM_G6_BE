@@ -3,6 +3,7 @@ package com.example.art_course.modules.finance.controller;
 import com.example.art_course.common.ApiResponse;
 import com.example.art_course.modules.finance.dto.TeacherBalanceDto;
 import com.example.art_course.modules.finance.service.LedgerService;
+import com.example.art_course.modules.finance.service.RevenueService;
 import com.example.art_course.modules.withdrawal.dto.CreateWithdrawalRequest;
 import com.example.art_course.modules.withdrawal.dto.WithdrawalResponseDto;
 import com.example.art_course.modules.withdrawal.service.WithdrawalService;
@@ -24,6 +25,7 @@ public class TeacherFinanceController {
 
     private final LedgerService ledgerService;
     private final WithdrawalService withdrawalService;
+    private final RevenueService revenueService;
 
     /**
      * Tra cứu số dư thời gian thực của Teacher (FIN-03).
@@ -34,6 +36,16 @@ public class TeacherFinanceController {
         UUID teacherId = UUID.fromString(auth.getName());
         TeacherBalanceDto balance = ledgerService.getTeacherBalance(teacherId);
         return ApiResponse.ok(balance);
+    }
+
+    /**
+     * Doanh thu thực nhận theo ngày/tháng cho biểu đồ (FIN-03): range=WEEK (7 ngày) hoặc MONTH (6 tháng).
+     */
+    @GetMapping("/revenue")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ApiResponse<List<RevenueService.Point>> getRevenue(
+            @RequestParam(defaultValue = "WEEK") String range, Authentication auth) {
+        return ApiResponse.ok(revenueService.teacherRevenue(UUID.fromString(auth.getName()), range));
     }
 
     /**

@@ -23,7 +23,11 @@ public class ProductService {
         List<Supply> supplies = supplyRepository.findByStatusInIgnoreCase(List.of("ACTIVE", "OUT_OF_STOCK")); // hết hàng vẫn hiện để FE ghi "Hết hàng"
         java.util.Map<UUID, String> names = teacherNames.byIds(
                 supplies.stream().map(Supply::getTeacherId).distinct().toList());
-        supplies.forEach(s -> s.setTeacherName(names.get(s.getTeacherId())));
+        java.util.Map<UUID, Long> fees = new java.util.HashMap<>();
+        supplies.forEach(s -> {
+            s.setTeacherName(names.get(s.getTeacherId()));
+            s.setShippingFee(fees.computeIfAbsent(s.getTeacherId(), teacherNames::shippingFeeOf));
+        });
         return supplies;
     }
 
@@ -34,6 +38,7 @@ public class ProductService {
                 .filter(s -> "ACTIVE".equalsIgnoreCase(s.getStatus()) || "OUT_OF_STOCK".equalsIgnoreCase(s.getStatus()))
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
         supply.setTeacherName(teacherNames.byId(supply.getTeacherId()));
+        supply.setShippingFee(teacherNames.shippingFeeOf(supply.getTeacherId()));
         return supply;
     }
 }
