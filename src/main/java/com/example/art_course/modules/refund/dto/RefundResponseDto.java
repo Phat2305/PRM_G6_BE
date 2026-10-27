@@ -22,6 +22,8 @@ public class RefundResponseDto {
     private String reason;
     private String status;
     private String refundTransactionCode;
+    // Lý do Staff từ chối (chỉ có khi REJECTED, lấy từ nhật ký kiểm duyệt vì bảng refunds không lưu).
+    private String reviewNote;
     private String proofImageUrl;
     private UUID handledBy;
     private Instant createdAt;

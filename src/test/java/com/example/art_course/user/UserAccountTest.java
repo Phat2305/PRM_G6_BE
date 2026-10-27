@@ -102,6 +102,29 @@ class UserAccountTest {
     }
 
     @Test
+    void changePassword_samePassword_isRejectedAfterVerifyingTheCurrentOne() {
+        User u = user("PARENT");
+        when(encoder.matches("old-pass", "hash")).thenReturn(true);
+
+        AppError e = assertThrows(AppError.class, () -> userService.changePassword(u.getId(), pw("old-pass", "old-pass")));
+
+        assertEquals("SAME_PASSWORD", e.getErrorCode());
+        verify(repo, never()).save(any());
+        assertEquals("hash", u.getPassword());
+    }
+
+    @Test
+    void changePassword_childAccountIsManagedByTheParent() {
+        User child = user("CHILD");
+        when(encoder.matches("old", "hash")).thenReturn(true);
+
+        AppError e = assertThrows(AppError.class, () -> userService.changePassword(child.getId(), pw("old", "newpassword1")));
+
+        assertEquals("CHILD_PASSWORD_BY_PARENT", e.getErrorCode());
+        verify(repo, never()).save(any());
+    }
+
+    @Test
     void changePassword_ok_savesEncodedPassword() {
         User u = user("PARENT");
         when(encoder.matches("old", "hash")).thenReturn(true);

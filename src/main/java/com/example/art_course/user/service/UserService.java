@@ -67,9 +67,18 @@ public class UserService {
     @Transactional
     public void changePassword(UUID userId, ChangePasswordRequest request) {
         User user = findUser(userId);
+        // Tài khoản bé do phụ huynh quản lý (đặt lại mật khẩu ở mục Con của tôi), bé không tự đổi.
+        if ("CHILD".equalsIgnoreCase(user.getRole())) {
+            throw new AppError(HttpStatus.FORBIDDEN, "CHILD_PASSWORD_BY_PARENT",
+                    "Mật khẩu của bé do phụ huynh đặt lại");
+        }
         // 400 chứ không phải 401, để app không hiểu nhầm là hết phiên và tự đăng xuất
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             throw new AppError(HttpStatus.BAD_REQUEST, "WRONG_PASSWORD", "Mật khẩu hiện tại không đúng");
+        }
+        // Chỉ biết là trùng sau khi đã xác minh mật khẩu hiện tại.
+        if (request.getCurrentPassword().equals(request.getNewPassword())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "SAME_PASSWORD", "Mật khẩu mới phải khác mật khẩu hiện tại");
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         user.revokeTokens();

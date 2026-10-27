@@ -69,10 +69,12 @@ public class AuthService {
 
         // Họ tên nằm ở bảng profile theo role
         String fullName = request.getFullName().trim();
+        String shippingAddress = request.getShippingAddress() != null ? request.getShippingAddress().trim() : null;
+        String phone = request.getPhone() != null ? request.getPhone().trim() : null;
         if (request.getRole() == RegisterRole.TEACHER) {
             authRepository.insertTeacherProfile(user.getId(), fullName);
         } else {
-            authRepository.insertParentProfile(user.getId(), fullName);
+            authRepository.insertParentProfile(user.getId(), fullName, shippingAddress, phone);
         }
 
         String token = jwtTokenProvider.generateToken(user.getId(), user.getUsername(), user.getRole());

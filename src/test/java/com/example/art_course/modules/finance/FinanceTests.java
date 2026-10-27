@@ -419,6 +419,34 @@ public class FinanceTests {
         verify(enrollmentContract, never()).revokeAccess(any(), any(), any());
     }
 
+    @Test
+    @DisplayName("5e. Lịch sử hoàn tiền của Parent: mới nhất trước, hoàn tiền bị từ chối kèm lý do từ nhật ký kiểm duyệt")
+    void testRefund_ListMyRefunds_IncludesRejectReason() {
+        RefundRepository refundRepo = mock(RefundRepository.class);
+        ModerationService moderation = mock(ModerationService.class);
+        RefundService refundService = refundServiceWith(refundRepo, mock(NotificationService.class), moderation);
+        UUID parentId = UUID.randomUUID();
+        Refund rejected = Refund.builder().id(UUID.randomUUID()).parentId(parentId)
+                .totalAmount(new BigDecimal("100000")).status("REJECTED").build();
+        Refund done = Refund.builder().id(UUID.randomUUID()).parentId(parentId)
+                .totalAmount(new BigDecimal("50000")).status("COMPLETED").build();
+        when(refundRepo.findByParentIdOrderByCreatedAtDesc(parentId)).thenReturn(List.of(rejected, done));
+        com.example.art_course.modules.moderation.entity.ModerationReview approvedOld =
+                com.example.art_course.modules.moderation.entity.ModerationReview.builder()
+                        .decision("APPROVED").reason("cũ").build();
+        com.example.art_course.modules.moderation.entity.ModerationReview rejectedNew =
+                com.example.art_course.modules.moderation.entity.ModerationReview.builder()
+                        .decision("REJECTED").reason("Không đủ điều kiện").build();
+        when(moderation.getReviewsByTarget("REFUND", rejected.getId())).thenReturn(List.of(rejectedNew, approvedOld));
+
+        List<RefundResponseDto> list = refundService.listMyRefunds(parentId);
+
+        assertEquals(2, list.size());
+        assertEquals("Không đủ điều kiện", list.get(0).getReviewNote());
+        assertNull(list.get(1).getReviewNote());
+        verify(moderation, never()).getReviewsByTarget(eq("REFUND"), eq(done.getId()));
+    }
+
     // =========================================================================
     // TEST 6: SỔ CÁI MONEY_LEDGER KHÔNG UPDATE/DELETE/TRUNCATE ĐƯỢC (TRIGGER BẢO MẬT)
     // =========================================================================

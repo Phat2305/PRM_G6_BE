@@ -258,7 +258,17 @@ public class RefundService {
      */
     @Transactional(readOnly = true)
     public List<RefundResponseDto> listMyRefunds(UUID parentId) {
-        return refundRepository.findByParentIdOrderByCreatedAtDesc(parentId).stream().map(this::mapToDto).toList();
+        return refundRepository.findByParentIdOrderByCreatedAtDesc(parentId).stream().map(r -> {
+            RefundResponseDto dto = mapToDto(r);
+            if ("REJECTED".equalsIgnoreCase(r.getStatus())) {
+                // Mới nhất trước: lấy lý do của lần từ chối gần nhất.
+                moderationService.getReviewsByTarget("REFUND", r.getId()).stream()
+                        .filter(m -> "REJECTED".equalsIgnoreCase(m.getDecision()))
+                        .findFirst()
+                        .ifPresent(m -> dto.setReviewNote(m.getReason()));
+            }
+            return dto;
+        }).toList();
     }
 
     private Refund findRefund(UUID refundId) {

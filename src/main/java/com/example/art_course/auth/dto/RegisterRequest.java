@@ -20,6 +20,9 @@ public class RegisterRequest {
     @Pattern(regexp = "^(0|\\+84)\\d{9}$", message = "Số điện thoại không hợp lệ")
     private String phone;
 
+    @Size(max = 255, message = "Địa chỉ giao hàng tối đa 255 ký tự")
+    private String shippingAddress;
+    
     @NotBlank(message = "Email là bắt buộc")
     @Email(message = "Email không hợp lệ")
     @Size(max = 255, message = "Email tối đa 255 ký tự")

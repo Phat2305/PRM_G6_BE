@@ -65,6 +65,10 @@ public class PasswordResetService {
         long startedAt = System.nanoTime();
         String email = normalize(request.getEmail());
         log.debug("Password reset submitted email={}", maskEmail(email));
+        // Xác nhận mật khẩu phải khớp: kiểm tra trước, không tính vào số lần nhập sai mã.
+        if (!java.util.Objects.equals(request.getNewPassword(), request.getConfirmPassword())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "PASSWORD_MISMATCH", "Mật khẩu xác nhận không khớp");
+        }
         Entry entry = resetRepository.find(email).orElseThrow(() -> {
             log.debug("Password reset rejected email={} reason=no_reset_record elapsedMs={}",
                     maskEmail(email), elapsedMs(startedAt));

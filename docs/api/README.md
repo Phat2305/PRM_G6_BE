@@ -61,7 +61,7 @@ Hệ thống sử dụng **JWT HS256** theo hợp đồng với BE1 ([`docs/cont
 | `POST` | `/api/v1/refunds/request` | Yêu cầu hoàn tiền theo dòng chi tiết | FIN-07 |
 | `GET` | `/api/customize-requests/{id}/delivery` | Xem khóa riêng đã được Staff duyệt (yêu cầu `DELIVERED`/`COMPLETED`); kèm `orderId`, `orderDetailId` để xin hoàn tiền | PARENT |
 | `POST` | `/api/customize-requests/{id}/reject-delivery` | Chưa đồng ý với bản bàn giao, body `reason`: gửi cho giáo viên qua tin nhắn, yêu cầu về `FUNDED` để sửa. Không thống nhất được thì xin hoàn tiền (`/refunds/request`) | PARENT |
-| `GET` | `/api/v1/refunds/my` | Xem các yêu cầu hoàn tiền của mình | FIN-07 |
+| `GET` | `/api/v1/refunds/my` | Lịch sử hoàn tiền của mình, mới nhất trước; hoàn tiền bị từ chối kèm `reviewNote` (lý do từ nhật ký kiểm duyệt) | FIN-07 |
 
 ### 3. Giáo viên (Role: `TEACHER`)
 | Method | Endpoint | Mô tả | Mã SRS |

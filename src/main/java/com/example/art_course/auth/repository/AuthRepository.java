@@ -29,10 +29,10 @@ public class AuthRepository {
                 userId, fullName);
     }
 
-    public void insertParentProfile(UUID userId, String fullName) {
+    public void insertParentProfile(UUID userId, String fullName, String shippingAddress, String phone) {
         jdbcTemplate.update(
-                "INSERT INTO parent_profiles (user_id, full_name) VALUES (?, ?)",
-                userId, fullName);
+                "INSERT INTO parent_profiles (user_id, full_name, shipping_address, phone) VALUES (?, ?, ?, ?)",
+                userId, fullName, shippingAddress, phone);
     }
 
     public Optional<ProfileRow> findParentProfile(UUID userId) {

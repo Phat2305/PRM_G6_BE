@@ -53,6 +53,7 @@ class PasswordResetServiceTest {
         r.setEmail(EMAIL);
         r.setCode(code);
         r.setNewPassword("newpassword1");
+        r.setConfirmPassword("newpassword1");
         return r;
     }
 
@@ -64,6 +65,21 @@ class PasswordResetServiceTest {
         Matcher m = Pattern.compile("\\d{6}").matcher(text.getValue());
         assertTrue(m.find());
         return m.group();
+    }
+
+    @Test
+    void resetWithMismatchedConfirmation_isRejected_andKeepsTheCodeUsable() {
+        String code = requestAndReadCode();
+        ResetPasswordRequest request = reset(code);
+        request.setConfirmPassword("something-else");
+
+        AppError e = assertThrows(AppError.class, () -> service.resetPassword(request));
+
+        assertEquals("PASSWORD_MISMATCH", e.getErrorCode());
+        verify(users, never()).save(any());
+        // Mã chưa bị tiêu hao: nhập lại đúng thì đổi được.
+        service.resetPassword(reset(code));
+        verify(users).save(user);
     }
 
     @Test
