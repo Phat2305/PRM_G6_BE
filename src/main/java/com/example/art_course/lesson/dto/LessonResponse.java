@@ -29,4 +29,8 @@ public class LessonResponse {
     private String status;
 
     private String videoStatus;
+    // Do server đo từ video đã xử lý; client không đặt được (dùng để kiểm "đã học xong").
+    private Integer durationSeconds;
+    private String assignmentTitle;
+    private String assignmentPrompt;
 }

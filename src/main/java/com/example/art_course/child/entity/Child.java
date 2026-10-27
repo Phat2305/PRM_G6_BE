@@ -27,4 +27,9 @@ public class Child {
 
     @Column(name = "birth_year")
     private Short birthYear;
+
+    // Phụ huynh cho phép giáo viên của khóa thấy tên bé (ASG-09).
+    @Column(name = "share_info", nullable = false)
+    @Builder.Default
+    private boolean shareInfo = false;
 }

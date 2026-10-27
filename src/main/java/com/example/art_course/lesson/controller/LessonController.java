@@ -58,6 +58,8 @@ public class LessonController {
                 .videoUrl(request.getVideoUrl())
                 .isTrial(request.getIsTrial())
                 .hasAssignment(request.getHasAssignment())
+                .assignmentTitle(request.getAssignmentTitle())
+                .assignmentPrompt(request.getAssignmentPrompt())
                 .status(request.getStatus())
                 .build();
 
@@ -106,7 +108,10 @@ public class LessonController {
                 lesson.getIsTrial(),
                 lesson.getHasAssignment(),
                 lesson.getStatus(),
-                lesson.getVideoStatus()
+                lesson.getVideoStatus(),
+                lesson.getDurationSeconds(),
+                lesson.getAssignmentTitle(),
+                lesson.getAssignmentPrompt()
         );
     }
 }

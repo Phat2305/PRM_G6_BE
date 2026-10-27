@@ -21,6 +21,7 @@ public class AdminAnalyticsController {
 
     private final AdminService adminService;
     private final TeacherNames teacherNames;
+    private final com.example.art_course.modules.finance.service.RevenueService revenueService;
 
     /**
      * Báo cáo thống kê tài chính và vận hành sàn (ADM-04, ADM-05, ADM-06).
@@ -29,6 +30,16 @@ public class AdminAnalyticsController {
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<AdminAnalyticsDto> getFinanceAnalytics() {
         return ApiResponse.ok(adminService.getFinanceAnalytics());
+    }
+
+    /**
+     * Doanh thu toàn sàn theo tháng cho biểu đồ (ADM-04); months 1–24, mặc định 6.
+     */
+    @GetMapping("/revenue")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<List<com.example.art_course.modules.finance.service.RevenueService.Point>> getRevenue(
+            @RequestParam(defaultValue = "6") int months) {
+        return ApiResponse.ok(revenueService.platformRevenue(months));
     }
 
     /**

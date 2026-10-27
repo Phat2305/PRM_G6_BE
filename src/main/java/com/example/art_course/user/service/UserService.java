@@ -22,6 +22,11 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -35,6 +40,8 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final R2StorageService r2StorageService;
 
+    private static final long MAX_CERT_BYTES = 5L * 1024 * 1024;
+    private static final Set<String> CERT_TYPES = Set.of("image/jpeg", "image/png", "image/webp", "application/pdf");
     private static final long MAX_AVATAR_BYTES = 5L * 1024 * 1024;
     private static final Set<String> AVATAR_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
@@ -49,14 +56,21 @@ public class UserService {
         if (emailGiven) {
             setEmail(user, request.getEmail());
         }
+        // Đổi danh sách chứng chỉ thì khóa file phải đi theo đúng tên chứng chỉ, không theo vị trí.
+        boolean certsGiven = "TEACHER".equals(user.getRole()) && request.getCertificates() != null;
+        Map<String, String> keyByName = certsGiven ? certificateKeyByName(userId) : Map.of();
         int updated = switch (user.getRole()) {
             case "PARENT" -> authRepository.updateParentProfile(
-                    userId, request.getFullName(), request.getShippingAddress());
+                    userId, request.getFullName(), request.getShippingAddress(), request.getPhone());
             case "TEACHER" -> authRepository.updateTeacherProfile(
                     userId, request.getFullName(), request.getBankAccountInfo(),
-                    request.getPhone(), request.getBio(), joinCertificates(request.getCertificates()));
+                    request.getPhone(), request.getBio(), joinCertificates(request.getCertificates()),
+                    request.getShippingFee());
             default -> 0;
         };
+        if (certsGiven && updated > 0) {
+            realignCertificateKeys(userId, keyByName);
+        }
         // Staff/Admin không có bảng hồ sơ nhưng vẫn được cập nhật email
         if (updated == 0 && !emailGiven) {
             throw new AppError(HttpStatus.BAD_REQUEST, "NO_PROFILE", "Tài khoản này không có hồ sơ để cập nhật");
@@ -142,7 +156,105 @@ public class UserService {
         }).orElse(new ProfileRow(null, null, null));
         return new ProfileResponse(u.getId(), u.getUsername(), u.getEmail(), u.getRole(), u.getStatus(),
                 p.fullName(), p.shippingAddress(), p.bankAccountInfo(),
-                p.phone(), p.bio(), splitCertificates(p.certificatesText()));
+                p.phone(), p.bio(), splitCertificates(p.certificatesText()), p.shippingFee(),
+                "TEACHER".equals(u.getRole())
+                        ? certificateKeys(u.getId(), splitCertificates(p.certificatesText()).size()).stream()
+                                .map(k -> !k.isEmpty()).toList()
+                        : null);
+    }
+
+    // File chứng chỉ (ảnh/PDF ≤ 5 MB) lưu R2 key certificates/{userId}/{uuid}, khóa nằm ở certificate_keys theo thứ tự chứng chỉ.
+    @Transactional
+    public void uploadCertificateFile(UUID userId, int index, MultipartFile file) {
+        User user = findUser(userId);
+        if (!"TEACHER".equals(user.getRole())) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Chỉ giáo viên đính kèm được chứng chỉ");
+        }
+        int count = certificateNames(userId).size();
+        if (index < 0 || index >= count) {
+            throw new AppError(HttpStatus.NOT_FOUND, "CERTIFICATE_NOT_FOUND", "Không có chứng chỉ thứ " + (index + 1));
+        }
+        if (file == null || file.isEmpty()) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "FILE_REQUIRED", "Chưa chọn file");
+        }
+        if (file.getSize() > MAX_CERT_BYTES) {
+            throw new AppError(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE", "File tối đa 5 MB");
+        }
+        String type = file.getContentType();
+        if (type == null || !CERT_TYPES.contains(type)) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "FILE_TYPE", "Chỉ nhận ảnh JPG, PNG, WEBP hoặc PDF");
+        }
+        List<String> keys = new ArrayList<>(certificateKeys(userId, count));
+        String old = keys.get(index);
+        String key = "certificates/" + userId + "/" + UUID.randomUUID();
+        try {
+            r2StorageService.uploadBytes(key, file.getBytes(), type);
+        } catch (IOException e) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "FILE_READ", "Không đọc được file");
+        }
+        keys.set(index, key);
+        authRepository.updateCertificateKeys(userId, String.join("\n", keys));
+        if (!old.isEmpty()) {
+            r2StorageService.deleteObject(old);
+        }
+    }
+
+    // Chính giáo viên, Staff và Admin được xem file chứng chỉ (Staff duyệt hồ sơ giáo viên).
+    public ResponseInputStream<GetObjectResponse> certificateFile(UUID callerId, UUID ownerId, int index) {
+        User caller = findUser(callerId);
+        boolean reviewer = "STAFF".equals(caller.getRole()) || "ADMIN".equals(caller.getRole());
+        if (!reviewer && !callerId.equals(ownerId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không xem được chứng chỉ này");
+        }
+        List<String> keys = certificateKeys(ownerId, certificateNames(ownerId).size());
+        if (index < 0 || index >= keys.size() || keys.get(index).isEmpty()) {
+            throw new AppError(HttpStatus.NOT_FOUND, "CERTIFICATE_FILE_NOT_FOUND", "Chứng chỉ này chưa có file");
+        }
+        return r2StorageService.getObject(keys.get(index));
+    }
+
+    private List<String> certificateNames(UUID userId) {
+        return authRepository.findTeacherProfile(userId)
+                .map(p -> splitCertificates(p.certificatesText())).orElse(List.of());
+    }
+
+    // Danh sách khóa R2 đúng độ dài `count` ("" = chưa có file), bù hoặc cắt nếu cột lệch với danh sách chứng chỉ.
+    private List<String> certificateKeys(UUID userId, int count) {
+        String raw = authRepository.findCertificateKeys(userId);
+        String[] parts = raw == null ? new String[0] : raw.split("\n", -1);
+        List<String> keys = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            keys.add(i < parts.length ? parts[i].trim() : "");
+        }
+        return keys;
+    }
+
+    private Map<String, String> certificateKeyByName(UUID userId) {
+        List<String> names = certificateNames(userId);
+        List<String> keys = certificateKeys(userId, names.size());
+        Map<String, String> byName = new HashMap<>();
+        for (int i = 0; i < names.size(); i++) {
+            if (!keys.get(i).isEmpty()) {
+                byName.putIfAbsent(names.get(i), keys.get(i));
+            }
+        }
+        return byName;
+    }
+
+    private void realignCertificateKeys(UUID userId, Map<String, String> oldByName) {
+        List<String> names = certificateNames(userId);
+        List<String> keys = new ArrayList<>();
+        Set<String> kept = new HashSet<>();
+        for (String name : names) {
+            String key = oldByName.getOrDefault(name, "");
+            if (!key.isEmpty() && kept.add(key)) {
+                keys.add(key);
+            } else {
+                keys.add("");
+            }
+        }
+        authRepository.updateCertificateKeys(userId, keys.stream().allMatch(String::isEmpty) ? "" : String.join("\n", keys));
+        oldByName.values().stream().filter(k -> !kept.contains(k)).forEach(r2StorageService::deleteObject);
     }
 
     // Chứng chỉ lưu trong certificates_text, mỗi dòng một chứng chỉ; null = giữ nguyên, rỗng = xóa hết.

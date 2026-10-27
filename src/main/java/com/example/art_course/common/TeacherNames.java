@@ -42,6 +42,19 @@ public class TeacherNames {
         return names;
     }
 
+    // Phí ship riêng của giáo viên (teacher_profiles.shipping_fee); null = dùng mặc định trong system_config.
+    public Long shippingFeeOf(UUID teacherId) {
+        if (teacherId == null) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        java.util.List<Object> rows = entityManager
+                .createNativeQuery("SELECT shipping_fee FROM teacher_profiles WHERE user_id = :id")
+                .setParameter("id", teacherId)
+                .getResultList();
+        return rows.isEmpty() || rows.get(0) == null ? null : ((Number) rows.get(0)).longValue();
+    }
+
     public String byId(UUID id) {
         return id == null ? null : byIds(java.util.List.of(id)).get(id);
     }

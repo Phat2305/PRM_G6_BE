@@ -21,6 +21,7 @@ public class ChildResponse {
 
     // Parent locked this child (users.status = LOCKED); the child cannot log in until unlocked.
     private boolean locked;
+    private boolean shareInfo;
 
     public String getName() {
         return displayName;

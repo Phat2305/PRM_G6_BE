@@ -24,4 +24,6 @@ public class UpdateChildRequest {
 
     @JsonAlias({"birth_date", "dob"})
     private String birthDate;
+
+    private Boolean shareInfo;
 }

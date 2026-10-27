@@ -6,7 +6,9 @@ import com.example.art_course.admin.dto.StaffResponse;
 import com.example.art_course.admin.dto.StaffStatusRequest;
 import com.example.art_course.admin.dto.UpdateStaffRequest;
 import com.example.art_course.admin.service.AdminUserService;
+import com.example.art_course.user.dto.ProfileResponse;
 import com.example.art_course.user.entity.User;
+import com.example.art_course.user.service.UserService;
 import com.example.art_course.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class AdminUserController {
 
     private final AdminUserService adminUserService;
     private final UserRepository userRepository;
+    private final UserService userService;
 
     @PostMapping("/staff")
     public StaffResponse createStaff(@Valid @RequestBody CreateStaffRequest request) {
@@ -51,6 +54,18 @@ public class AdminUserController {
     public void deleteStaff(@PathVariable UUID id) {
         adminUserService.deleteStaff(id);
     }
+    // STF-01: Staff xem hồ sơ đầy đủ (giới thiệu, chứng chỉ, ngân hàng) của giáo viên trước khi duyệt.
+    @GetMapping("/teachers/{userId}/profile")
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ProfileResponse getTeacherProfile(@PathVariable UUID userId) {
+        ProfileResponse profile = userService.getProfile(userId);
+        if (!"TEACHER".equals(profile.getRole())) {
+            throw new com.example.art_course.common.AppError(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "TEACHER_NOT_FOUND", "Không tìm thấy giáo viên");
+        }
+        return profile;
+    }
+
     // ACC-12: Staff (và Admin) duyệt giáo viên mới đăng ký.
     @GetMapping("/teachers/pending")
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")

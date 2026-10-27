@@ -257,10 +257,11 @@ public class OrderService {
 
     /**
      * Xác định phí vận chuyển cho đơn hàng của Teacher:
-     * Đọc từ bảng system_config (khóa shipping_fee_default) hoặc phí ship riêng của Teacher (nếu có trường trong DB).
+     * Phí ship riêng của Teacher (teacher_profiles.shipping_fee); chưa đặt thì đọc system_config (shipping_fee_default).
      */
     public Money resolveShippingFee(UUID teacherId) {
-        return configService.getDefaultShippingFee();
+        Long own = teacherNames.shippingFeeOf(teacherId);
+        return own != null ? Money.of(own) : configService.getDefaultShippingFee();
     }
 
     @Transactional(readOnly = true)
@@ -342,6 +343,10 @@ public class OrderService {
 
         int count = 0;
         for (Order order : expiredOrders) {
+            // Đơn customize do CustomizeQuoteExpirationJob xử lý vì phải mở lại yêu cầu và báo giá (CUS-18).
+            if (!orderDetailRepository.findByOrderIdAndCustomizeRequestIdIsNotNull(order.getId()).isEmpty()) {
+                continue;
+            }
             List<OrderDetail> details = orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(order.getId());
             for (OrderDetail d : details) {
                 if (d.getSupplyId() != null) {

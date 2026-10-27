@@ -108,6 +108,15 @@ public class VideoController {
         ));
     }
 
+    @DeleteMapping("/lessons/{lessonId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteLessonVideo(
+            @PathVariable UUID lessonId,
+            Authentication authentication
+    ) {
+        videoLessonService.deleteLessonVideo(lessonId, authentication.getName());
+    }
+
     public record UploadVideoResponse(
             String videoId,
             String originalFileName,

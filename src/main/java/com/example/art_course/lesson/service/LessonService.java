@@ -133,6 +133,13 @@ public class LessonService {
             lesson.setHasAssignment(request.getHasAssignment());
         }
 
+        if (request.getAssignmentTitle() != null) {
+            lesson.setAssignmentTitle(request.getAssignmentTitle().trim());
+        }
+        if (request.getAssignmentPrompt() != null) {
+            lesson.setAssignmentPrompt(request.getAssignmentPrompt().trim());
+        }
+
         if (request.getStatus() != null) {
             lesson.setStatus(request.getStatus());
         }

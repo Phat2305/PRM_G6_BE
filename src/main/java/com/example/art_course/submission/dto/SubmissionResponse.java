@@ -3,6 +3,7 @@
 
 import lombok.*;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Getter
@@ -19,4 +20,7 @@ public class SubmissionResponse {
     private String status;
     private String teacherFeedback;
     private String badge;
+    private String childName;
+    private Instant createdAt;
+    private Instant gradedAt;
 }

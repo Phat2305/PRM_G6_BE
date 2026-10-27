@@ -1,12 +1,18 @@
 
 package com.example.art_course.submission.controller;
 
-import com.example.art_course.submission.dto.CreateSubmissionRequest;
 import com.example.art_course.submission.dto.GradeSubmissionRequest;
 import com.example.art_course.submission.dto.SubmissionResponse;
 import com.example.art_course.submission.service.SubmissionService;
 
 import jakarta.validation.Valid;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -25,14 +31,29 @@ public class SubmissionController {
         this.submissionService = submissionService;
     }
 
-    @PostMapping
-    public ResponseEntity<SubmissionResponse> create(
-            @Valid @RequestBody CreateSubmissionRequest request,
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<SubmissionResponse> upload(
+            @RequestParam("lessonId") UUID lessonId,
+            @RequestParam("file") MultipartFile file,
             Authentication authentication) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(submissionService.create(
-                        request, authentication.getName()));
+                .body(submissionService.upload(
+                        lessonId, file, authentication.getName()));
+    }
+
+    @GetMapping("/{id}/image")
+    public ResponseEntity<Resource> image(
+            @PathVariable UUID id,
+            Authentication authentication) {
+
+        ResponseInputStream<GetObjectResponse> object =
+                submissionService.image(id, authentication.getName());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(object.response().contentType()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-cache")
+                .body(new InputStreamResource(object));
     }
 
     @GetMapping("/{id}")

@@ -25,6 +25,10 @@ public class Supply {
     @Transient
     private String teacherName;
 
+    // Phí ship riêng của giáo viên (VND); null = dùng mặc định trong system_config.
+    @Transient
+    private Long shippingFee;
+
     @Column(nullable = false)
     private String name;
 

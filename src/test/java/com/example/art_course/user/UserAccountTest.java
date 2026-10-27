@@ -126,7 +126,7 @@ class UserAccountTest {
     void updateProfile_teacher_savesPhoneBioAndCertificatesAsLines() {
         User u = user("TEACHER");
         when(authRepo.updateTeacherProfile(u.getId(), null, null, "0901234567", "Dạy vẽ 8 năm",
-                "Chứng chỉ A\nChứng chỉ B")).thenReturn(1);
+                "Chứng chỉ A\nChứng chỉ B", null)).thenReturn(1);
         when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(new AuthRepository.ProfileRow(
                 "Lan", null, "VCB 1234", "0901234567", "Dạy vẽ 8 năm", "Chứng chỉ A\nChứng chỉ B")));
         UpdateProfileRequest req = new UpdateProfileRequest();
@@ -143,7 +143,7 @@ class UserAccountTest {
     @Test
     void updateProfile_teacher_emptyCertificatesClearsAndNullKeeps() {
         User u = user("TEACHER");
-        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, "")).thenReturn(1);
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, "", null)).thenReturn(1);
         when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(
                 new AuthRepository.ProfileRow("Lan", null, "", null, null, null)));
         UpdateProfileRequest req = new UpdateProfileRequest();
@@ -157,7 +157,7 @@ class UserAccountTest {
     @Test
     void updateProfile_parent_goesThroughRepository() {
         User u = user("PARENT");
-        when(authRepo.updateParentProfile(u.getId(), "An", "HCM")).thenReturn(1);
+        when(authRepo.updateParentProfile(u.getId(), "An", "HCM", null)).thenReturn(1);
         when(authRepo.findParentProfile(u.getId()))
                 .thenReturn(Optional.of(new AuthRepository.ProfileRow("An", "HCM", null)));
         UpdateProfileRequest req = new UpdateProfileRequest();
@@ -168,6 +168,64 @@ class UserAccountTest {
 
         assertEquals("An", res.getFullName());
         assertEquals("HCM", res.getShippingAddress());
+    }
+
+    @Test
+    void updateProfile_parent_savesPhone() {
+        User u = user("PARENT");
+        when(authRepo.updateParentProfile(u.getId(), null, null, "0901234567")).thenReturn(1);
+        when(authRepo.findParentProfile(u.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("An", null, null, "0901234567", null, null)));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setPhone("0901234567");
+
+        assertEquals("0901234567", userService.updateProfile(u.getId(), req).getPhone());
+    }
+
+    @Test
+    void updateProfile_teacher_savesShippingFee() {
+        User u = user("TEACHER");
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, null, 25000L)).thenReturn(1);
+        when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("Lan", null, "", null, null, null, 25000L)));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setShippingFee(25000L);
+
+        assertEquals(25000L, userService.updateProfile(u.getId(), req).getShippingFee());
+    }
+
+    @Test
+    void certificateFile_uploadKeepsKeysAndStaffCanRead() {
+        User teacher = user("TEACHER");
+        User staff = user("STAFF");
+        User stranger = user("TEACHER");
+        when(authRepo.findTeacherProfile(teacher.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("Lan", null, "", null, null, "Chứng chỉ A\nChứng chỉ B")));
+        when(authRepo.findCertificateKeys(teacher.getId())).thenReturn("old-key\n");
+        MockMultipartFile pdf = new MockMultipartFile("file", "a.pdf", "application/pdf", new byte[]{1, 2});
+
+        userService.uploadCertificateFile(teacher.getId(), 1, pdf);
+
+        org.mockito.ArgumentCaptor<String> keys = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(authRepo).updateCertificateKeys(eq(teacher.getId()), keys.capture());
+        String[] saved = keys.getValue().split("\n");
+        assertEquals("old-key", saved[0]);
+        assertTrue(saved[1].startsWith("certificates/" + teacher.getId() + "/"));
+
+        // sai định dạng / ngoài phạm vi bị từ chối
+        MockMultipartFile gif = new MockMultipartFile("file", "a.gif", "image/gif", new byte[]{1});
+        assertEquals("FILE_TYPE", assertThrows(AppError.class,
+                () -> userService.uploadCertificateFile(teacher.getId(), 0, gif)).getErrorCode());
+        assertEquals("CERTIFICATE_NOT_FOUND", assertThrows(AppError.class,
+                () -> userService.uploadCertificateFile(teacher.getId(), 5, pdf)).getErrorCode());
+
+        // chủ, Staff được xem; giáo viên khác thì 403
+        when(authRepo.findCertificateKeys(teacher.getId())).thenReturn("old-key\nk2");
+        userService.certificateFile(teacher.getId(), teacher.getId(), 0);
+        userService.certificateFile(staff.getId(), teacher.getId(), 1);
+        verify(r2).getObject("old-key");
+        assertEquals(403, assertThrows(AppError.class,
+                () -> userService.certificateFile(stranger.getId(), teacher.getId(), 0)).getStatus().value());
     }
 
     @Test

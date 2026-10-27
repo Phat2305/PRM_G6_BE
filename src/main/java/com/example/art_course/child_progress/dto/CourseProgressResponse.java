@@ -16,6 +16,8 @@ import java.util.UUID;
 public class CourseProgressResponse {
 
     private UUID childId;
+    // Null khi phụ huynh chưa cho giáo viên xem tên (ASG-09).
+    private String childName;
     private UUID courseId;
     private int completedLessons;
     private int totalLessons;

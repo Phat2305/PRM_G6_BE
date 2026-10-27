@@ -64,6 +64,13 @@ public class NotificationService {
                 "Phụ huynh đã chấp nhận báo giá " + vnd(price) + ", đang chờ thanh toán.", "OFFER_ACCEPTED", requestId);
     }
 
+    // CUS-18: đơn thanh toán báo giá customize hết hạn; yêu cầu mở lại để báo giá/chấp nhận lại.
+    @Async
+    public void notifyCustomizeQuoteExpired(UUID requestId, UUID recipientId) {
+        sendNotificationAsync(recipientId, "Báo giá customize hết hạn thanh toán",
+                "Đơn thanh toán đã quá hạn, yêu cầu được mở lại để chọn báo giá.", "CUSTOMIZE_QUOTE_EXPIRED", requestId);
+    }
+
     // CUS-11: giáo viên bàn giao khóa học riêng; phụ huynh vào xem và gán cho bé.
     @Async
     public void notifyCustomizeDelivered(UUID requestId, UUID parentId, String courseName) {

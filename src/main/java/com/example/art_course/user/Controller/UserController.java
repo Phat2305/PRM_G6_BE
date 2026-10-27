@@ -54,6 +54,25 @@ public class UserController {
                 .body(new InputStreamResource(object));
     }
 
+    @PostMapping(value = "/me/certificates/{index}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void uploadCertificate(@PathVariable int index, @RequestParam("file") MultipartFile file,
+                                  Authentication auth) {
+        userService.uploadCertificateFile(currentUserId(auth), index, file);
+    }
+
+    @GetMapping("/{userId}/certificates/{index}/file")
+    public ResponseEntity<Resource> certificate(@PathVariable UUID userId, @PathVariable int index,
+                                                Authentication auth) {
+        ResponseInputStream<GetObjectResponse> object =
+                userService.certificateFile(currentUserId(auth), userId, index);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(object.response().contentType()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-cache")
+                .body(new InputStreamResource(object));
+    }
+
     @PostMapping("/me/logout")
     public void logout(Authentication auth) {
         userService.revokeTokens(currentUserId(auth));
