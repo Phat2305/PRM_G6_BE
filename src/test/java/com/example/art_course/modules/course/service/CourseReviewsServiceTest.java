@@ -69,6 +69,35 @@ class CourseReviewsServiceTest {
     }
 
     @Test
+    @DisplayName("danh mục phân trang: lọc theo từ khóa và thể loại, trang sau không trùng trang trước")
+    void catalogPaginatesAndFilters() {
+        List<Course> courses = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            courses.add(Course.builder().id(UUID.randomUUID()).teacherId(teacherId)
+                    .name(String.format("Màu nước %02d", i)).category("Màu nước")
+                    .price(new BigDecimal("1000")).status("PUBLISHED").build());
+        }
+        courses.add(Course.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Chì cơ bản")
+                .category("Chì").price(new BigDecimal("1000")).status("PUBLISHED").build());
+        when(courseRepo.findByStatusIgnoreCase("PUBLISHED")).thenReturn(courses);
+        when(names.byIds(any())).thenReturn(Map.of(teacherId, "Cô Lan"));
+        when(reviewRepo.summarize(any())).thenReturn(List.of());
+
+        var first = service.listCourses("màu nước", null, 0, 10);
+        var second = service.listCourses("màu nước", null, 1, 10);
+        assertEquals(12, first.total());
+        assertEquals(10, first.items().size());
+        assertTrue(first.hasMore());
+        assertEquals(2, second.items().size());
+        assertFalse(second.hasMore());
+        assertTrue(first.items().stream().noneMatch(a -> second.items().stream()
+                .anyMatch(b -> b.getId().equals(a.getId()))));
+
+        assertEquals(1, service.listCourses(null, "Chì", 0, 10).total());
+        assertEquals(13, service.listCourses("cô lan", null, null, null).items().size());
+    }
+
+    @Test
     @DisplayName("danh mục rỗng: không gọi truy vấn tổng hợp")
     void emptyCatalogSkipsAggregate() {
         when(courseRepo.findByStatusIgnoreCase("PUBLISHED")).thenReturn(List.of());

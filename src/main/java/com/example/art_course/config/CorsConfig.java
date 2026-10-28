@@ -39,7 +39,11 @@ public class CorsConfig {
         ));
 
         config.setExposedHeaders(List.of(
-                "Authorization"
+                "Authorization",
+                "X-Total-Count",
+                "X-Page",
+                "X-Page-Size",
+                "X-Has-More"
         ));
 
         // JWT qua Authorization header, không dùng cookie

@@ -6,6 +6,7 @@ import com.example.art_course.modules.course.dto.CourseSummaryDto;
 import com.example.art_course.modules.course.dto.TrialLessonDto;
 import com.example.art_course.modules.course.service.CourseService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,9 +24,15 @@ public class ShopCourseController {
 
     private final CourseService courseService;
 
+    // Không truyền size thì trả cả danh sách như cũ. Có size: ?page=0&size=10&q=...&category=...;
+    // tổng số và cờ còn trang sau nằm ở header X-Total-Count, X-Has-More.
     @GetMapping
-    public ApiResponse<List<CourseSummaryDto>> listPublishedCourses() {
-        return ApiResponse.ok(courseService.listCourses());
+    public ResponseEntity<ApiResponse<List<CourseSummaryDto>>> listPublishedCourses(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return courseService.listCourses(q, category, page, size).toResponse();
     }
 
     @GetMapping("/{courseId}")

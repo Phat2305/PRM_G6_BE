@@ -42,15 +42,39 @@ public class CourseService {
      */
     @Transactional(readOnly = true)
     public List<CourseSummaryDto> listCourses() {
+        return listCourses(null, null, null, null).items();
+    }
+
+    /**
+     * Danh mục có lọc và phân trang. q khớp tên khóa, thể loại, tên giáo viên (không phân biệt hoa thường);
+     * category khớp đúng thể loại. size == null thì trả cả danh sách như bản không phân trang.
+     * Sắp xếp theo tên rồi id để các trang không trùng hoặc sót mục.
+     */
+    @Transactional(readOnly = true)
+    public com.example.art_course.common.PagedResult<CourseSummaryDto> listCourses(
+            String q, String category, Integer page, Integer size) {
         // CUS-10: khóa học làm riêng cho một yêu cầu customize không bán công khai
-        List<Course> published = courseRepository.findByStatusIgnoreCase("PUBLISHED").stream()
+        List<Course> all = courseRepository.findByStatusIgnoreCase("PUBLISHED").stream()
                 .filter(c -> c.getCustomizeRequestId() == null)
+                .filter(c -> category == null || category.isBlank() || category.trim().equalsIgnoreCase(c.getCategory()))
                 .toList();
         java.util.Map<UUID, String> names = teacherNames.byIds(
-                published.stream().map(Course::getTeacherId).distinct().toList());
+                all.stream().map(Course::getTeacherId).distinct().toList());
+        String needle = q == null ? "" : q.trim().toLowerCase();
+        List<Course> matched = all.stream()
+                .filter(c -> needle.isEmpty()
+                        || contains(c.getName(), needle)
+                        || contains(c.getCategory(), needle)
+                        || contains(names.get(c.getTeacherId()), needle))
+                .sorted(java.util.Comparator
+                        .comparing((Course c) -> c.getName() == null ? "" : c.getName().toLowerCase())
+                        .thenComparing(c -> String.valueOf(c.getId())))
+                .toList();
+        var paged = com.example.art_course.common.PagedResult.of(matched, page, size);
+        List<Course> published = paged.items();
         java.util.Map<UUID, CourseReviewRepository.RatingSummary> ratings = ratingsOf(
                 published.stream().map(Course::getId).toList());
-        return published.stream()
+        List<CourseSummaryDto> items = published.stream()
                 .map(c -> CourseSummaryDto.builder()
                         .id(c.getId())
                         .teacherId(c.getTeacherId())
@@ -65,6 +89,11 @@ public class CourseService {
                         .reviewCount(countOf(ratings.get(c.getId())))
                         .build())
                 .toList();
+        return new com.example.art_course.common.PagedResult<>(items, paged.total(), paged.page(), paged.size());
+    }
+
+    private static boolean contains(String text, String lowerNeedle) {
+        return text != null && text.toLowerCase().contains(lowerNeedle);
     }
 
     private java.util.Map<UUID, CourseReviewRepository.RatingSummary> ratingsOf(java.util.Collection<UUID> courseIds) {
