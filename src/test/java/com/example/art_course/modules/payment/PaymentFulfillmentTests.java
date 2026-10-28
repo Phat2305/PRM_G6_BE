@@ -20,7 +20,7 @@ import com.example.art_course.modules.payment.repository.PaymentRepository;
 import com.example.art_course.modules.payment.repository.WebhookLogRepository;
 import com.example.art_course.modules.payment.service.EnrollmentGrantService;
 import com.example.art_course.modules.payment.service.PaymentService;
-import com.example.art_course.modules.product.repository.SupplyRepository;
+import com.example.art_course.supply.repository.SupplyRepository;
 import com.example.art_course.modules.refund.repository.RefundItemRepository;
 import com.example.art_course.modules.refund.repository.RefundRepository;
 import com.example.art_course.modules.systemconfig.service.ConfigService;

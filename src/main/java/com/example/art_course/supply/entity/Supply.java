@@ -1,4 +1,3 @@
-
 package com.example.art_course.supply.entity;
 
 import jakarta.persistence.*;
@@ -15,30 +14,55 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class Supply {
-
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
     private UUID id;
 
     @Column(name = "teacher_id", nullable = false)
     private UUID teacherId;
 
-    @Column(name = "name", nullable = false, length = 255)
+    // Họ tên giáo viên, được điền khi trả API (không lưu trong bảng supplies)
+    @Transient
+    private String teacherName;
+
+    // Phí ship riêng của giáo viên (VND); null = dùng mặc định trong system_config.
+    @Transient
+    private Long shippingFee;
+
+    @Column(nullable = false)
     private String name;
 
-    @Column(name = "description", columnDefinition = "text")
     private String description;
 
-    @Column(name = "image_url", columnDefinition = "text")
+    @Column(name = "image_url")
     private String imageUrl;
 
-    @Column(name = "price", precision = 12, scale = 2)
+    @Column(nullable = false)
     private BigDecimal price;
 
-    @Column(name = "stock_quantity")
-    private Integer stockQuantity;
+    @Column(name = "stock_quantity", nullable = false)
+    private int stockQuantity;
 
-    @Column(name = "status", length = 20)
+    @Column(name = "reserved_quantity", nullable = false)
+    private int reservedQuantity;
+
+    @Column(name = "sold_quantity", nullable = false)
+    private int soldQuantity;
+
+    @Column(nullable = false, length = 20)
     private String status;
+
+    // Hết hàng thì tự chuyển OUT_OF_STOCK; có hàng lại (giáo viên nhập thêm, hủy/hoàn đơn) thì tự về ACTIVE, không cần duyệt lại.
+    // Chỉ đụng hai trạng thái này: PENDING_REVIEW, REJECTED, HIDDEN do kiểm duyệt quyết định.
+    public void syncStatusWithStock() {
+        if (stockQuantity <= 0 && "ACTIVE".equalsIgnoreCase(status)) {
+            status = "OUT_OF_STOCK";
+        } else if (stockQuantity > 0 && "OUT_OF_STOCK".equalsIgnoreCase(status)) {
+            status = "ACTIVE";
+        }
+    }
+
+    public int getAvailableStock() {
+        return Math.max(0, stockQuantity - reservedQuantity);
+    }
 }

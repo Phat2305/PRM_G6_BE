@@ -2,10 +2,10 @@ package com.example.art_course.modules.course.service;
 
 import com.example.art_course.common.AppError;
 import com.example.art_course.contracts.events.CourseReviewedEvent;
-import com.example.art_course.modules.course.entity.Course;
+import com.example.art_course.course.entity.Course;
 import com.example.art_course.modules.course.entity.CourseReview;
-import com.example.art_course.modules.course.entity.Lesson;
-import com.example.art_course.modules.course.repository.CourseRepository;
+import com.example.art_course.lesson.entity.Lesson;
+import com.example.art_course.course.repository.CourseRepository;
 import com.example.art_course.modules.course.repository.CourseReviewRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -136,8 +136,8 @@ public class CourseService {
                 .map(l -> LessonSummaryDto.builder()
                         .id(l.getId())
                         .title(l.getTitle())
-                        .isTrial(l.isTrial())
-                        .hasAssignment(l.isHasAssignment())
+                        .isTrial(Boolean.TRUE.equals(l.getIsTrial()))
+                        .hasAssignment(Boolean.TRUE.equals(l.getHasAssignment()))
                         .status(l.getStatus())
                         .build())
                 .toList();
@@ -168,7 +168,7 @@ public class CourseService {
         if (lesson == null) {
             throw new AppError(HttpStatus.NOT_FOUND, "LESSON_NOT_FOUND", "Không tìm thấy bài học");
         }
-        if (!lesson.isTrial()) {
+        if (!Boolean.TRUE.equals(lesson.getIsTrial())) {
             throw new AppError(HttpStatus.FORBIDDEN, "TRIAL_NOT_ALLOWED", "Bài học này không hỗ trợ xem thử miễn phí (SHOP-10)");
         }
 
@@ -178,8 +178,8 @@ public class CourseService {
                 .lessonId(lesson.getId())
                 .courseId(lesson.getCourseId())
                 .title(lesson.getTitle())
-                .isTrial(lesson.isTrial())
-                .hasAssignment(lesson.isHasAssignment())
+                .isTrial(Boolean.TRUE.equals(lesson.getIsTrial()))
+                .hasAssignment(Boolean.TRUE.equals(lesson.getHasAssignment()))
                 .signedVideoUrl(signedUrlOpt.orElse(null))
                 .message(signedUrlOpt.isPresent() ? "Signed URL hợp lệ (SHOP-10)" : "Chờ BE1 cấp signed URL an toàn (LRN-02/03); không phát video_url thô")
                 .build();

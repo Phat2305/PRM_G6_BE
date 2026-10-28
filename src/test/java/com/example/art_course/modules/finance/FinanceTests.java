@@ -19,7 +19,7 @@ import com.example.art_course.modules.payment.entity.MoneyLedger;
 import com.example.art_course.modules.payment.entity.Payment;
 import com.example.art_course.modules.payment.repository.MoneyLedgerRepository;
 import com.example.art_course.modules.payment.repository.PaymentRepository;
-import com.example.art_course.modules.product.repository.SupplyRepository;
+import com.example.art_course.supply.repository.SupplyRepository;
 import com.example.art_course.modules.refund.dto.CreateRefundRequest;
 import com.example.art_course.modules.refund.entity.Refund;
 import com.example.art_course.modules.refund.repository.RefundItemRepository;

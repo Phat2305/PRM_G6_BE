@@ -87,7 +87,7 @@ public class CommerceTests {
         var ctx = PostgresTestcontainerEnv.getContext();
         var jdbc = ctx.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
         var orderService = ctx.getBean(com.example.art_course.modules.order.service.OrderService.class);
-        var supplyRepo = ctx.getBean(com.example.art_course.modules.product.repository.SupplyRepository.class);
+        var supplyRepo = ctx.getBean(com.example.art_course.supply.repository.SupplyRepository.class);
 
         UUID parentId = UUID.randomUUID();
         UUID teacherId = UUID.randomUUID();
@@ -155,7 +155,7 @@ public class CommerceTests {
         var jdbc = ctx.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
         var orderService = ctx.getBean(com.example.art_course.modules.order.service.OrderService.class);
         var orderRepo = ctx.getBean(com.example.art_course.modules.order.repository.OrderRepository.class);
-        var supplyRepo = ctx.getBean(com.example.art_course.modules.product.repository.SupplyRepository.class);
+        var supplyRepo = ctx.getBean(com.example.art_course.supply.repository.SupplyRepository.class);
 
         // Dọn các đơn PENDING_PAYMENT quá hạn cũ nếu có
         orderService.expirePendingOrders();

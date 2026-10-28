@@ -2,8 +2,8 @@ package com.example.art_course.modules.product;
 
 import com.example.art_course.common.AppError;
 import com.example.art_course.common.TeacherNames;
-import com.example.art_course.modules.product.entity.Supply;
-import com.example.art_course.modules.product.repository.SupplyRepository;
+import com.example.art_course.supply.entity.Supply;
+import com.example.art_course.supply.repository.SupplyRepository;
 import com.example.art_course.modules.product.service.ProductService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

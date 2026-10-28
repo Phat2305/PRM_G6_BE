@@ -1,7 +1,7 @@
 package com.example.art_course.modules.staff.controller;
 
 import com.example.art_course.common.ApiResponse;
-import com.example.art_course.modules.product.entity.Supply;
+import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.modules.staff.dto.ComplaintDto;
 import com.example.art_course.modules.staff.service.StaffService;
 import lombok.RequiredArgsConstructor;

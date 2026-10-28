@@ -141,7 +141,7 @@ public class SupplyService {
         if (contentChanged) {
             supply.setStatus("PENDING_REVIEW");
         } else {
-            syncStatusWithStock(supply);
+            supply.syncStatusWithStock();
         }
 
         return supplyRepository.save(supply);
@@ -158,16 +158,6 @@ public class SupplyService {
 
     private static String blankIfNull(String value) {
         return value == null ? "" : value;
-    }
-
-    // Only ACTIVE and OUT_OF_STOCK follow the stock; review states (PENDING_REVIEW, REJECTED, HIDDEN) are left alone.
-    private static void syncStatusWithStock(Supply supply) {
-        boolean empty = supply.getStockQuantity() == null || supply.getStockQuantity() <= 0;
-        if (empty && "ACTIVE".equalsIgnoreCase(supply.getStatus())) {
-            supply.setStatus("OUT_OF_STOCK");
-        } else if (!empty && "OUT_OF_STOCK".equalsIgnoreCase(supply.getStatus())) {
-            supply.setStatus("ACTIVE");
-        }
     }
 
     private User getUserById(String userId) {

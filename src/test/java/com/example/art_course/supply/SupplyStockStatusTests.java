@@ -94,8 +94,8 @@ class SupplyStockStatusTests {
     @Test
     @DisplayName("BE2: thanh toán hết kho thì OUT_OF_STOCK, hoàn kho thì ACTIVE lại")
     void be2EntitySync() {
-        com.example.art_course.modules.product.entity.Supply s =
-                com.example.art_course.modules.product.entity.Supply.builder()
+        com.example.art_course.supply.entity.Supply s =
+                com.example.art_course.supply.entity.Supply.builder()
                         .stockQuantity(0).status("ACTIVE").build();
         s.syncStatusWithStock();
         assertEquals("OUT_OF_STOCK", s.getStatus());
