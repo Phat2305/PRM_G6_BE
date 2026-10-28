@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -70,9 +71,11 @@ public class AuthRepository {
 
     // Khóa R2 của file chứng chỉ, mỗi dòng một khóa, cùng thứ tự với certificates_text ("" = chưa có file).
     public String findCertificateKeys(UUID userId) {
-        return jdbcTemplate.query(
+        // Không dùng Stream.findFirst: cột NULL (giáo viên chưa có chứng chỉ) làm nó ném NullPointerException.
+        List<String> rows = jdbcTemplate.query(
                 "SELECT certificate_keys FROM teacher_profiles WHERE user_id = ?",
-                (rs, i) -> rs.getString(1), userId).stream().findFirst().orElse(null);
+                (rs, i) -> rs.getString(1), userId);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     public void updateCertificateKeys(UUID userId, String keys) {
