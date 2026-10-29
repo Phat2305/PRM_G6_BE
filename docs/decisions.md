@@ -2,6 +2,8 @@ Quyết định đã chốt (đặt tại docs/decisions.md)
 
 Các quyết định này ghi đè mọi chỗ cũ trong ảnh use case và checklist.
 
+SHOP-06 (29/10/2026, yêu cầu người dùng): mỗi phụ huynh dùng một địa chỉ trong `parent_profiles.shipping_address`, tên/SĐT dùng chung `full_name`/`phone`. FE đọc/lưu qua GET/PUT `/api/v1/users/me`; bỏ API `/me/addresses`. Khi chuyển đổi, giữ shipping_address đã có; nếu trống thì chép địa chỉ mặc định từ parent_addresses, chỉ bù phone còn trống và giữ tên hồ sơ. Xuất bản sao dữ liệu cũ, cập nhật BE/FE rồi chạy thủ công [V10__parent_profile_address.sql](../src/main/resources/db/migration/V10__parent_profile_address.sql) để chuyển dữ liệu và xóa bảng cũ; không dùng CASCADE. Địa chỉ phụ và người nhận riêng không được chuyển sang hồ sơ. Không chạy lại khối B5 của migration 08 sau bước này.
+
 #	Quyết định
 1	Khóa học không có trường trình độ (SRS CRS-01). Chưa thêm cột độ tuổi cho khóa vì #6 SRS chưa chốt. "Art Kit" là học cụ gợi ý tổng hợp từ các bài, bán giá lẻ, không có giá gói (CRS-08, #15).
 2	Chỉ Teacher upload video. UC 6.1 bỏ "Admin".

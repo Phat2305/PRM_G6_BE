@@ -19,6 +19,8 @@ public class UpdateProfileRequest {
     @Size(min = 1, max = 255, message = "Họ tên gồm 1-255 ký tự")
     private String fullName;
 
+    // SHOP-06: một địa chỉ mặc định trong parent_profiles.
+    @Size(max = 500, message = "Địa chỉ tối đa 500 ký tự")
     private String shippingAddress;
 
     @Size(max = 255, message = "Tài khoản ngân hàng tối đa 255 ký tự")

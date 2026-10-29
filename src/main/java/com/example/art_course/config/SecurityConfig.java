@@ -50,7 +50,6 @@ public class SecurityConfig {
                                 "/health"
                         ).permitAll()
                         .requestMatchers("/api/v1/cart/**", "/api/v1/orders/checkout", "/api/v1/orders/my-orders").hasRole("PARENT")
-                        .requestMatchers("/api/v1/users/me/addresses/**").hasRole("PARENT")
                         .requestMatchers("/api/v1/orders/teacher-orders").hasRole("TEACHER")
                         // Giáo viên chỉ được đọc đánh giá khóa của mình (kiểm tra sở hữu ở CourseService)
                         .requestMatchers(HttpMethod.GET, "/api/v1/course-reviews/course/*").hasAnyRole("PARENT", "TEACHER")

@@ -146,6 +146,24 @@ class UserAccountTest {
     }
 
     @Test
+    void updateProfile_parentSavesShippingAddressInProfile() {
+        User parent = user("PARENT");
+        String address = "12 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh";
+        when(authRepo.updateParentProfile(parent.getId(), null, address, null)).thenReturn(1);
+        when(authRepo.findParentProfile(parent.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("Mai", address, null, "0901234567", null, null)));
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setShippingAddress(address);
+
+        var response = userService.updateProfile(parent.getId(), request);
+
+        verify(authRepo).updateParentProfile(parent.getId(), null, address, null);
+        assertEquals(address, response.getShippingAddress());
+        assertEquals("Mai", response.getFullName());
+        assertEquals("0901234567", response.getPhone());
+    }
+
+    @Test
     void updateProfile_teacher_savesPhoneBioAndCertificatesAsLines() {
         User u = user("TEACHER");
         when(authRepo.updateTeacherProfile(u.getId(), null, null, "0901234567", "Dạy vẽ 8 năm",
