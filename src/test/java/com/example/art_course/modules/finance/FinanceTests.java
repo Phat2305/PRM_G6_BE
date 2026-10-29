@@ -55,6 +55,13 @@ import static org.mockito.Mockito.*;
 @DisplayName("PROMPT 5 — JUNIT 5 TEST SUITE (Escrow, Ledger, Withdrawals, Refunds)")
 public class FinanceTests {
 
+    private static RefundRepository refundTotals() {
+        RefundRepository refunds = mock(RefundRepository.class);
+        when(refunds.sumCompletedTeacherAmount(any())).thenReturn(BigDecimal.ZERO);
+        return refunds;
+    }
+
+
     // =========================================================================
     // TEST 1: GIẢI PHÓNG KHI CHỈ MỘT PHẦN DÒNG ĐỦ ĐIỀU KIỆN (MỤC 7.1, #26)
     // =========================================================================
@@ -107,7 +114,7 @@ public class FinanceTests {
                 .productName("Bộ cọ vẽ chuyên dụng")
                 .build();
 
-        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
         when(paymentRepo.findByOrderId(orderId)).thenReturn(Optional.of(payment));
         when(refundRepo.findByOrderId(orderId)).thenReturn(Collections.emptyList());
         when(orderDetailRepo.findByOrderId(orderId)).thenReturn(List.of(courseDetail, supplyDetail));
@@ -225,7 +232,7 @@ public class FinanceTests {
                 .status(WithdrawalStatus.PENDING)
                 .build();
 
-        when(withdrawalRepo.findById(requestId)).thenReturn(Optional.of(request));
+        when(withdrawalRepo.findByIdForUpdate(requestId)).thenReturn(Optional.of(request));
         when(withdrawalRepo.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         RejectWithdrawalRequest rejectReq = new RejectWithdrawalRequest("Thông tin số tài khoản không đúng tên đăng ký");
@@ -297,7 +304,7 @@ public class FinanceTests {
                 .status("APPROVED")
                 .build();
 
-        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
         when(paymentRepo.findByOrderId(orderId)).thenReturn(Optional.of(payment));
         when(orderDetailRepo.findById(detailId)).thenReturn(Optional.of(detail));
         when(refundRepo.findByOrderId(orderId)).thenReturn(List.of(existingRefund));
@@ -325,7 +332,9 @@ public class FinanceTests {
     }
 
     private RefundService refundServiceWith(RefundRepository refundRepo, NotificationService notif, ModerationService moderation) {
-        return new RefundService(refundRepo, mock(RefundItemRepository.class), mock(OrderRepository.class),
+        OrderRepository orders = mock(OrderRepository.class);
+        when(orders.findByIdForUpdate(any())).thenReturn(Optional.of(Order.builder().status(com.example.art_course.common.statemachine.OrderStatus.PAID).build()));
+        return new RefundService(refundRepo, mock(RefundItemRepository.class), orders,
                 mock(OrderDetailRepository.class), mock(PaymentRepository.class), mock(SupplyRepository.class),
                 mock(IEnrollmentContract.class), mock(LedgerService.class), notif, moderation,
                 mock(CustomizeRequestRepository.class), mock(CourseRepository.class));
@@ -383,8 +392,12 @@ public class FinanceTests {
         IEnrollmentContract enrollmentContract = mock(IEnrollmentContract.class);
         CustomizeRequestRepository requestRepo = mock(CustomizeRequestRepository.class);
         CourseRepository courseRepo = mock(CourseRepository.class);
-        RefundService refundService = new RefundService(refundRepo, refundItemRepo, mock(OrderRepository.class),
-                orderDetailRepo, mock(PaymentRepository.class), mock(SupplyRepository.class), enrollmentContract,
+        OrderRepository orders = mock(OrderRepository.class);
+        PaymentRepository payments = mock(PaymentRepository.class);
+        when(orders.findByIdForUpdate(any())).thenReturn(Optional.of(Order.builder().status(com.example.art_course.common.statemachine.OrderStatus.PAID).build()));
+        when(payments.findById(any())).thenReturn(Optional.of(Payment.builder().status(PaymentStatus.HELD).build()));
+        RefundService refundService = new RefundService(refundRepo, refundItemRepo, orders,
+                orderDetailRepo, payments, mock(SupplyRepository.class), enrollmentContract,
                 mock(LedgerService.class), mock(NotificationService.class), mock(ModerationService.class),
                 requestRepo, courseRepo);
 
@@ -493,7 +506,7 @@ public class FinanceTests {
         PaymentRepository paymentRepo = mock(PaymentRepository.class);
         WithdrawalRequestRepository withdrawalRepo = mock(WithdrawalRequestRepository.class);
 
-        LedgerService ledgerService = new LedgerService(ledgerRepo, paymentRepo, withdrawalRepo);
+        LedgerService ledgerService = new LedgerService(ledgerRepo, paymentRepo, withdrawalRepo, refundTotals());
 
         UUID teacherId = UUID.randomUUID();
 

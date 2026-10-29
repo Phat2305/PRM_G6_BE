@@ -30,6 +30,16 @@ public class Order {
     @Transient
     private String teacherName;
 
+    // SHOP-03: thông tin nhận hàng tại thời điểm đặt, độc lập với hồ sơ về sau.
+    @Column(name = "recipient_name", length = 255)
+    private String recipientName;
+
+    @Column(name = "recipient_phone", length = 20)
+    private String recipientPhone;
+
+    @Column(name = "shipping_address", columnDefinition = "text")
+    private String shippingAddress;
+
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalAmount;
 

@@ -41,7 +41,7 @@ class PaymentStockTests {
             mock(WebhookLogRepository.class),
             mock(MoneyLedgerRepository.class),
             supplyRepo, null, null,
-            mock(NotificationService.class), null);
+            mock(NotificationService.class), null, org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
     private final UUID paymentId = UUID.randomUUID();
     private final UUID orderId = UUID.randomUUID();
@@ -57,7 +57,7 @@ class PaymentStockTests {
         OrderDetail detail = OrderDetail.builder().orderId(orderId).supplyId(supplyId).quantity(2).build();
         supply = Supply.builder().id(supplyId).stockQuantity(2).reservedQuantity(2).soldQuantity(0).status("ACTIVE").build();
 
-        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
         when(detailRepo.findByOrderId(orderId)).thenReturn(List.of(detail));
         when(supplyRepo.findByIdForUpdate(supplyId)).thenReturn(Optional.of(supply));
     }

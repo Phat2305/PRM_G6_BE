@@ -40,13 +40,13 @@ class CustomizePaymentFundedTest {
         CustomizeRequestRepository requests = mock(CustomizeRequestRepository.class);
         PaymentService service = new PaymentService(orders, details, payments, mock(WebhookLogRepository.class),
                 mock(MoneyLedgerRepository.class), mock(SupplyRepository.class), mock(PaymentGatewayFactory.class),
-                mock(EnrollmentGrantService.class), mock(NotificationService.class), mock(ConfigService.class));
+                mock(EnrollmentGrantService.class), mock(NotificationService.class), mock(ConfigService.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
         ReflectionTestUtils.setField(service, "customizeRequestRepository", requests);
 
         UUID orderId = UUID.randomUUID();
         CustomizeRequest request = CustomizeRequest.builder()
                 .id(UUID.randomUUID()).parentId(UUID.randomUUID()).status("ACCEPTED").build();
-        when(orders.findById(orderId)).thenReturn(Optional.of(Order.builder().id(orderId).build()));
+        when(orders.findByIdForUpdate(orderId)).thenReturn(Optional.of(Order.builder().id(orderId).build()));
         when(details.findByOrderId(orderId)).thenReturn(List.of(OrderDetail.builder()
                 .orderId(orderId).customizeRequestId(request.getId()).productName("Vẽ mèo")
                 .unitPrice(new BigDecimal("450000")).quantity(1).subTotal(new BigDecimal("450000")).build()));

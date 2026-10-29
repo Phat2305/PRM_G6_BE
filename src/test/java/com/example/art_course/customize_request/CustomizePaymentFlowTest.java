@@ -126,7 +126,7 @@ class CustomizePaymentFlowTest {
                 .status(OrderStatus.PENDING_PAYMENT).expiredAt(Instant.now().plus(1, ChronoUnit.HOURS)).build();
         when(details.findByCustomizeRequestId(request.getId()))
                 .thenReturn(List.of(OrderDetail.builder().orderId(pending.getId()).build()));
-        when(orders.findById(pending.getId())).thenReturn(Optional.of(pending));
+        when(orders.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
         CustomizeOrderService service = orderService();
 
         assertSame(pending, service.orderFor(request.getId(), parentId));
@@ -138,5 +138,16 @@ class CustomizePaymentFlowTest {
         request.setStatus("OPEN");
         AppError open = assertThrows(AppError.class, () -> service.orderFor(request.getId(), parentId));
         assertEquals("REQUEST_NOT_ACCEPTED", open.getErrorCode());
+    }
+
+    @Test
+    void revokeCannotReopenARequestWhenPaymentWonTheOrderLock() {
+        Order paid = Order.builder().id(UUID.randomUUID()).status(OrderStatus.PAID).build();
+        when(details.findByCustomizeRequestId(request.getId()))
+                .thenReturn(List.of(OrderDetail.builder().orderId(paid.getId()).build()));
+        when(orders.findByIdForUpdate(paid.getId())).thenReturn(Optional.of(paid));
+        assertEquals("ORDER_ALREADY_PAID", assertThrows(AppError.class,
+                () -> orderService().cancelPending(request.getId())).getErrorCode());
+        verify(orders, never()).save(any());
     }
 }

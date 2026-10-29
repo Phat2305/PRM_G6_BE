@@ -59,7 +59,8 @@ class CustomizeQuoteExpirationJobTest {
     @DisplayName("quá hạn theo expiredAt: mở lại yêu cầu và trả báo giá về pending")
     void expiredOrderReopensRequest() {
         Order expired = order(Instant.now().minusSeconds(60));
-        when(orders.findByStatus(OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(expired));
+        when(orders.findIdsByStatus(OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(expired.getId()));
+        when(orders.findByIdForUpdate(expired.getId())).thenReturn(java.util.Optional.of(expired));
         CustomizeRequest request = request("ACCEPTED");
         Offer accepted = new Offer();
         accepted.setStatus("accepted");
@@ -85,7 +86,9 @@ class CustomizeQuoteExpirationJobTest {
     void notYetDueOrNotAccepted() {
         Order fresh = order(Instant.now().plusSeconds(3600));
         Order late = order(Instant.now().minusSeconds(5));
-        when(orders.findByStatus(OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(fresh, late));
+        when(orders.findIdsByStatus(OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(fresh.getId(), late.getId()));
+        when(orders.findByIdForUpdate(fresh.getId())).thenReturn(java.util.Optional.of(fresh));
+        when(orders.findByIdForUpdate(late.getId())).thenReturn(java.util.Optional.of(late));
         CustomizeRequest funded = request("FUNDED");
 
         assertEquals(1, job.expireOverdueCustomizeQuotes());

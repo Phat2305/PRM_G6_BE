@@ -2,7 +2,6 @@ package com.example.art_course.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -41,8 +40,7 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/api/v1/shop/courses/**",
                                 "/api/v1/supplies/**",
-                                "/api/v1/payments/webhook/**",
-                                "/api/v1/payments/return/**",
+                                "/api/v1/payments/webhook/PAYOS",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger/**",
@@ -61,10 +59,7 @@ public class SecurityConfig {
                                 "/api/v1/refunds/**",
                                 "/api/v1/fulfillment/**",
                                 "/api/v1/teacher/finance/**"
-                        ).access((authentication, context) -> new AuthorizationDecision(
-                                authentication.get().isAuthenticated()
-                                        && authentication.get().getAuthorities().stream()
-                                        .noneMatch(a -> "ROLE_CHILD".equals(a.getAuthority()))))
+                        ).hasAnyRole("PARENT", "TEACHER", "STAFF", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 // Mặc định Spring trả 401/403 body rỗng; ghi JSON cùng dạng ApiResponse để FE đọc error.message

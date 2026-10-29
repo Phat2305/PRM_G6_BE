@@ -195,7 +195,7 @@ public class WithdrawalService {
     }
 
     private WithdrawalRequest findRequest(UUID requestId) {
-        return withdrawalRequestRepository.findById(requestId)
+        return withdrawalRequestRepository.findByIdForUpdate(requestId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "WITHDRAWAL_NOT_FOUND", "Không tìm thấy yêu cầu rút tiền: " + requestId));
     }
 

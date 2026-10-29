@@ -37,7 +37,7 @@ class PaymentReconcileTests {
     private final PaymentService service = new PaymentService(
             orderRepo, mock(OrderDetailRepository.class), paymentRepo, mock(WebhookLogRepository.class),
             mock(MoneyLedgerRepository.class), mock(SupplyRepository.class), gatewayFactory, null,
-            mock(NotificationService.class), null);
+            mock(NotificationService.class), null, org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
     private Payment pending(UUID id) {
         return Payment.builder().id(id).orderId(UUID.randomUUID()).gateway("PAYOS").status(PaymentStatus.PENDING)
@@ -58,9 +58,11 @@ class PaymentReconcileTests {
     void reconcileOutcomes() {
         UUID paidId = UUID.randomUUID();
         Payment paid = pending(paidId);
-        when(paymentRepo.findById(paidId)).thenReturn(Optional.of(paid));
+        when(paymentRepo.findOrderIdById(paidId)).thenReturn(Optional.of(paid.getOrderId()));
+        when(orderRepo.findByIdForUpdate(paid.getOrderId())).thenReturn(Optional.of(Order.builder().id(paid.getOrderId()).build()));
+        when(paymentRepo.findByIdForUpdate(paidId)).thenReturn(Optional.of(paid));
         when(paymentRepo.transition(paidId, PaymentStatus.PENDING, PaymentStatus.HELD)).thenReturn(1);
-        when(orderRepo.findById(paid.getOrderId())).thenReturn(Optional.of(Order.builder().id(paid.getOrderId())
+        when(orderRepo.findByIdForUpdate(paid.getOrderId())).thenReturn(Optional.of(Order.builder().id(paid.getOrderId())
                 .parentId(UUID.randomUUID()).teacherId(UUID.randomUUID()).build()));
         when(gatewayFactory.getGateway("PAYOS")).thenReturn(gateway);
         when(gateway.queryTransaction(paid)).thenReturn(new PaymentGateway.GatewayQueryResult(true, true, "tx", paid.getAmount()));
@@ -69,7 +71,9 @@ class PaymentReconcileTests {
 
         UUID unpaidId = UUID.randomUUID();
         Payment unpaid = pending(unpaidId);
-        when(paymentRepo.findById(unpaidId)).thenReturn(Optional.of(unpaid));
+        when(paymentRepo.findOrderIdById(unpaidId)).thenReturn(Optional.of(unpaid.getOrderId()));
+        when(orderRepo.findByIdForUpdate(unpaid.getOrderId())).thenReturn(Optional.of(Order.builder().id(unpaid.getOrderId()).build()));
+        when(paymentRepo.findByIdForUpdate(unpaidId)).thenReturn(Optional.of(unpaid));
         when(gateway.queryTransaction(unpaid)).thenReturn(new PaymentGateway.GatewayQueryResult(true, false, null, null));
         assertFalse(service.reconcilePayment(unpaidId));
         verify(paymentRepo, never()).transition(eq(unpaidId), any(), any());
@@ -77,7 +81,9 @@ class PaymentReconcileTests {
         UUID doneId = UUID.randomUUID();
         Payment done = pending(doneId);
         done.setStatus(PaymentStatus.HELD);
-        when(paymentRepo.findById(doneId)).thenReturn(Optional.of(done));
+        when(paymentRepo.findOrderIdById(doneId)).thenReturn(Optional.of(done.getOrderId()));
+        when(orderRepo.findByIdForUpdate(done.getOrderId())).thenReturn(Optional.of(Order.builder().id(done.getOrderId()).build()));
+        when(paymentRepo.findByIdForUpdate(doneId)).thenReturn(Optional.of(done));
         assertFalse(service.reconcilePayment(doneId));
         verify(gateway, never()).queryTransaction(done);
     }

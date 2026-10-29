@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -38,6 +39,11 @@ public class PayOSPaymentGateway implements PaymentGateway {
     private String endpoint;
 
     private final RestClient http = RestClient.create();
+    private final JdbcTemplate jdbc;
+
+    public PayOSPaymentGateway(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
 
     @Override
     public String getGatewayCode() {
@@ -49,7 +55,8 @@ public class PayOSPaymentGateway implements PaymentGateway {
     public String createPaymentUrl(Order order, Payment payment, String returnUrl) {
         requireConfigured();
         // orderCode của PayOS là số nguyên duy nhất; mỗi lần tạo link dùng mã mới
-        long orderCode = System.currentTimeMillis();
+        // PAY-01: sequence dùng chung giữa các request và instance.
+        long orderCode = jdbc.queryForObject("SELECT nextval('public.payos_order_code_seq')", Long.class);
         long amount = payment.getAmount().longValueExact();
         String description = "DH" + orderCode % 1_000_000_000L; // tối đa 25 ký tự
         // PayOS tự gắn status/cancel vào cả hai URL; client dựa vào đó để phân biệt
@@ -138,7 +145,13 @@ public class PayOSPaymentGateway implements PaymentGateway {
         String status = String.valueOf(data.get("status"));
         boolean paid = "PAID".equals(status);
         boolean cancelled = "CANCELLED".equals(status) || "EXPIRED".equals(status);
-        return new GatewayQueryResult(true, paid, String.valueOf(data.get("id")), payment.getAmount(), cancelled);
+        BigDecimal amount;
+        try {
+            amount = new BigDecimal(String.valueOf(data.get("amountPaid")));
+        } catch (NumberFormatException ex) {
+            return new GatewayQueryResult(false, false, null, BigDecimal.ZERO);
+        }
+        return new GatewayQueryResult(true, paid, String.valueOf(data.get("id")), amount, cancelled);
     }
 
     private void requireConfigured() {

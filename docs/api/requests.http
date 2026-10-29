@@ -98,14 +98,14 @@ Authorization: Bearer {{parentToken}}
 GET {{baseUrl}}/api/v1/orders/99999999-9999-9999-9999-999999999999
 Authorization: Bearer {{parentToken}}
 
-### 2.8 Khởi tạo thanh toán tạo link VNPay/MoMo/Mock (PAY-01)
+### 2.8 Khởi tạo link thanh toán PayOS (PAY-01)
 POST {{baseUrl}}/api/v1/payments/create
 Authorization: Bearer {{parentToken}}
 Content-Type: application/json
 
 {
   "orderId": "99999999-9999-9999-9999-999999999999",
-  "gateway": "MOCK",
+  "gateway": "PAYOS",
   "returnUrl": "http://localhost:3000/payment/callback"
 }
 
@@ -140,8 +140,9 @@ Content-Type: application/json
 ### PHẦN 3: XỬ LÝ THANH TOÁN WEBHOOK (PAYMENT GATEWAY IPN)
 ### -------------------------------------------------------------------------
 
-### 3.1 Giả lập Webhook MOCK thanh toán thành công (Chuyển Order PAID, Payment HELD, cấn trừ kho)
-POST {{baseUrl}}/api/v1/payments/webhook/MOCK?orderId=99999999-9999-9999-9999-999999999999&amount=530000&vnp_ResponseCode=00&signature=mock_valid_signature
+### 3.1 Webhook PayOS
+# PayOS gọi POST /api/v1/payments/webhook/PAYOS với JSON có chữ ký HMAC hợp lệ.
+# Không có endpoint webhook/return giả lập; không dùng chữ ký mẫu để thay đổi thanh toán.
 
 
 ### -------------------------------------------------------------------------

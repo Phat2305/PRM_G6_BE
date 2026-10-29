@@ -40,6 +40,20 @@ class VideoAccessServiceTest {
     }
 
     @Test
+    void inactiveEnrollmentDoesNotGrantVideoAccessThroughTheRealContract() {
+        lessonWith(false);
+        var repo = mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class);
+        var contract = new com.example.art_course.contracts.DefaultEnrollmentContract(repo);
+        var access = new VideoAccessService(lessons, courses, children, requests, contract);
+        UUID child = UUID.randomUUID();
+        // Có dòng ghi danh nhưng không ACTIVE: trước đây existsById vẫn cho xem.
+        when(repo.existsById(any())).thenReturn(true);
+        assertFalse(access.canStream(hlsId, child, "CHILD"));
+        when(repo.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(child, course.getId(), "active")).thenReturn(true);
+        assertTrue(access.canStream(hlsId, child, "CHILD"));
+    }
+
+    @Test
     void staffAndAdminMayAlwaysStream_forModeration() {
         assertTrue(service.canStream(hlsId, UUID.randomUUID(), "STAFF"));
         assertTrue(service.canStream(hlsId, UUID.randomUUID(), "ADMIN"));

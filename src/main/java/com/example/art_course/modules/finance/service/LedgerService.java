@@ -26,6 +26,7 @@ public class LedgerService {
     private final MoneyLedgerRepository moneyLedgerRepository;
     private final PaymentRepository paymentRepository;
     private final WithdrawalRequestRepository withdrawalRequestRepository;
+    private final com.example.art_course.modules.refund.repository.RefundRepository refundRepository;
 
     /**
      * Tính toán số dư thời gian thực của Teacher trực tiếp từ sổ cái và các giao dịch (FIN-03).
@@ -36,7 +37,7 @@ public class LedgerService {
         List<Payment> payments = paymentRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId);
         BigDecimal heldBalance = payments.stream()
                 .filter(p -> p.getStatus() == PaymentStatus.HELD)
-                .map(Payment::getNetAmount)
+                .map(p -> p.getNetAmount().subtract(refundRepository.sumCompletedTeacherAmount(p.getId())).max(BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 2. Tiền có thể rút (Available Balance từ sổ cái money_ledger)
@@ -78,10 +79,18 @@ public class LedgerService {
     public MoneyLedger recordEntry(UUID teacherId, String entryType, BigDecimal amount,
                                   UUID paymentId, UUID refundId, UUID withdrawalId,
                                   String note, UUID createdBy) {
+        return recordEntry(teacherId, entryType, amount, paymentId, refundId, withdrawalId, note, createdBy, true);
+    }
+
+    @Transactional
+    public MoneyLedger recordEntry(UUID teacherId, String entryType, BigDecimal amount,
+                                  UUID paymentId, UUID refundId, UUID withdrawalId,
+                                  String note, UUID createdBy, boolean affectsAvailable) {
         MoneyLedger entry = MoneyLedger.builder()
                 .teacherId(teacherId)
                 .entryType(entryType)
                 .amount(amount)
+                .affectsAvailable(affectsAvailable)
                 .paymentId(paymentId)
                 .refundId(refundId)
                 .withdrawalId(withdrawalId)

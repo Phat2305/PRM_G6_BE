@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.util.Collection;
 import java.util.List;
@@ -14,6 +16,11 @@ import java.util.UUID;
 
 @Repository
 public interface WithdrawalRequestRepository extends JpaRepository<WithdrawalRequest, UUID> {
+    // FIN-05/06: các quyết định cho cùng một yêu cầu chạy lần lượt.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT w FROM WithdrawalRequest w WHERE w.id = :id")
+    Optional<WithdrawalRequest> findByIdForUpdate(@Param("id") UUID id);
+
     List<WithdrawalRequest> findByTeacherIdOrderByCreatedAtDesc(UUID teacherId);
     boolean existsByTeacherIdAndStatusIn(UUID teacherId, Collection<WithdrawalStatus> statuses);
     Optional<WithdrawalRequest> findFirstByTeacherIdAndStatusIn(UUID teacherId, Collection<WithdrawalStatus> statuses);

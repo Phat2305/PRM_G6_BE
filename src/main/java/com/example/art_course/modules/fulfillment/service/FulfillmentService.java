@@ -2,6 +2,8 @@ package com.example.art_course.modules.fulfillment.service;
 
 import com.example.art_course.common.AppError;
 import com.example.art_course.common.statemachine.DeliveryStatus;
+import com.example.art_course.common.statemachine.OrderStatus;
+import com.example.art_course.common.statemachine.PaymentStatus;
 import com.example.art_course.common.statemachine.StateMachineValidator;
 import com.example.art_course.modules.fulfillment.dto.DeliveryStatusResponseDto;
 import com.example.art_course.modules.fulfillment.dto.ShippingUpdateRequest;
@@ -249,12 +251,13 @@ public class FulfillmentService {
         int autoConfirmDays = configService.getAutoConfirmDeliveryDays();
         Instant threshold = Instant.now().minus(autoConfirmDays, ChronoUnit.DAYS);
 
-        List<OrderDetail> deliveredItems = orderDetailRepository.findByDeliveryStatusAndDeliveredAtBefore(
+        List<UUID> deliveredItems = orderDetailRepository.findDeliveredIdsBefore(
                 DeliveryStatus.DELIVERED, threshold
         );
 
         int count = 0;
-        for (OrderDetail detail : deliveredItems) {
+        for (UUID detailId : deliveredItems) {
+            OrderDetail detail = findSupplyDetail(detailId);
             if (detail.getDeliveryStatus() == DeliveryStatus.DELIVERED) {
                 detail.setDeliveryStatus(DeliveryStatus.COMPLETED);
                 detail.setConfirmedDeliveredAt(Instant.now());
@@ -273,6 +276,12 @@ public class FulfillmentService {
     }
 
     private OrderDetail findSupplyDetail(UUID orderDetailId) {
+        UUID orderId = orderDetailRepository.findOrderIdById(orderDetailId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_DETAIL_NOT_FOUND", "Không tìm thấy dòng hàng"));
+        Order order = findOrder(orderId);
+        if (order.getStatus() != OrderStatus.PAID) {
+            throw new AppError(HttpStatus.CONFLICT, "ORDER_NOT_PAID", "Chỉ xử lý giao hàng cho đơn đã thanh toán");
+        }
         OrderDetail detail = orderDetailRepository.findById(orderDetailId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_DETAIL_NOT_FOUND", "Không tìm thấy dòng chi tiết đơn hàng: " + orderDetailId));
         if (!"SUPPLY".equalsIgnoreCase(detail.getProductType())) {
@@ -282,7 +291,7 @@ public class FulfillmentService {
     }
 
     private Order findOrder(UUID orderId) {
-        return orderRepository.findById(orderId)
+        return orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng"));
     }
 
@@ -306,8 +315,15 @@ public class FulfillmentService {
     }
 
     private void createRefundRequest(Order order, OrderDetail detail, String reason) {
-        Payment payment = paymentRepository.findByOrderId(order.getId()).orElse(null);
-        UUID paymentId = payment != null ? payment.getId() : UUID.randomUUID();
+        Payment payment = paymentRepository.findByOrderId(order.getId())
+                .orElseThrow(() -> new AppError(HttpStatus.CONFLICT, "PAYMENT_NOT_PAID", "Không tìm thấy thanh toán thành công"));
+        if (payment.getStatus() != PaymentStatus.HELD && payment.getStatus() != PaymentStatus.RELEASED) {
+            throw new AppError(HttpStatus.CONFLICT, "PAYMENT_NOT_PAID", "Chưa có thanh toán thành công");
+        }
+        if (refundItemRepository.hasNonRejectedRefund(detail.getId())) {
+            throw new AppError(HttpStatus.CONFLICT, "DUPLICATE_REFUND", "Dòng hàng đã có yêu cầu hoàn tiền");
+        }
+        UUID paymentId = payment.getId();
 
         Refund refund = Refund.builder()
                 .paymentId(paymentId)

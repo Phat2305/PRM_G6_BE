@@ -40,6 +40,7 @@ public class CustomizeQuoteExpirationJob {
 
     @Scheduled(fixedDelay = 300000) // Quét mỗi 5 phút
     @SchedulerLock(name = "CustomizeQuoteExpirationJob", lockAtLeastFor = "30s", lockAtMostFor = "10m")
+    @Transactional
     public void run() {
         jobTracker.track("CustomizeQuoteExpirationJob", this::expireOverdueCustomizeQuotes);
     }
@@ -47,10 +48,12 @@ public class CustomizeQuoteExpirationJob {
     @Transactional
     public int expireOverdueCustomizeQuotes() {
         Instant now = Instant.now();
-        List<Order> pendingOrders = orderRepository.findByStatus(OrderStatus.PENDING_PAYMENT);
+        List<UUID> pendingOrders = orderRepository.findIdsByStatus(OrderStatus.PENDING_PAYMENT);
         int count = 0;
 
-        for (Order order : pendingOrders) {
+        for (UUID orderId : pendingOrders) {
+            Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
+            if (order == null || order.getStatus() != OrderStatus.PENDING_PAYMENT) continue;
             // Hạn theo cấu hình lúc tạo đơn (expiredAt); đơn cũ chưa có thì mặc định 24h kể từ lúc tạo.
             Instant deadline = order.getExpiredAt() != null
                     ? order.getExpiredAt()

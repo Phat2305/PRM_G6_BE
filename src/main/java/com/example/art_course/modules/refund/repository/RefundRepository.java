@@ -32,4 +32,19 @@ public interface RefundRepository extends JpaRepository<Refund, UUID> {
     // ADM-04: tổng tiền đã hoàn xong.
     @Query("SELECT COALESCE(SUM(r.totalAmount), 0) FROM Be2Refund r WHERE UPPER(r.status) = 'COMPLETED'")
     BigDecimal sumCompleted();
+
+    @Query("SELECT COALESCE(SUM(r.totalAmount), 0) FROM Be2Refund r "
+            + "WHERE r.paymentId = :paymentId AND UPPER(r.status) = 'COMPLETED'")
+    BigDecimal sumCompletedByPaymentId(@Param("paymentId") UUID paymentId);
+
+    // FIN-09: phần giáo viên chịu = tiền hoàn trừ hoa hồng của các dòng được hoàn.
+    @Query(value = """
+            SELECT COALESCE(SUM(r.total_amount - COALESCE((
+                SELECT SUM(d.commission_amount)
+                FROM refund_items i JOIN order_details d ON d.id = i.order_detail_id
+                WHERE i.refund_id = r.id
+            ), 0)), 0)
+            FROM refunds r WHERE r.payment_id = :paymentId AND UPPER(r.status) = 'COMPLETED'
+            """, nativeQuery = true)
+    BigDecimal sumCompletedTeacherAmount(@Param("paymentId") UUID paymentId);
 }

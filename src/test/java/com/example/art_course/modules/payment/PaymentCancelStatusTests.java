@@ -36,7 +36,7 @@ class PaymentCancelStatusTests {
     private final PaymentService service = new PaymentService(
             orderRepo, mock(OrderDetailRepository.class), paymentRepo, mock(WebhookLogRepository.class),
             mock(MoneyLedgerRepository.class), mock(SupplyRepository.class), gatewayFactory, null,
-            mock(NotificationService.class), null);
+            mock(NotificationService.class), null, org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
     private final UUID parent = UUID.randomUUID();
     private final UUID paymentId = UUID.randomUUID();
@@ -45,8 +45,9 @@ class PaymentCancelStatusTests {
             .teacherId(UUID.randomUUID()).createdAt(Instant.now()).build();
 
     private PaymentStatusResponseDto query(PaymentGateway.GatewayQueryResult result) {
-        when(paymentRepo.findById(paymentId)).thenReturn(Optional.of(payment));
-        when(orderRepo.findById(payment.getOrderId())).thenReturn(Optional.of(Order.builder().id(payment.getOrderId())
+        when(paymentRepo.findOrderIdById(paymentId)).thenReturn(Optional.of(payment.getOrderId()));
+        when(paymentRepo.findByIdForUpdate(paymentId)).thenReturn(Optional.of(payment));
+        when(orderRepo.findByIdForUpdate(payment.getOrderId())).thenReturn(Optional.of(Order.builder().id(payment.getOrderId())
                 .parentId(parent).teacherId(payment.getTeacherId()).build()));
         when(gatewayFactory.getGateway("PAYOS")).thenReturn(gateway);
         when(gateway.queryTransaction(payment)).thenReturn(result);

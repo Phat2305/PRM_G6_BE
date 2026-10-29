@@ -29,6 +29,11 @@ public class MoneyLedger {
     @Column(nullable = false)
     private BigDecimal amount;
 
+    // FIN-09: hoàn từ tiền đang giữ không trừ số dư đã giải ngân của đơn khác.
+    @Column(name = "affects_available", nullable = false)
+    @Builder.Default
+    private boolean affectsAvailable = true;
+
     @Column(name = "payment_id")
     private UUID paymentId;
 

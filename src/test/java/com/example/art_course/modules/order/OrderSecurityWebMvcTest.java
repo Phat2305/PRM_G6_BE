@@ -74,6 +74,30 @@ public class OrderSecurityWebMvcTest {
         public OrderController orderController(OrderService orderService, UserRepository userRepository) {
             return new OrderController(orderService, userRepository);
         }
+
+        @Bean
+        public com.example.art_course.modules.payment.service.PaymentService paymentService() {
+            return mock(com.example.art_course.modules.payment.service.PaymentService.class);
+        }
+
+        @Bean
+        public com.example.art_course.modules.payment.controller.PaymentController paymentController(
+                com.example.art_course.modules.payment.service.PaymentService service, UserRepository users) {
+            return new com.example.art_course.modules.payment.controller.PaymentController(service, users);
+        }
+
+        @Bean
+        public com.example.art_course.video.service.VideoStorageService videoStorage() {
+            return mock(com.example.art_course.video.service.VideoStorageService.class);
+        }
+
+        @Bean
+        public com.example.art_course.video.controller.VideoController videoController(
+                com.example.art_course.video.service.VideoStorageService storage) {
+            return new com.example.art_course.video.controller.VideoController(storage,
+                    mock(com.example.art_course.video.messaging.VideoProcessingPublisher.class),
+                    mock(com.example.art_course.video.service.VideoLessonService.class));
+        }
     }
 
     @Autowired
@@ -136,6 +160,46 @@ public class OrderSecurityWebMvcTest {
                 .expiration(new Date(System.currentTimeMillis() + 3600_000))
                 .signWith(Keys.hmacShaKeyFor(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8)))
                 .compact();
+    }
+
+    @Test
+    void mockWebhookHasNoPublicRoute() throws Exception {
+        mockMvc.perform(post("/api/v1/payments/webhook/MOCK")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"signature\":\"anything\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/payments/webhook/MOCK")
+                .header("Authorization", "Bearer " + createToken(parentAId, "PARENT", "ACCESS"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"signature\":\"anything\"}"))
+                .andExpect(status().isNotFound());
+        verifyNoInteractions(context.getBean(com.example.art_course.modules.payment.service.PaymentService.class));
+    }
+
+    @Test
+    void onlyTeacherCanUploadGenericVideo() throws Exception {
+        var storage = context.getBean(com.example.art_course.video.service.VideoStorageService.class);
+        when(storage.store(any())).thenReturn(new com.example.art_course.video.service.VideoStorageService.StoredVideo("clip.mp4", "unused-test-path"));
+        var file = new org.springframework.mock.web.MockMultipartFile("file", "clip.mp4", "video/mp4", new byte[]{1});
+        for (String role : java.util.List.of("PARENT", "CHILD", "STAFF", "ADMIN")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/videos/upload")
+                    .file(file).header("Authorization", "Bearer " + createToken(UUID.randomUUID(), role, "ACCESS")))
+                    .andExpect(status().isForbidden());
+        }
+        verify(storage, never()).store(any());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/videos/upload")
+                .file(file).header("Authorization", "Bearer " + createToken(teacherId, "TEACHER", "ACCESS")))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void expiredAndTamperedTokensAreRejectedByTheRealFilter() throws Exception {
+        String expired = Jwts.builder().subject(parentAId.toString()).claim("role", "PARENT")
+                .claim("type", "ACCESS").expiration(Date.from(Instant.now().minusSeconds(1)))
+                .signWith(Keys.hmacShaKeyFor(TEST_JWT_SECRET.getBytes(StandardCharsets.UTF_8))).compact();
+        mockMvc.perform(get("/api/v1/orders/my-orders").header("Authorization", "Bearer " + expired))
+                .andExpect(status().isUnauthorized());
+        String tampered = createToken(parentAId, "PARENT", "ACCESS") + "bad";
+        mockMvc.perform(get("/api/v1/orders/my-orders").header("Authorization", "Bearer " + tampered))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -79,9 +79,10 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
     }
 
-    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNoResource(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
-        ApiResponse<Void> response = ApiResponse.error("NOT_FOUND", "Không tìm thấy API: /" + ex.getResourcePath());
+    @ExceptionHandler({org.springframework.web.servlet.resource.NoResourceFoundException.class,
+            org.springframework.web.servlet.NoHandlerFoundException.class})
+    public ResponseEntity<ApiResponse<Void>> handleNoResource(Exception ex) {
+        ApiResponse<Void> response = ApiResponse.error("NOT_FOUND", "Không tìm thấy API");
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
     }
 

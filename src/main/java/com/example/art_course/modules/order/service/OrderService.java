@@ -60,7 +60,7 @@ public class OrderService {
             Cart cart = cartRepository.findByParentId(parentId)
                     .orElseThrow(() -> new AppError(HttpStatus.BAD_REQUEST, "CART_EMPTY", "Giỏ hàng đang trống"));
             cartId = cart.getId();
-            itemsToProcess = cartItemRepository.findByCartId(cartId);
+            itemsToProcess = new ArrayList<>(cartItemRepository.findByCartId(cartId));
             if (itemsToProcess.isEmpty()) {
                 throw new AppError(HttpStatus.BAD_REQUEST, "CART_EMPTY", "Giỏ hàng đang trống");
             }
@@ -79,6 +79,9 @@ public class OrderService {
             }
         }
 
+        // PAY-07: các request khóa dụng cụ theo cùng thứ tự để tránh deadlock.
+        itemsToProcess.sort(Comparator.comparing(i -> i.getSupplyId() == null ? "" : i.getSupplyId().toString()));
+
         // Nhóm theo Teacher
         Map<UUID, List<PreparedItem>> teacherGroups = new LinkedHashMap<>();
 
@@ -93,6 +96,7 @@ public class OrderService {
 
                 // Bé có thể chọn sau khi thanh toán (assignChild); có chọn sẵn thì chặn mua trùng (SHOP-04)
                 if (item.getChildId() != null) {
+                    requireOwnedChild(parentId, item.getChildId());
                     requireChildNotEnrolled(item.getChildId(), item.getCourseId());
                 }
 
@@ -165,7 +169,11 @@ public class OrderService {
             Money shippingFee = hasSupply ? resolveShippingFee(teacherId) : Money.ZERO;
             Money totalAmount = subtotal.add(shippingFee);
 
+            if (hasSupply) validateRecipient(request);
             Order order = Order.builder()
+                    .recipientName(hasSupply ? request.getRecipientName().trim() : null)
+                    .recipientPhone(hasSupply ? request.getRecipientPhone().replace(" ", "").trim() : null)
+                    .shippingAddress(hasSupply ? request.getShippingAddress().trim() : null)
                     .parentId(parentId)
                     .teacherId(teacherId)
                     .totalAmount(totalAmount.getAmount())
@@ -209,6 +217,23 @@ public class OrderService {
         return createdOrders;
     }
 
+    // SHOP-03: nhận hàng vật lý phải đủ tên, SĐT và địa chỉ trước khi tạo đơn.
+    private void validateRecipient(CheckoutRequest request) {
+        String name = request.getRecipientName();
+        String phone = request.getRecipientPhone();
+        String address = request.getShippingAddress();
+        if (name == null || name.isBlank() || name.trim().length() > 255
+                || phone == null || !phone.replace(" ", "").trim().matches("^(0|\\+84)\\d{9}$")
+                || address == null || address.isBlank() || address.trim().length() > 500) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_RECIPIENT", "Cần tên, số điện thoại hợp lệ và địa chỉ giao hàng (tối đa 500 ký tự)");
+        }
+    }
+
+    private void requireOwnedChild(UUID parentId, UUID childId) {
+        childRepository.findByUserIdAndParentId(childId, parentId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "CHILD_NOT_FOUND", "Không tìm thấy bé của bạn"));
+    }
+
     private void requireChildNotEnrolled(UUID childId, UUID courseId) {
         String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
         List<?> enrolled = entityManager.createNativeQuery(enrollSql)
@@ -226,7 +251,7 @@ public class OrderService {
      */
     @Transactional
     public OrderDetail assignChild(UUID orderId, UUID detailId, UUID parentId, UUID childId) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng"));
         if (!order.getParentId().equals(parentId)) {
             throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Đơn hàng này không thuộc về bạn");
@@ -242,11 +267,13 @@ public class OrderService {
         if (!"COURSE".equalsIgnoreCase(detail.getProductType())) {
             throw new AppError(HttpStatus.BAD_REQUEST, "NOT_A_COURSE", "Chỉ khóa học mới gán cho bé");
         }
+        if (detail.getDeliveryStatus() == DeliveryStatus.REFUNDED) {
+            throw new AppError(HttpStatus.CONFLICT, "ITEM_REFUNDED", "Khóa học đã được hoàn tiền");
+        }
         if (detail.getChildId() != null) {
             throw new AppError(HttpStatus.CONFLICT, "CHILD_ALREADY_ASSIGNED", "Khóa học đã được gán cho bé");
         }
-        childRepository.findByUserIdAndParentId(childId, parentId)
-                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "CHILD_NOT_FOUND", "Không tìm thấy bé của bạn"));
+        requireOwnedChild(parentId, childId);
         requireChildNotEnrolled(childId, detail.getCourseId());
 
         detail.setChildId(childId);
@@ -303,7 +330,7 @@ public class OrderService {
      */
     @Transactional
     public void cancelOrder(UUID orderId, UUID userId, String role) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng"));
 
         boolean isOwner = "PARENT".equalsIgnoreCase(role) && order.getParentId().equals(userId);
@@ -317,10 +344,11 @@ public class OrderService {
         }
 
         // Hoàn trả tồn giữ chỗ
-        List<OrderDetail> details = orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(orderId);
+        List<OrderDetail> details = new ArrayList<>(orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(orderId));
+        details.sort(Comparator.comparing(d -> d.getSupplyId().toString()));
         for (OrderDetail d : details) {
             if (d.getSupplyId() != null) {
-                supplyRepository.findById(d.getSupplyId()).ifPresent(s -> {
+                supplyRepository.findByIdForUpdate(d.getSupplyId()).ifPresent(s -> {
                     s.setReservedQuantity(Math.max(0, s.getReservedQuantity() - d.getQuantity()));
                     supplyRepository.save(s);
                 });
@@ -337,20 +365,24 @@ public class OrderService {
      */
     @Transactional
     public int expirePendingOrders() {
-        List<Order> expiredOrders = orderRepository.findByStatusAndExpiredAtLessThanEqual(
+        List<UUID> expiredOrders = orderRepository.findExpiredIds(
                 OrderStatus.PENDING_PAYMENT, Instant.now()
         );
 
         int count = 0;
-        for (Order order : expiredOrders) {
+        for (UUID orderId : expiredOrders) {
+            Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
+            if (order == null || order.getStatus() != OrderStatus.PENDING_PAYMENT
+                    || order.getExpiredAt() == null || order.getExpiredAt().isAfter(Instant.now())) continue;
             // Đơn customize do CustomizeQuoteExpirationJob xử lý vì phải mở lại yêu cầu và báo giá (CUS-18).
             if (!orderDetailRepository.findByOrderIdAndCustomizeRequestIdIsNotNull(order.getId()).isEmpty()) {
                 continue;
             }
-            List<OrderDetail> details = orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(order.getId());
+            List<OrderDetail> details = new ArrayList<>(orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(order.getId()));
+            details.sort(Comparator.comparing(d -> d.getSupplyId().toString()));
             for (OrderDetail d : details) {
                 if (d.getSupplyId() != null) {
-                    supplyRepository.findById(d.getSupplyId()).ifPresent(s -> {
+                    supplyRepository.findByIdForUpdate(d.getSupplyId()).ifPresent(s -> {
                         s.setReservedQuantity(Math.max(0, s.getReservedQuantity() - d.getQuantity()));
                         supplyRepository.save(s);
                     });

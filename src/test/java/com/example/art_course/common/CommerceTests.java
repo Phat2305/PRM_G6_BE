@@ -1,15 +1,12 @@
 package com.example.art_course.common;
 
 import com.example.art_course.common.statemachine.OrderStatus;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,64 +16,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("PROMPT 3 — JUNIT 5 TEST SUITE (Task A: Commerce & Orders)")
 public class CommerceTests {
 
-    private static final String TEST_ONLY_MOCK_KEY = "junit-test-only-hmac-sha-256-mock-key-not-for-production-use";
 
-    // =========================================================================
-    // TEST 1: TÁCH ĐƠN NHIỀU TEACHER (BR-04, SHOP-05, #25)
-    // =========================================================================
-    @Test
-    @DisplayName("1. Tách đơn nhiều Teacher: giỏ hàng nhiều giáo viên tách thành mỗi giáo viên 1 đơn riêng")
-    void testMultiTeacherOrderSplit() {
-        record CartItemTest(String itemType, UUID teacherId, String title, Money unitPrice, int quantity, UUID childId) {}
-
-        UUID teacher1 = UUID.randomUUID();
-        UUID teacher2 = UUID.randomUUID();
-        UUID child1 = UUID.randomUUID();
-
-        List<CartItemTest> cartItems = List.of(
-                new CartItemTest("COURSE", teacher1, "Khóa học vẽ nét", Money.of(300000), 1, child1),
-                new CartItemTest("SUPPLY", teacher1, "Bộ bút chì màu", Money.of(120000), 1, null),
-                new CartItemTest("COURSE", teacher2, "Màu nước nâng cao", Money.of(500000), 1, child1)
-        );
-
-        // Gom nhóm theo Teacher
-        Map<UUID, List<CartItemTest>> teacherGroups = new LinkedHashMap<>();
-        for (CartItemTest item : cartItems) {
-            teacherGroups.computeIfAbsent(item.teacherId(), k -> new ArrayList<>()).add(item);
-        }
-
-        assertEquals(2, teacherGroups.size(), "Phải tách thành đúng 2 đơn theo 2 Teacher (BR-04, #25)");
-
-        // Kiểm tra đơn Teacher 1 (Khóa học 300k + Dụng cụ 120k + Phí ship 30k = 450k)
-        List<CartItemTest> itemsTeacher1 = teacherGroups.get(teacher1);
-        Money subtotal1 = Money.ZERO;
-        boolean hasSupply1 = false;
-        for (CartItemTest it : itemsTeacher1) {
-            subtotal1 = subtotal1.add(it.unitPrice().multiply(it.quantity()));
-            if ("SUPPLY".equals(it.itemType())) hasSupply1 = true;
-        }
-        Money shippingFee1 = hasSupply1 ? Money.of(30000) : Money.ZERO;
-        Money total1 = subtotal1.add(shippingFee1);
-
-        assertEquals("420000", subtotal1.toString());
-        assertEquals("30000", shippingFee1.toString(), "Đơn có dụng cụ phải tính phí ship cố định 30.000 VND (#8)");
-        assertEquals("450000", total1.toString());
-
-        // Kiểm tra đơn Teacher 2 (Khóa học 500k, không có dụng cụ -> ship 0 VND)
-        List<CartItemTest> itemsTeacher2 = teacherGroups.get(teacher2);
-        Money subtotal2 = Money.ZERO;
-        boolean hasSupply2 = false;
-        for (CartItemTest it : itemsTeacher2) {
-            subtotal2 = subtotal2.add(it.unitPrice().multiply(it.quantity()));
-            if ("SUPPLY".equals(it.itemType())) hasSupply2 = true;
-        }
-        Money shippingFee2 = hasSupply2 ? Money.of(30000) : Money.ZERO;
-        Money total2 = subtotal2.add(shippingFee2);
-
-        assertEquals("500000", subtotal2.toString());
-        assertEquals("0", shippingFee2.toString(), "Đơn chỉ có khóa học không tính phí ship");
-        assertEquals("500000", total2.toString());
-    }
+    // Tách đơn được kiểm tra qua OrderService thật trong OrderServiceSafetyTest.
 
     // =========================================================================
     // TEST 2: BÁN VƯỢT TỒN KHI ĐỒNG THỜI TRÊN POSTGRESQL THẬT (PAY-07)
@@ -118,6 +59,9 @@ public class CommerceTests {
                     item.setQuantity(1);
 
                     var req = new com.example.art_course.modules.order.service.OrderService.CheckoutRequest();
+                    req.setRecipientName("Người nhận test");
+                    req.setRecipientPhone("0901234567");
+                    req.setShippingAddress("1 Đường Test, Phường Test, Quận Test, Tỉnh Test");
                     req.setUseCart(false);
                     req.setItems(List.of(item));
 
@@ -269,109 +213,7 @@ public class CommerceTests {
         assertDoesNotThrow(() -> orderService.createOrdersFromCheckout(parentId, req2));
     }
 
-    // =========================================================================
-    // TEST 5: JWT CONTRACT TESTS (ACCESS vs REFRESH, EXPIRATION, ROLE CHILD)
-    // =========================================================================
-    @Test
-    @DisplayName("5.1. Phân quyền: Child gọi API mua hàng/thanh toán bị từ chối 403 FORBIDDEN (BR-02, NFR-04)")
-    void testChildRoleForbidden() {
-        String childToken = Jwts.builder()
-                .subject(UUID.randomUUID().toString())
-                .claim("role", "CHILD")
-                .claim("type", "ACCESS")
-                .signWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-
-        var claims = Jwts.parser()
-                .verifyWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .build()
-                .parseSignedClaims(childToken)
-                .getPayload();
-
-        String role = claims.get("role", String.class);
-        boolean isChildForbidden = "CHILD".equalsIgnoreCase(role);
-        assertTrue(isChildForbidden, "Vai trò CHILD phải bị phát hiện để chặn truy cập");
-
-        String parentToken = Jwts.builder()
-                .subject(UUID.randomUUID().toString())
-                .claim("role", "PARENT")
-                .claim("type", "ACCESS")
-                .signWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-
-        var parentClaims = Jwts.parser()
-                .verifyWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .build()
-                .parseSignedClaims(parentToken)
-                .getPayload();
-
-        boolean isParentForbidden = "CHILD".equalsIgnoreCase(parentClaims.get("role", String.class));
-        assertFalse(isParentForbidden, "Vai trò PARENT được phép truy cập");
-    }
-
-    @Test
-    @DisplayName("5.2. JWT Contract: Chỉ chấp nhận ACCESS token, từ chối REFRESH token (INVALID_TOKEN_TYPE)")
-    void testRefreshTokenRejected() {
-        String refreshToken = Jwts.builder()
-                .subject(UUID.randomUUID().toString())
-                .claim("role", "PARENT")
-                .claim("type", "REFRESH")
-                .signWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-
-        var claims = Jwts.parser()
-                .verifyWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .build()
-                .parseSignedClaims(refreshToken)
-                .getPayload();
-
-        String tokenType = claims.get("type", String.class);
-        assertNotEquals("ACCESS", tokenType);
-        assertEquals("REFRESH", tokenType, "Refresh token phải bị phát hiện");
-
-        // Mô phỏng kiểm tra của JwtAuthFilter
-        boolean isAllowed = "ACCESS".equalsIgnoreCase(tokenType);
-        assertFalse(isAllowed, "Refresh token không được phép gọi API tài nguyên");
-    }
-
-    @Test
-    @DisplayName("5.3. JWT Contract: Token đã hết hạn phải bị ném lỗi ExpiredJwtException (TOKEN_EXPIRED)")
-    void testExpiredTokenRejected() {
-        Date past = new Date(System.currentTimeMillis() - 3600_000); // 1 giờ trước
-        String expiredToken = Jwts.builder()
-                .subject(UUID.randomUUID().toString())
-                .claim("role", "PARENT")
-                .claim("type", "ACCESS")
-                .expiration(past)
-                .signWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-
-        assertThrows(io.jsonwebtoken.ExpiredJwtException.class, () -> {
-            Jwts.parser()
-                    .verifyWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                    .build()
-                    .parseSignedClaims(expiredToken);
-        }, "Token quá hạn bắt buộc phải ném ExpiredJwtException");
-    }
-
-    @Test
-    @DisplayName("5.4. JWT Contract: Token sai chữ ký bị từ chối (INVALID_TOKEN)")
-    void testInvalidSignatureRejected() {
-        String otherKey = "another-wrong-key-that-does-not-match-signature-at-all-32b";
-        String token = Jwts.builder()
-                .subject(UUID.randomUUID().toString())
-                .claim("role", "PARENT")
-                .claim("type", "ACCESS")
-                .signWith(Keys.hmacShaKeyFor(otherKey.getBytes(StandardCharsets.UTF_8)))
-                .compact();
-
-        assertThrows(Exception.class, () -> {
-            Jwts.parser()
-                    .verifyWith(Keys.hmacShaKeyFor(TEST_ONLY_MOCK_KEY.getBytes(StandardCharsets.UTF_8)))
-                    .build()
-                    .parseSignedClaims(token);
-        }, "Token ký bằng key khác phải bị từ chối do sai chữ ký");
-    }
+    // JWT được kiểm tra qua FilterChain thật trong OrderSecurityWebMvcTest.
 
     // =========================================================================
     // TEST 6: BẢO TOÀN HOA HỒNG VÀ TIỀN THỰC NHẬN (TECHNICAL RULE #1)

@@ -2,6 +2,7 @@ package com.example.art_course.modules.finance.service;
 
 import com.example.art_course.common.statemachine.DeliveryStatus;
 import com.example.art_course.common.statemachine.PaymentStatus;
+import com.example.art_course.common.statemachine.OrderStatus;
 import com.example.art_course.contracts.events.CourseCompletedEvent;
 import com.example.art_course.contracts.events.CourseReviewedEvent;
 import com.example.art_course.modules.course.repository.CourseReviewRepository;
@@ -51,8 +52,8 @@ public class EscrowReleaseService {
      */
     @Transactional
     public boolean tryReleaseEscrow(UUID orderId) {
-        Order order = orderRepository.findById(orderId).orElse(null);
-        if (order == null) return false;
+        Order order = orderRepository.findByIdForUpdate(orderId).orElse(null);
+        if (order == null || order.getStatus() != OrderStatus.PAID) return false;
 
         Payment payment = paymentRepository.findByOrderId(orderId).orElse(null);
         if (payment == null || payment.getStatus() != PaymentStatus.HELD) {
@@ -80,7 +81,10 @@ public class EscrowReleaseService {
             }
         }
 
-        // TẤT CẢ các dòng đều đã đủ điều kiện -> Giải phóng HELD -> RELEASED trong 1 @Transactional
+        // FIN-09: chỉ giải ngân phần còn lại sau các khoản đã hoàn từ HELD.
+        var amount = payment.getNetAmount().subtract(refundRepository.sumCompletedTeacherAmount(payment.getId()))
+                .max(java.math.BigDecimal.ZERO);
+        if (paymentRepository.transition(payment.getId(), PaymentStatus.HELD, PaymentStatus.RELEASED) == 0) return false;
         payment.setStatus(PaymentStatus.RELEASED);
         payment.setReleasedAt(Instant.now());
         paymentRepository.save(payment);
@@ -88,7 +92,7 @@ public class EscrowReleaseService {
         ledgerService.recordEntry(
                 payment.getTeacherId(),
                 "RELEASE",
-                payment.getNetAmount(),
+                amount,
                 payment.getId(),
                 null,
                 null,
@@ -96,7 +100,7 @@ public class EscrowReleaseService {
                 null
         );
 
-        notificationService.notifyEscrowReleased(payment.getId(), payment.getTeacherId(), payment.getNetAmount());
+        notificationService.notifyEscrowReleased(payment.getId(), payment.getTeacherId(), amount);
         log.info("[ESCROW-SUCCESS] Đã giải phóng thành công {} VND cho Teacher {} từ đơn hàng {}",
                 payment.getNetAmount(), payment.getTeacherId(), orderId);
 
@@ -104,6 +108,7 @@ public class EscrowReleaseService {
     }
 
     private boolean isDetailEligibleForRelease(Order order, OrderDetail detail) {
+        if (detail.getDeliveryStatus() == DeliveryStatus.REFUNDED) return true;
         String type = detail.getProductType();
 
         if ("COURSE".equalsIgnoreCase(type)) {
@@ -158,6 +163,7 @@ public class EscrowReleaseService {
      * Kích hoạt tự động khi Parent đánh giá khóa học (SHOP-09).
      */
     @EventListener
+    @Transactional
     public void onCourseReviewed(CourseReviewedEvent event) {
         log.info("[ESCROW-EVENT] Nhận sự kiện phụ huynh {} đánh giá khóa học {}", event.getParentId(), event.getCourseId());
         List<Order> parentOrders = orderRepository.findByParentIdOrderByCreatedAtDesc(event.getParentId());
@@ -170,6 +176,7 @@ public class EscrowReleaseService {
      * Kích hoạt khi Child hoàn thành khóa học (LRN-07 / BE1).
      */
     @EventListener
+    @Transactional
     public void onCourseCompleted(CourseCompletedEvent event) {
         log.info("[ESCROW-EVENT] Nhận sự kiện trẻ {} hoàn thành khóa học {}", event.getChildId(), event.getCourseId());
         String key = event.getChildId() + ":" + event.getCourseId();
@@ -182,19 +189,9 @@ public class EscrowReleaseService {
         }
     }
 
-    /**
-     * Quét và giải phóng các khoản escrow đủ điều kiện.
-     */
-    public int autoReleaseEscrow() {
-        log.info("[ESCROW] Bắt đầu quét tự động giải phóng tiền ký quỹ...");
-        List<Payment> heldPayments = paymentRepository.findByStatus(PaymentStatus.HELD);
-        int count = 0;
-        for (Payment payment : heldPayments) {
-            if (tryReleaseEscrow(payment.getOrderId())) {
-                count++;
-            }
-        }
-        log.info("[ESCROW] Kết thúc quét. Số đơn hàng được giải phóng: {}", count);
-        return count;
+    // FIN-03: job gọi từng đơn qua bean để mỗi lần giải ngân có transaction riêng.
+    @Transactional(readOnly = true)
+    public List<UUID> findHeldOrderIds() {
+        return paymentRepository.findByStatus(PaymentStatus.HELD).stream().map(Payment::getOrderId).toList();
     }
 }

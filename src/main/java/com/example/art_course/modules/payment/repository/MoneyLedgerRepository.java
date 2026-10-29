@@ -32,7 +32,7 @@ public interface MoneyLedgerRepository extends JpaRepository<MoneyLedger, UUID> 
             END
         ), 0)
         FROM MoneyLedger m
-        WHERE m.teacherId = :teacherId
+        WHERE m.teacherId = :teacherId AND m.affectsAvailable = true
     """)
     BigDecimal calculateAvailableBalance(@Param("teacherId") UUID teacherId);
 
@@ -46,6 +46,7 @@ public interface MoneyLedgerRepository extends JpaRepository<MoneyLedger, UUID> 
             END
         ), 0)
         FROM MoneyLedger m
+        WHERE m.affectsAvailable = true
     """)
     BigDecimal calculateTotalAvailable();
 }

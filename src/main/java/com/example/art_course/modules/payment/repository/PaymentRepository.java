@@ -42,6 +42,15 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     Optional<Payment> findByOrderId(UUID orderId);
     Optional<Payment> findByGatewayOrderCode(Long gatewayOrderCode);
+
+    @Query("SELECT p.id FROM Payment p WHERE p.gatewayOrderCode = :code")
+    Optional<UUID> findIdByGatewayOrderCode(@Param("code") Long code);
+
+    @Query("SELECT p.orderId FROM Payment p WHERE p.id = :id")
+    Optional<UUID> findOrderIdById(@Param("id") UUID id);
+
+    @Query("SELECT p.id FROM Payment p WHERE p.gateway = :gateway AND p.gatewayTransactionId = :tx")
+    Optional<UUID> findIdByGatewayAndGatewayTransactionId(@Param("gateway") String gateway, @Param("tx") String tx);
     Optional<Payment> findByGatewayAndGatewayTransactionId(String gateway, String gatewayTransactionId);
     List<Payment> findByTeacherIdOrderByCreatedAtDesc(UUID teacherId);
     List<Payment> findByStatus(PaymentStatus status);

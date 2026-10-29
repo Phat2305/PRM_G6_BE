@@ -10,7 +10,6 @@ import com.example.art_course.modules.payment.service.PaymentService;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 import jakarta.validation.Valid;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,7 +21,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/payments")
 public class PaymentController {
@@ -30,7 +28,6 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final UserRepository userRepository;
 
-    @org.springframework.beans.factory.annotation.Autowired
     public PaymentController(PaymentService paymentService, UserRepository userRepository) {
         this.paymentService = paymentService;
         this.userRepository = userRepository;
@@ -38,7 +35,7 @@ public class PaymentController {
 
 
     /**
-     * Tạo payment request và link thanh toán cổng VNPay/MoMo (PAY-01).
+     * Tạo payment request và link thanh toán PayOS (PAY-01).
      */
     @PostMapping("/create")
     @PreAuthorize("hasRole('PARENT')")
@@ -89,47 +86,6 @@ public class PaymentController {
 
     private static String str(Object o) {
         return o == null ? "" : o.toString();
-    }
-
-    /**
-     * Webhook / IPN xử lý kết quả thanh toán từ cổng qua POST (PAY-01, PAY-02, PAY-09).
-     */
-    @PostMapping("/webhook/{gateway}")
-    public ResponseEntity<Map<String, Object>> handleWebhookPost(
-            @PathVariable String gateway,
-            @RequestParam(required = false) Map<String, String> queryParams,
-            @RequestBody(required = false) Map<String, String> bodyParams
-    ) {
-        Map<String, String> allParams = new HashMap<>();
-        if (queryParams != null) allParams.putAll(queryParams);
-        if (bodyParams != null) allParams.putAll(bodyParams);
-
-        Map<String, Object> result = paymentService.handleWebhook(gateway, allParams);
-        return ResponseEntity.ok(result);
-    }
-
-    /**
-     * Webhook / IPN hỗ trợ GET (cho các cổng hỗ trợ GET callback như VNPay).
-     */
-    @GetMapping("/webhook/{gateway}")
-    public ResponseEntity<Map<String, Object>> handleWebhookGet(
-            @PathVariable String gateway,
-            @RequestParam Map<String, String> queryParams
-    ) {
-        Map<String, Object> result = paymentService.handleWebhook(gateway, queryParams);
-        return ResponseEntity.ok(result);
-    }
-
-    /**
-     * Return URL khi người dùng hoàn tất thanh toán và được điều hướng về app.
-     */
-    @GetMapping("/return/{gateway}")
-    public ResponseEntity<Map<String, Object>> handleReturn(
-            @PathVariable String gateway,
-            @RequestParam Map<String, String> queryParams
-    ) {
-        Map<String, Object> result = paymentService.handleWebhook(gateway, queryParams);
-        return ResponseEntity.ok(result);
     }
 
     private UUID resolveUserId(Authentication auth) {

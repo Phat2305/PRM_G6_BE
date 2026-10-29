@@ -49,7 +49,7 @@ public class CustomizeOrderService {
         }
 
         for (OrderDetail detail : orderDetailRepository.findByCustomizeRequestId(requestId)) {
-            Order existing = orderRepository.findById(detail.getOrderId()).orElse(null);
+            Order existing = orderRepository.findByIdForUpdate(detail.getOrderId()).orElse(null);
             if (existing == null) continue;
             if (existing.getStatus() == OrderStatus.PENDING_PAYMENT
                     && (existing.getExpiredAt() == null || existing.getExpiredAt().isAfter(Instant.now()))) {
@@ -97,12 +97,15 @@ public class CustomizeOrderService {
     @Transactional
     public void cancelPending(UUID requestId) {
         for (OrderDetail detail : orderDetailRepository.findByCustomizeRequestId(requestId)) {
-            orderRepository.findById(detail.getOrderId())
-                    .filter(o -> o.getStatus() == OrderStatus.PENDING_PAYMENT)
-                    .ifPresent(o -> {
-                        o.setStatus(OrderStatus.CANCELLED);
-                        orderRepository.save(o);
-                    });
+            Order order = orderRepository.findByIdForUpdate(detail.getOrderId()).orElse(null);
+            if (order == null) continue;
+            if (order.getStatus() == OrderStatus.PAID) {
+                throw new AppError(HttpStatus.CONFLICT, "ORDER_ALREADY_PAID", "Yêu cầu đã được thanh toán");
+            }
+            if (order.getStatus() == OrderStatus.PENDING_PAYMENT) {
+                order.setStatus(OrderStatus.CANCELLED);
+                orderRepository.save(order);
+            }
         }
     }
 }

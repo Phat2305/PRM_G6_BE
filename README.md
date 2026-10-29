@@ -55,17 +55,15 @@ Swagger UI: <http://localhost:8080/swagger-ui.html> · OpenAPI JSON: <http://loc
 
 ## Database và migration
 
-- Schema nền: `docs/ART_COUSE.sql`. Migration BE2: `src/main/resources/db/migration/`:
+- Schema lịch sử: `docs/ART_COUSE.sql`; các bản bổ sung 01–09 nằm trong `docs/migrations/`.
+- Migration mới nằm trong `src/main/resources/db/migration/`, áp trên schema hiện hành:
 
   | File | Nội dung |
   |------|----------|
-  | `V1__be2_schema_init.sql` | Schema BE2 |
-  | `V2__ledger_hardening.sql` | Sổ cái chỉ-ghi-thêm |
-  | `V3__payos_gateway.sql` | Cột `payments.gateway_order_code` (orderCode của PayOS), ràng buộc cổng chỉ `PAYOS` và `MOCK` (chỉ áp cho dòng mới) |
-  | `V4__course_child_optional.sql` | Khóa học được phép chưa gán bé khi đặt hàng |
-  | `V5__drop_order_detail_product_type.sql` | Bỏ cột `order_details.product_type`; loại dòng suy ra từ `course_id` / `supply_id` / `customize_request_id` |
+  | `V10__parent_profile_address.sql` | Chuyển địa chỉ mặc định vào `parent_profiles.shipping_address`, bỏ bảng địa chỉ cũ |
+  | `V11__commerce_safety.sql` | Lưu thông tin nhận hàng trong đơn, phân biệt hoàn từ tiền giữ/tiền khả dụng, sequence mã PayOS |
 
-  Chạy theo thứ tự V3 → V4 → V5. Profile `dev` tự áp bằng Flyway; Supabase phải chạy tay (SQL Editor).
+  Áp V11 trước khi triển khai bản backend này. SQL không sửa/xóa lịch sử sổ cái; số dư sai từ trước cần đối soát riêng.
 - Flyway chỉ bật ở profile `dev`. Hibernate `ddl-auto` là `none` hoặc `validate`.
 - **Không** chạy app, test hay migration vào database Supabase. Muốn áp migration lên Supabase, xuất file SQL rồi chạy thủ công.
 - Script dev (PowerShell). Chỉ cho phép database `art_course_dev` trên localhost và cần biến `DEV_DB_PASSWORD`:
@@ -79,7 +77,7 @@ Swagger UI: <http://localhost:8080/swagger-ui.html> · OpenAPI JSON: <http://loc
 .\gradlew.bat test --tests "*PayOSPaymentGatewayTest"   # không cần Docker
 ```
 
-Các test dùng PostgreSQL thật (Testcontainers) cần Docker; không có Docker thì chúng báo lỗi, các test còn lại vẫn chạy.
+Các test dùng PostgreSQL thật (Testcontainers) cần Docker; không có Docker thì chúng được đánh dấu bỏ qua, các test còn lại vẫn chạy. Test service dùng schema từ entity trong container riêng và áp SQL V11; test địa chỉ kiểm tra riêng V10.
 
 ## Xác thực
 
@@ -120,6 +118,15 @@ Luồng thanh toán:
 1. Client gọi `payments/create`, mở `paymentUrl` ở trình duyệt, rồi hỏi `payments/{id}/status` mỗi vài giây.
 2. PayOS gọi webhook khi khách trả tiền. Hệ thống kiểm chữ ký và số tiền, rồi chuyển đơn sang `PAID`, giữ tiền (`HELD`) và cấp quyền học cho các khóa đã có bé.
 3. Sau thanh toán PayOS chuyển khách về `returnUrl` (cả khi thành công lẫn hủy) kèm `status` và `cancel`. Backend có sẵn trang tĩnh `/payment-result.html` cho việc này.
+
+Các biện pháp xử lý trùng và tiền đến muộn:
+
+- Đơn đã hủy/hết hạn giữ nguyên trạng thái khi nhận tiền. Backend tạo một yêu cầu hoàn tiền để Staff xử lý, gồm cả phí giao hàng; không xuất kho hay cấp quyền học. API trạng thái trả `refundPending: true`.
+- Tạo lại thanh toán dùng link PayOS cũ khi còn hiệu lực hoặc chưa xác định được trạng thái. Chỉ lấy mã mới khi PayOS xác nhận link cũ đã hủy/hết hạn.
+- Hoàn tiền chỉ nhận giao dịch `HELD`/`RELEASED`, mỗi dòng chỉ có một yêu cầu chưa bị từ chối. Khóa đơn và yêu cầu rút tiền ngăn xử lý đồng thời hai lần.
+- Hoàn từ `HELD` ghi `REFUND` với `affects_available=false`, giảm phần đang giữ; hoàn từ `RELEASED` giảm phần khả dụng. Sổ cái ghi phần giáo viên chịu, yêu cầu hoàn vẫn ghi đủ tiền trả phụ huynh. Hoàn hết đổi payment sang `REFUNDED`.
+- Giải ngân chạy từng đơn qua transaction riêng. Cấp quyền học lỗi được thử lại từ đơn đã lưu mỗi phút, kể cả sau restart; không tự mở lại ghi danh bị vô hiệu hóa hoặc dòng đã hoàn tiền.
+- Đơn dụng cụ bắt buộc có `recipientName`, `recipientPhone`, `shippingAddress`; thông tin được lưu theo thời điểm đặt. `/api/videos/upload` chỉ cho `TEACHER`.
 
 Cấu hình PayOS:
 
@@ -168,7 +175,7 @@ Một số bảng ở trên được viết trước đợt này nên có chỗ 
 - **Ảnh bìa khóa học bắt buộc khi gửi duyệt.** `CourseReviewPolicy.requireReviewable` từ chối gửi duyệt và duyệt khóa thường chưa có `cover_image_url` (400 "Khóa học cần có ảnh bìa"); khóa customize được miễn. Ảnh tải bằng `POST /api/courses/{id}/cover` (JPG/PNG/WEBP, tối đa 5 MB) và phải lên trước khi gửi duyệt. Khóa cũ không có ảnh sẽ bị yêu cầu thêm ảnh khi gửi duyệt lại.
 - **Mật khẩu.** `POST /api/v1/users/me/change-password` từ chối mật khẩu mới trùng mật khẩu cũ (`SAME_PASSWORD`) và tài khoản bé (403 `CHILD_PASSWORD_BY_PARENT`, bé do phụ huynh đặt lại). `POST /auth/reset-password` so `newPassword` với `confirmPassword` (400 `PASSWORD_MISMATCH`, không tính vào số lần nhập sai mã).
 - **SQL phải chạy trước** (SQL Editor của Supabase hoặc profile `dev`): `docs/migrations/07_review_workflow.sql` và `docs/migrations/09_fe_gaps_2.sql` (cùng `08_fe_gaps.sql` nếu chưa chạy).
-- **Chưa làm / cần lưu ý:** mã quên mật khẩu còn lưu trong bộ nhớ (`PasswordResetRepository`, mất khi restart); chưa giới hạn số lần đăng nhập sai; chưa lưu việc đồng ý điều khoản và dữ liệu trẻ em (ACC-16/17); quy tắc mật khẩu BE chỉ kiểm độ dài 6–20 (app yêu cầu thêm chữ và số); video lỗi chưa có DLQ/retry; thanh toán chỉ có PayOS; 7 test dùng Testcontainers cần Docker nên chưa chạy được trên máy phát triển; nên bật RLS cho các bảng Supabase.
+- **Chưa làm / cần lưu ý:** mã quên mật khẩu còn lưu trong bộ nhớ (`PasswordResetRepository`, mất khi restart); chưa giới hạn số lần đăng nhập sai; chưa lưu việc đồng ý điều khoản và dữ liệu trẻ em (ACC-16/17); quy tắc mật khẩu BE chỉ kiểm độ dài 6–20 (app yêu cầu thêm chữ và số); video lỗi chưa có DLQ/retry; thanh toán chỉ có PayOS; test dùng Testcontainers cần Docker; xem số test bị bỏ qua trong báo cáo Gradle; nên bật RLS cho các bảng Supabase.
 
 ## Deploy Render, CORS và ngrok
 

@@ -2,6 +2,8 @@ package com.example.art_course.modules.refund.service;
 
 import com.example.art_course.common.AppError;
 import com.example.art_course.common.statemachine.DeliveryStatus;
+import com.example.art_course.common.statemachine.PaymentStatus;
+import com.example.art_course.common.statemachine.OrderStatus;
 import com.example.art_course.contracts.IEnrollmentContract;
 import com.example.art_course.course.repository.CourseRepository;
 import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
@@ -64,7 +66,7 @@ public class RefundService {
      */
     @Transactional
     public RefundResponseDto requestRefund(UUID parentId, CreateRefundRequest request) {
-        Order order = orderRepository.findById(request.getOrderId())
+        Order order = orderRepository.findByIdForUpdate(request.getOrderId())
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng: " + request.getOrderId()));
 
         if (!order.getParentId().equals(parentId)) {
@@ -74,11 +76,17 @@ public class RefundService {
         Payment payment = paymentRepository.findByOrderId(order.getId())
                 .orElseThrow(() -> new AppError(HttpStatus.BAD_REQUEST, "PAYMENT_NOT_FOUND", "Đơn hàng chưa có giao dịch thanh toán"));
 
+        requirePaid(payment);
         OrderDetail detail = orderDetailRepository.findById(request.getOrderDetailId())
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_DETAIL_NOT_FOUND", "Không tìm thấy dòng sản phẩm"));
 
         if (!detail.getOrderId().equals(order.getId())) {
             throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_ORDER_DETAIL", "Dòng sản phẩm không thuộc đơn hàng này");
+        }
+
+        // FIN-07: khóa đơn trước khi kiểm tra cả dòng sản phẩm lẫn tổng tiền.
+        if (refundItemRepository.hasNonRejectedRefund(detail.getId())) {
+            throw new AppError(HttpStatus.CONFLICT, "DUPLICATE_REFUND", "Dòng sản phẩm đã có yêu cầu hoàn tiền");
         }
 
         // Kiểm tra tổng hoàn không vượt số tiền đã thanh toán (FIN-07, PAY-08)
@@ -132,6 +140,10 @@ public class RefundService {
             throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Yêu cầu hoàn tiền không ở trạng thái chờ duyệt (PENDING)");
         }
 
+        Payment payment = paymentRepository.findById(refund.getPaymentId())
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch"));
+        requirePaid(payment);
+        Order order = orderRepository.findByIdForUpdate(refund.getOrderId()).orElseThrow();
         refund.setStatus("APPROVED");
         refund.setHandledBy(staffId);
         Refund updated = refundRepository.save(refund);
@@ -140,13 +152,24 @@ public class RefundService {
         for (RefundItem item : items) {
             OrderDetail detail = orderDetailRepository.findById(item.getOrderDetailId()).orElse(null);
             if (detail != null) {
+                if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.EXPIRED) {
+                    detail.setDeliveryStatus(DeliveryStatus.REFUNDED);
+                    orderDetailRepository.save(detail);
+                    continue;
+                }
                 if ("COURSE".equalsIgnoreCase(detail.getProductType())) {
                     // Thu hồi quyền học BE1 (BR-12)
                     enrollmentContract.revokeAccess(detail.getChildId(), detail.getCourseId(), refund.getId());
                     log.info("[REFUND-REVOKE] Đã thu hồi quyền học của Child {} - Course {}", detail.getChildId(), detail.getCourseId());
+                    detail.setDeliveryStatus(DeliveryStatus.REFUNDED);
+                    orderDetailRepository.save(detail);
                 } else if ("SUPPLY".equalsIgnoreCase(detail.getProductType())) {
                     // Trả lại tồn kho nếu dụng cụ chưa hoàn tất giao
-                    if (detail.getDeliveryStatus() != DeliveryStatus.COMPLETED) {
+                    // FUL-06, FIN-08: hủy/từ chối đã trả tồn; đơn trả tiền muộn chưa bán hàng.
+                    if (order.getStatus() != OrderStatus.CANCELLED && order.getStatus() != OrderStatus.EXPIRED
+                            && java.util.EnumSet.of(DeliveryStatus.PENDING, DeliveryStatus.CONFIRMED,
+                                    DeliveryStatus.SHIPPING, DeliveryStatus.DELIVERED, DeliveryStatus.DELIVERY_FAILED)
+                                    .contains(detail.getDeliveryStatus())) {
                         restoreSupplyStock(detail);
                     }
                     detail.setDeliveryStatus(DeliveryStatus.REFUNDED);
@@ -213,20 +236,28 @@ public class RefundService {
         refund.setHandledBy(staffId);
         Refund updated = refundRepository.save(refund);
 
-        Payment payment = paymentRepository.findById(refund.getPaymentId()).orElse(null);
-        UUID teacherId = payment != null ? payment.getTeacherId() : UUID.randomUUID();
-
-        // Ghi sổ cái REFUND
-        ledgerService.recordEntry(
-                teacherId,
-                "REFUND",
-                refund.getTotalAmount(),
-                refund.getPaymentId(),
-                refund.getId(),
-                null,
-                "Hoàn tiền thành công cho đơn hàng " + refund.getOrderId() + " qua mã GD: " + request.getTransactionCode(),
-                staffId
-        );
+        Payment payment = paymentRepository.findById(refund.getPaymentId())
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Không tìm thấy giao dịch"));
+        requirePaid(payment);
+        BigDecimal commission = BigDecimal.ZERO;
+        for (RefundItem item : refundItemRepository.findByRefundId(refund.getId())) {
+            OrderDetail detail = orderDetailRepository.findById(item.getOrderDetailId()).orElseThrow();
+            commission = commission.add(detail.getCommissionAmount());
+        }
+        BigDecimal teacherAmount = refund.getTotalAmount().subtract(commission);
+        if (teacherAmount.signum() < 0 || teacherAmount.compareTo(payment.getNetAmount()) > 0) {
+            throw new AppError(HttpStatus.CONFLICT, "INVALID_REFUND_AMOUNT", "Số tiền hoàn của giáo viên không hợp lệ");
+        }
+        // FIN-09: hoàn từ HELD không trừ tiền khả dụng của đơn khác; vẫn ghi đủ lịch sử REFUND.
+        ledgerService.recordEntry(payment.getTeacherId(), "REFUND", teacherAmount, payment.getId(),
+                refund.getId(), null, "Hoàn " + refund.getTotalAmount() + " VND cho đơn " + refund.getOrderId()
+                        + " qua mã GD: " + request.getTransactionCode(), staffId,
+                payment.getStatus() == PaymentStatus.RELEASED);
+        refundRepository.flush();
+        if (refundRepository.sumCompletedByPaymentId(payment.getId()).compareTo(payment.getAmount()) >= 0) {
+            payment.setStatus(PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+        }
 
         notificationService.notifyRefundCompleted(updated.getId(), updated.getParentId(), updated.getTotalAmount(), request.getTransactionCode());
         log.info("[REFUND-COMPLETED] Staff {} hoàn tất chi trả hoàn tiền {} VND cho Parent {}",
@@ -272,8 +303,17 @@ public class RefundService {
     }
 
     private Refund findRefund(UUID refundId) {
-        return refundRepository.findByIdForUpdate(refundId)
+        Refund refund = refundRepository.findByIdForUpdate(refundId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "REFUND_NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền: " + refundId));
+        orderRepository.findByIdForUpdate(refund.getOrderId())
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Không tìm thấy đơn hàng"));
+        return refund;
+    }
+
+    private void requirePaid(Payment payment) {
+        if (payment.getStatus() != PaymentStatus.HELD && payment.getStatus() != PaymentStatus.RELEASED) {
+            throw new AppError(HttpStatus.CONFLICT, "PAYMENT_NOT_PAID", "Chỉ hoàn tiền cho giao dịch đã thanh toán thành công");
+        }
     }
 
     private void restoreSupplyStock(OrderDetail detail) {

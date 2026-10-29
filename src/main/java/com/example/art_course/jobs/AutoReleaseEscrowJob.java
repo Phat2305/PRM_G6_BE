@@ -18,6 +18,16 @@ public class AutoReleaseEscrowJob {
     @Scheduled(cron = "${app.jobs.auto-release-escrow-cron:0 0 4 * * *}")
     @SchedulerLock(name = "AutoReleaseEscrowJob", lockAtLeastFor = "1m", lockAtMostFor = "15m")
     public void run() {
-        jobTracker.track("AutoReleaseEscrowJob", escrowReleaseService::autoReleaseEscrow);
+        jobTracker.track("AutoReleaseEscrowJob", () -> {
+            int released = 0;
+            for (var orderId : escrowReleaseService.findHeldOrderIds()) {
+                try {
+                    if (escrowReleaseService.tryReleaseEscrow(orderId)) released++;
+                } catch (Exception e) {
+                    log.warn("[ESCROW] Đơn {} giải ngân lỗi, transaction đã rollback: {}", orderId, e.getMessage());
+                }
+            }
+            return released;
+        });
     }
 }

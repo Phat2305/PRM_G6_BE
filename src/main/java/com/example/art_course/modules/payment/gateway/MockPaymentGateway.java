@@ -3,12 +3,14 @@ package com.example.art_course.modules.payment.gateway;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.payment.entity.Payment;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
 
 @Component
+@Profile("test")
 public class MockPaymentGateway implements PaymentGateway {
 
     public static final String GATEWAY_CODE = "MOCK";

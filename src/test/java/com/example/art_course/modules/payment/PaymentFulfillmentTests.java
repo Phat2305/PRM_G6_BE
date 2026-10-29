@@ -64,7 +64,7 @@ public class PaymentFulfillmentTests {
         ConfigService configService = mock(ConfigService.class);
         PaymentGateway gateway = mock(PaymentGateway.class);
 
-        when(gatewayFactory.getGateway("VNPAY")).thenReturn(gateway);
+        when(gatewayFactory.getGateway("PAYOS")).thenReturn(gateway);
 
         UUID paymentId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
@@ -74,15 +74,18 @@ public class PaymentFulfillmentTests {
                 .id(paymentId)
                 .orderId(orderId)
                 .teacherId(teacherId)
-                .gateway("VNPAY")
+                .gateway("PAYOS")
                 .amount(new BigDecimal("500000"))
                 .status(PaymentStatus.HELD) // Đã thanh toán thành công trước đó
                 .build();
 
-        when(paymentRepo.findById(paymentId)).thenReturn(Optional.of(payment));
+        when(paymentRepo.findIdByGatewayOrderCode(1001L)).thenReturn(Optional.of(paymentId));
+        when(paymentRepo.findOrderIdById(paymentId)).thenReturn(Optional.of(orderId));
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(Order.builder().id(orderId).build()));
+        when(paymentRepo.findByIdForUpdate(paymentId)).thenReturn(Optional.of(payment));
 
         Map<String, String> params = Map.of(
-                "vnp_TxnRef", paymentId.toString(),
+                "data.orderCode", "1001",
                 "vnp_Amount", "50000000",
                 "vnp_ResponseCode", "00"
         );
@@ -95,9 +98,9 @@ public class PaymentFulfillmentTests {
                 orderRepo, orderDetailRepo, paymentRepo, webhookLogRepo,
                 moneyLedgerRepo, supplyRepo, gatewayFactory, grantService,
                 notifService, configService
-        );
+        , org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
-        Map<String, Object> response = paymentService.handleWebhook("VNPAY", params);
+        Map<String, Object> response = paymentService.handleWebhook("PAYOS", params);
 
         assertEquals("SUCCESS", response.get("status"), "Idempotent response status phải là SUCCESS");
         assertTrue(response.get("message").toString().contains("Idempotent"), "Message phản hồi phải báo là Idempotent");
@@ -129,10 +132,10 @@ public class PaymentFulfillmentTests {
         ConfigService configService = mock(ConfigService.class);
         PaymentGateway gateway = mock(PaymentGateway.class);
 
-        when(gatewayFactory.getGateway("VNPAY")).thenReturn(gateway);
+        when(gatewayFactory.getGateway("PAYOS")).thenReturn(gateway);
 
         Map<String, String> params = Map.of(
-                "vnp_TxnRef", UUID.randomUUID().toString(),
+                "data.orderCode", "1001",
                 "vnp_SecureHash", "fake_invalid_hash"
         );
 
@@ -145,9 +148,9 @@ public class PaymentFulfillmentTests {
                 orderRepo, orderDetailRepo, paymentRepo, webhookLogRepo,
                 moneyLedgerRepo, supplyRepo, gatewayFactory, grantService,
                 notifService, configService
-        );
+        , org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
-        AppError error = assertThrows(AppError.class, () -> paymentService.handleWebhook("VNPAY", params));
+        AppError error = assertThrows(AppError.class, () -> paymentService.handleWebhook("PAYOS", params));
 
         assertEquals(HttpStatus.BAD_REQUEST, error.getStatus());
         assertEquals("INVALID_SIGNATURE", error.getErrorCode());
@@ -178,7 +181,7 @@ public class PaymentFulfillmentTests {
         ConfigService configService = mock(ConfigService.class);
         PaymentGateway gateway = mock(PaymentGateway.class);
 
-        when(gatewayFactory.getGateway("VNPAY")).thenReturn(gateway);
+        when(gatewayFactory.getGateway("PAYOS")).thenReturn(gateway);
 
         UUID paymentId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
@@ -187,14 +190,18 @@ public class PaymentFulfillmentTests {
         Payment payment = Payment.builder()
                 .id(paymentId)
                 .orderId(orderId)
+                .gateway("PAYOS")
                 .amount(new BigDecimal("500000"))
                 .status(PaymentStatus.PENDING)
                 .build();
 
-        when(paymentRepo.findById(paymentId)).thenReturn(Optional.of(payment));
+        when(paymentRepo.findIdByGatewayOrderCode(1001L)).thenReturn(Optional.of(paymentId));
+        when(paymentRepo.findOrderIdById(paymentId)).thenReturn(Optional.of(orderId));
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(Order.builder().id(orderId).build()));
+        when(paymentRepo.findByIdForUpdate(paymentId)).thenReturn(Optional.of(payment));
 
         Map<String, String> params = Map.of(
-                "vnp_TxnRef", paymentId.toString(),
+                "data.orderCode", "1001",
                 "vnp_Amount", "30000000" // Cổng báo số tiền 300.000 VND (thiếu tiền)
         );
 
@@ -207,9 +214,9 @@ public class PaymentFulfillmentTests {
                 orderRepo, orderDetailRepo, paymentRepo, webhookLogRepo,
                 moneyLedgerRepo, supplyRepo, gatewayFactory, grantService,
                 notifService, configService
-        );
+        , org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
-        AppError error = assertThrows(AppError.class, () -> paymentService.handleWebhook("VNPAY", params));
+        AppError error = assertThrows(AppError.class, () -> paymentService.handleWebhook("PAYOS", params));
 
         assertEquals(HttpStatus.BAD_REQUEST, error.getStatus());
         assertEquals("AMOUNT_MISMATCH", error.getErrorCode());
@@ -323,7 +330,7 @@ public class PaymentFulfillmentTests {
         UUID orderId = UUID.randomUUID();
         UUID teacherId = UUID.randomUUID();
 
-        Order order = Order.builder().id(orderId).teacherId(teacherId).parentId(UUID.randomUUID()).build();
+        Order order = Order.builder().id(orderId).teacherId(teacherId).parentId(UUID.randomUUID()).status(com.example.art_course.common.statemachine.OrderStatus.PAID).build();
         OrderDetail detail = OrderDetail.builder()
                 .id(detailId)
                 .orderId(orderId)
@@ -331,8 +338,9 @@ public class PaymentFulfillmentTests {
                 .deliveryStatus(DeliveryStatus.CONFIRMED) // Đang CONFIRMED
                 .build();
 
+        when(detailRepo.findOrderIdById(detailId)).thenReturn(Optional.of(orderId));
         when(detailRepo.findById(detailId)).thenReturn(Optional.of(detail));
-        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
 
         // Cố tình CONFIRM lại khi đã CONFIRMED -> Bị ném ngoại lệ INVALID_STATE_TRANSITION
         AppError error = assertThrows(AppError.class, () ->
@@ -360,8 +368,8 @@ public class PaymentFulfillmentTests {
 
         UUID detailId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
-        Order order = Order.builder().id(orderId).parentId(UUID.randomUUID()).teacherId(UUID.randomUUID()).build();
-        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        Order order = Order.builder().id(orderId).parentId(UUID.randomUUID()).teacherId(UUID.randomUUID()).status(com.example.art_course.common.statemachine.OrderStatus.PAID).build();
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
 
         OrderDetail detail = OrderDetail.builder()
                 .id(detailId)
@@ -372,8 +380,10 @@ public class PaymentFulfillmentTests {
                 .build();
 
         // Lần chạy 1: tìm thấy 1 đơn đủ điều kiện
-        when(detailRepo.findByDeliveryStatusAndDeliveredAtBefore(eq(DeliveryStatus.DELIVERED), any()))
-                .thenReturn(List.of(detail))
+        when(detailRepo.findOrderIdById(detailId)).thenReturn(Optional.of(orderId));
+        when(detailRepo.findById(detailId)).thenReturn(Optional.of(detail));
+        when(detailRepo.findDeliveredIdsBefore(eq(DeliveryStatus.DELIVERED), any()))
+                .thenReturn(List.of(detailId))
                 .thenReturn(Collections.emptyList()); // Lần chạy 2: không còn đơn nào vì đã COMPLETED
 
         FulfillmentService service = new FulfillmentService(
@@ -418,16 +428,11 @@ public class PaymentFulfillmentTests {
                 teacherId, "teacher_cw_" + teacherId);
         jdbc.update("INSERT INTO public.orders (id, parent_id, teacher_id, total_amount, shipping_fee, status) VALUES (?, ?, ?, 200000, 0, 'PENDING_PAYMENT')",
                 orderId, parentId, teacherId);
-        jdbc.update("INSERT INTO public.payments (id, order_id, teacher_id, gateway, amount, commission_amount, net_amount, status) VALUES (?, ?, ?, 'MOCK', 200000, 40000, 160000, 'PENDING')",
+        jdbc.update("INSERT INTO public.payments (id, order_id, teacher_id, gateway, amount, commission_amount, net_amount, status) VALUES (?, ?, ?, 'PAYOS', 200000, 40000, 160000, 'PENDING')",
                 paymentId, orderId, teacherId);
 
-        Map<String, String> params = Map.of(
-                "paymentId", paymentId.toString(),
-                "transactionId", sharedTxId,
-                "amount", "200000",
-                "status", "SUCCESS",
-                "signature", "MOCK_VALID_SIGNATURE"
-        );
+        jdbc.update("UPDATE public.payments SET gateway_order_code = 1001 WHERE id = ?", paymentId);
+        Map<String, String> params = com.example.art_course.common.PostgresTestcontainerEnv.payosWebhook(1001, "200000", sharedTxId);
 
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(2);
         java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
@@ -438,7 +443,7 @@ public class PaymentFulfillmentTests {
             executor.submit(() -> {
                 try {
                     startLatch.await();
-                    Map<String, Object> res = paymentService.handleWebhook("MOCK", params);
+                    Map<String, Object> res = paymentService.handleWebhook("PAYOS", params);
                     if ("SUCCESS".equals(res.get("status"))) {
                         successResponses.incrementAndGet();
                     }
@@ -499,7 +504,7 @@ public class PaymentFulfillmentTests {
                 orderId, parentId, teacherId);
         jdbc.update("INSERT INTO public.order_details (order_id, supply_id, product_name, unit_price, quantity, sub_total, delivery_status) VALUES (?, ?, 'Giay ve', 50000, 2, 100000, 'PENDING')",
                 orderId, supplyId);
-        jdbc.update("INSERT INTO public.payments (id, order_id, teacher_id, gateway, amount, commission_amount, net_amount, status) VALUES (?, ?, ?, 'MOCK', 130000, 10000, 120000, 'PENDING')",
+        jdbc.update("INSERT INTO public.payments (id, order_id, teacher_id, gateway, amount, commission_amount, net_amount, status) VALUES (?, ?, ?, 'PAYOS', 130000, 10000, 120000, 'PENDING')",
                 paymentId, orderId, teacherId);
 
         // Giả lập lỗi giữa transaction khi ghi sổ cái money_ledger (sau khi order, payment, supply đã save trong cùng @Transactional)
@@ -509,21 +514,16 @@ public class PaymentFulfillmentTests {
         PaymentService rawService = new PaymentService(
                 orderRepo, detailRepo, paymentRepo, webhookLogRepo,
                 failingLedgerRepo, supplyRepo, gatewayFactory, grantService, notifService, configService
-        );
+        , org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundRepository.class), org.mockito.Mockito.mock(com.example.art_course.modules.refund.repository.RefundItemRepository.class), org.mockito.Mockito.mock(com.example.art_course.enrollment.repository.EnrollmentRepository.class), org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
 
         org.springframework.transaction.support.TransactionTemplate txTemplate =
                 new org.springframework.transaction.support.TransactionTemplate(txManager);
 
-        Map<String, String> params = Map.of(
-                "paymentId", paymentId.toString(),
-                "transactionId", "TX_ROLLBACK_" + UUID.randomUUID(),
-                "amount", "130000",
-                "status", "SUCCESS",
-                "signature", "MOCK_VALID_SIGNATURE"
-        );
+        jdbc.update("UPDATE public.payments SET gateway_order_code = 1002 WHERE id = ?", paymentId);
+        Map<String, String> params = com.example.art_course.common.PostgresTestcontainerEnv.payosWebhook(1002, "130000", "TX_ROLLBACK_" + UUID.randomUUID());
 
         assertThrows(RuntimeException.class, () ->
-                txTemplate.executeWithoutResult(status -> rawService.handleWebhook("MOCK", params))
+                txTemplate.executeWithoutResult(status -> rawService.handleWebhook("PAYOS", params))
         );
 
         // Kiểm chứng toàn bộ thay đổi trên PostgreSQL thật đã bị ROLLBACK sạch sẽ

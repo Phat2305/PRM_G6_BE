@@ -3,15 +3,28 @@ package com.example.art_course.common;
 import com.example.art_course.contracts.IEnrollmentContract;
 import com.example.art_course.modules.notification.NotificationService;
 import com.example.art_course.modules.order.service.OrderService;
-import com.example.art_course.modules.payment.gateway.MockPaymentGateway;
+import com.example.art_course.modules.payment.gateway.PayOSPaymentGateway;
 import com.example.art_course.modules.payment.gateway.PaymentGatewayFactory;
 import com.example.art_course.modules.payment.service.EnrollmentGrantService;
 import com.example.art_course.modules.payment.service.PaymentService;
+import com.example.art_course.modules.finance.service.LedgerService;
+import com.example.art_course.modules.finance.service.EscrowReleaseService;
+import com.example.art_course.modules.refund.service.RefundService;
+import com.example.art_course.modules.withdrawal.service.WithdrawalService;
+import com.example.art_course.modules.refund.repository.RefundRepository;
+import com.example.art_course.modules.refund.repository.RefundItemRepository;
+import com.example.art_course.modules.order.repository.OrderRepository;
+import com.example.art_course.modules.order.repository.OrderDetailRepository;
+import com.example.art_course.modules.payment.repository.PaymentRepository;
+import com.example.art_course.modules.payment.repository.MoneyLedgerRepository;
+import com.example.art_course.modules.withdrawal.repository.WithdrawalRequestRepository;
+import com.example.art_course.supply.repository.SupplyRepository;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
-import org.flywaydb.core.Flyway;
+import org.testcontainers.DockerClientFactory;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,14 +38,10 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import javax.sql.DataSource;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
 import static org.mockito.Mockito.mock;
 
@@ -48,6 +57,7 @@ public final class PostgresTestcontainerEnv {
     private PostgresTestcontainerEnv() {}
 
     public static synchronized AnnotationConfigApplicationContext getContext() {
+        assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker required for isolated PostgreSQL tests");
         if (context == null) {
             if (container == null) {
                 container = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -59,10 +69,10 @@ public final class PostgresTestcontainerEnv {
                 String jdbcUrl = container.getJdbcUrl();
                 assertIsolatedContainerUrl(jdbcUrl);
 
-                loadBaseSchemaAndMigrate();
             }
 
             context = new AnnotationConfigApplicationContext(TestJpaConfig.class);
+            prepareTestSchema();
         }
         return context;
     }
@@ -70,6 +80,27 @@ public final class PostgresTestcontainerEnv {
     public static synchronized PostgreSQLContainer<?> getContainer() {
         getContext();
         return container;
+    }
+
+    public static java.util.Map<String, String> payosWebhook(long code, String amount, String reference) {
+        var data = new java.util.TreeMap<String, String>();
+        data.put("amount", amount);
+        data.put("code", "00");
+        data.put("orderCode", Long.toString(code));
+        data.put("reference", reference);
+        String raw = data.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
+                .collect(java.util.stream.Collectors.joining("&"));
+        try {
+            var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec("test-checksum-key".getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+            var params = new java.util.HashMap<String, String>();
+            data.forEach((key, value) -> params.put("data." + key, value));
+            params.put("success", "true");
+            params.put("signature", java.util.HexFormat.of().formatHex(mac.doFinal(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+            return params;
+        } catch (java.security.GeneralSecurityException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     /**
@@ -89,33 +120,31 @@ public final class PostgresTestcontainerEnv {
         }
     }
 
-    private static void loadBaseSchemaAndMigrate() {
+    // Isolated service tests use current entities; legacy pg_dump is not the application schema.
+    private static void prepareTestSchema() {
+        assertIsolatedContainerUrl(container.getJdbcUrl());
+        JdbcTemplate jdbc = context.getBean(JdbcTemplate.class);
+        // Profile lookup uses native SQL rather than JPA entities.
+        jdbc.execute("CREATE TABLE teacher_profiles (user_id uuid PRIMARY KEY, full_name varchar(255), shipping_fee bigint)");
+        jdbc.execute("CREATE TABLE parent_profiles (user_id uuid PRIMARY KEY, full_name varchar(255), shipping_address text, phone text)");
+        jdbc.query("SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public'", rs -> {
+            String column = rs.getString("column_name");
+            String value = null;
+            if (column.equals("id") && rs.getString("data_type").equals("uuid")) value = "gen_random_uuid()";
+            if (List.of("created_at", "updated_at").contains(column)) value = "CURRENT_TIMESTAMP";
+            if (List.of("commission_rate", "commission_amount", "net_amount", "shipping_fee", "reserved_quantity", "sold_quantity", "rejection_count").contains(column)) value = "0";
+            if (value != null) jdbc.execute("ALTER TABLE public.\"" + rs.getString("table_name") + "\" ALTER COLUMN \"" + column + "\" SET DEFAULT " + value);
+        });
         try {
-            Path baseSqlPath = Path.of("docs", "ART_COUSE.sql");
-            String filteredSql = Files.readAllLines(baseSqlPath, StandardCharsets.UTF_8).stream()
-                    .filter(line -> !line.startsWith("\\restrict"))
-                    .filter(line -> !line.startsWith("\\unrestrict"))
-                    .filter(line -> !line.startsWith("SET transaction_timeout"))
-                    .filter(line -> !line.contains("OWNER TO"))
-                    .filter(line -> !line.startsWith("COPY public."))
-                    .filter(line -> !line.equals("\\."))
-                    .collect(Collectors.joining("\n"));
-
-            try (Connection conn = container.createConnection("");
-                 Statement stmt = conn.createStatement()) {
-                assertIsolatedContainerUrl(conn.getMetaData().getURL());
-                stmt.execute(filteredSql);
-            }
-
-            Flyway flyway = Flyway.configure()
-                    .dataSource(container.getJdbcUrl(), container.getUsername(), container.getPassword())
-                    .locations("classpath:db/migration")
-                    .baselineOnMigrate(true)
-                    .baselineVersion("0")
-                    .load();
-            flyway.migrate();
-        } catch (Exception e) {
-            throw new RuntimeException("Lỗi khởi tạo schema nền và Flyway trên Testcontainers postgres:16-alpine", e);
+            // Exercise the actual migration and append-only triggers, never a copied money algorithm.
+            jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V11__commerce_safety.sql")));
+            String original = Files.readString(Path.of("docs/migrations/01_be2_migration_up.sql"));
+            int from = original.indexOf("CREATE OR REPLACE FUNCTION public.fn_prevent_money_ledger_modification()");
+            int to = original.indexOf("-- =====================================================================", from);
+            jdbc.execute(original.substring(from, to));
+            jdbc.execute("CREATE TRIGGER trg_prevent_money_ledger_truncate BEFORE TRUNCATE ON public.money_ledger FOR EACH STATEMENT EXECUTE FUNCTION public.fn_prevent_money_ledger_modification()");
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot prepare isolated test schema", ex);
         }
     }
 
@@ -148,7 +177,7 @@ public final class PostgresTestcontainerEnv {
             em.setPackagesToScan("com.example.art_course");
             em.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
             Properties props = new Properties();
-            props.setProperty("hibernate.hbm2ddl.auto", "validate");
+            props.setProperty("hibernate.hbm2ddl.auto", "create-drop");
             props.setProperty("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
             em.setJpaProperties(props);
             return em;
@@ -174,12 +203,13 @@ public final class PostgresTestcontainerEnv {
                 com.example.art_course.supply.repository.SupplyRepository supplyRepo,
                 EntityManagerFactory emf,
                 ConfigService configService,
-                EnrollmentGrantService enrollmentGrantService
+                EnrollmentGrantService enrollmentGrantService,
+                com.example.art_course.child.repository.ChildRepository childRepository
         ) {
             jakarta.persistence.EntityManager sharedEm = org.springframework.orm.jpa.SharedEntityManagerCreator.createSharedEntityManager(emf);
             return new OrderService(orderRepo, orderDetailRepo, cartRepo, cartItemRepo, courseRepo, supplyRepo, sharedEm,
                     new com.example.art_course.common.TeacherNames(sharedEm),
-                    mock(com.example.art_course.child.repository.ChildRepository.class),
+                    childRepository,
                     enrollmentGrantService, configService);
         }
 
@@ -200,7 +230,9 @@ public final class PostgresTestcontainerEnv {
 
         @Bean
         public PaymentGatewayFactory paymentGatewayFactory() {
-            return new PaymentGatewayFactory(List.of(new MockPaymentGateway()));
+            PayOSPaymentGateway gateway = new PayOSPaymentGateway(mock(JdbcTemplate.class));
+            org.springframework.test.util.ReflectionTestUtils.setField(gateway, "checksumKey", "test-checksum-key");
+            return new PaymentGatewayFactory(List.of(gateway));
         }
 
         @Bean
@@ -214,10 +246,44 @@ public final class PostgresTestcontainerEnv {
                 PaymentGatewayFactory gatewayFactory,
                 EnrollmentGrantService grantService,
                 NotificationService notifService,
-                ConfigService configService
+                ConfigService configService,
+                com.example.art_course.modules.refund.repository.RefundRepository refunds,
+                com.example.art_course.modules.refund.repository.RefundItemRepository refundItems,
+                com.example.art_course.enrollment.repository.EnrollmentRepository enrollments,
+                PlatformTransactionManager transactionManager
         ) {
             return new PaymentService(orderRepo, orderDetailRepo, paymentRepo, webhookLogRepo, moneyLedgerRepo,
-                    supplyRepo, gatewayFactory, grantService, notifService, configService);
+                    supplyRepo, gatewayFactory, grantService, notifService, configService, refunds, refundItems, enrollments, transactionManager);
+        }
+
+        @Bean
+        public LedgerService ledgerService(MoneyLedgerRepository ledger, PaymentRepository payments,
+                                           WithdrawalRequestRepository withdrawals, RefundRepository refunds) {
+            return org.mockito.Mockito.spy(new LedgerService(ledger, payments, withdrawals, refunds));
+        }
+
+        @Bean
+        public RefundService refundService(RefundRepository refunds, RefundItemRepository items,
+                OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
+                SupplyRepository supplies, IEnrollmentContract enrollment, LedgerService ledger,
+                NotificationService notifications,
+                com.example.art_course.customize_request.repository.CustomizeRequestRepository requests,
+                com.example.art_course.course.repository.CourseRepository courses) {
+            return new RefundService(refunds, items, orders, details, payments, supplies, enrollment, ledger,
+                    notifications, mock(com.example.art_course.modules.moderation.service.ModerationService.class), requests, courses);
+        }
+
+        @Bean
+        public EscrowReleaseService escrowReleaseService(PaymentRepository payments, OrderRepository orders,
+                OrderDetailRepository details, com.example.art_course.modules.course.repository.CourseReviewRepository reviews,
+                RefundRepository refunds, LedgerService ledger, NotificationService notifications, ConfigService config) {
+            return new EscrowReleaseService(payments, orders, details, reviews, refunds, ledger, notifications, config);
+        }
+
+        @Bean
+        public WithdrawalService withdrawalService(WithdrawalRequestRepository withdrawals, LedgerService ledger,
+                MoneyLedgerRepository entries, NotificationService notifications) {
+            return new WithdrawalService(withdrawals, entries, ledger, notifications);
         }
     }
 }

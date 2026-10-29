@@ -13,6 +13,8 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class PaymentStatusResponseDto {
+    // PAY-08: đã nhận tiền cho đơn hủy/hết hạn, chờ Staff hoàn thủ công.
+    private boolean refundPending;
     private UUID paymentId;
     private UUID orderId;
     private PaymentStatus status;

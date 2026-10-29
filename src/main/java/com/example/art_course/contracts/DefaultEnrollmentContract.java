@@ -42,6 +42,6 @@ public class DefaultEnrollmentContract implements IEnrollmentContract {
     @Override
     public boolean isEnrolled(UUID childId, UUID courseId) {
         if (childId == null || courseId == null) return false;
-        return enrollmentRepository.existsById(new EnrollmentId(childId, courseId));
+        return enrollmentRepository.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(childId, courseId, "active");
     }
 }
