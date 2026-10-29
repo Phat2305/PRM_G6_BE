@@ -171,7 +171,8 @@ public class NotificationService {
 
     public void notifyRefundCompleted(UUID refundId, UUID parentId, BigDecimal amount, String transactionCode) {
         sendNotificationAsync(parentId, "Hoàn tiền thành công",
-                "Khoản tiền hoàn " + amount + " VND đã được chuyển khoản (Mã GD: " + transactionCode + ")", "REFUND_COMPLETED", refundId);
+                "Khoản tiền hoàn " + amount + " VND đã được chuyển khoản"
+                        + (transactionCode == null ? ". Bằng chứng có trong lịch sử hoàn tiền." : " (Mã GD: " + transactionCode + ")"), "REFUND_COMPLETED", refundId);
     }
 
     public void notifyRefundRejected(UUID refundId, UUID parentId, BigDecimal amount, String reason) {

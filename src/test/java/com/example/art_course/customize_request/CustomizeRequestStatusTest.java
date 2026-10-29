@@ -29,6 +29,25 @@ class CustomizeRequestStatusTest {
     private final OfferRepository offers = mock(OfferRepository.class);
     private final CustomizeRequestService service = new CustomizeRequestService(repo, users, offers);
 
+    @Test
+    void listAndDetailIncludeContactCountsWithOneQueryPerResponse() {
+        String parent = login("PARENT");
+        UUID parentId = UUID.fromString(parent);
+        CustomizeRequest working = saved(parentId, "FUNDED");
+        CustomizeRequest open = saved(parentId, "OPEN");
+        when(repo.findAllByParentId(parentId)).thenReturn(List.of(working, open));
+        var count = mock(CustomizeRequestRepository.ContactCount.class);
+        when(count.getRequestId()).thenReturn(working.getId());
+        when(count.getContacted()).thenReturn(2L);
+        when(repo.countTeacherContacts(List.of(working.getId(), open.getId()))).thenReturn(List.of(count));
+        var list = service.getByParentId(parentId, parent);
+        assertEquals(2L, list.getFirst().getContacted());
+        assertEquals(0L, list.getLast().getContacted());
+        verify(repo).countTeacherContacts(List.of(working.getId(), open.getId()));
+        when(repo.countTeacherContacts(List.of(working.getId()))).thenReturn(List.of(count));
+        assertEquals(2L, service.getById(working.getId(), parent).getContacted());
+    }
+
     private String login(String role) {
         User u = new User(UUID.randomUUID(), "u", "hash", role, "ACTIVE", null, null);
         when(users.findByPrincipal(u.getId().toString())).thenReturn(Optional.of(u));

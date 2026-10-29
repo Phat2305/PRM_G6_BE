@@ -22,3 +22,5 @@ SHOP-06 (29/10/2026, yêu cầu người dùng): mỗi phụ huynh dùng một �
 14	PAY-08: tiền PayOS đến sau khi đơn CANCELLED/EXPIRED không khôi phục đơn/kho/quyền học; tạo một yêu cầu hoàn tiền toàn bộ để Staff xử lý thủ công. Link thanh toán chưa xác nhận hủy được dùng lại khi thử thanh toán.
 15	FIN-09: REFUND ghi phần giáo viên chịu (gross hoàn trừ commission snapshot). Hoàn từ HELD không trừ số dư khả dụng của đơn khác; affects_available=false và giảm phần ký quỹ còn lại. Hoàn từ RELEASED trừ khả dụng. Hoàn đủ gross đổi payment sang REFUNDED. Không tự sửa dữ liệu sổ cái lịch sử.
 16	SHOP-03: thông tin nhận hàng của đơn là snapshot riêng trong orders; đổi parent_profiles.shipping_address không đổi địa chỉ đơn cũ. Checkout chỉ gán khóa cho bé thuộc phụ huynh.
+
+17	FIN-09 (yêu cầu giao diện Staff): màn Hoàn tiền thay nhập mã giao dịch bằng ảnh JPG/PNG/WEBP tối đa 5 MB. Upload multipart và hoàn tất dùng cùng khóa/transaction; proof_image_url trỏ endpoint riêng tư, chỉ Staff/Admin và phụ huynh sở hữu được xem. Mã giao dịch để trống trên luồng ảnh; giữ mã lịch sử và API JSON cũ cho client cũ. Không đổi schema.

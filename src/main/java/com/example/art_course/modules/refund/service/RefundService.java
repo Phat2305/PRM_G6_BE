@@ -34,6 +34,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import com.example.art_course.video.service.R2StorageService;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import java.io.IOException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -59,6 +64,47 @@ public class RefundService {
     private final ModerationService moderationService;
     private final CustomizeRequestRepository customizeRequestRepository;
     private final CourseRepository courseRepository;
+    private final R2StorageService storage;
+
+    // FIN-08: upload and completion share the same refund/order locks and transaction.
+    @Transactional
+    public RefundResponseDto completeWithProof(UUID refundId, UUID staffId, MultipartFile file) {
+        Refund refund = findRefund(refundId);
+        if (!"APPROVED".equalsIgnoreCase(refund.getStatus())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Chỉ xác nhận được yêu cầu đã duyệt");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "IMAGE_REQUIRED", "Chưa chọn ảnh bằng chứng chuyển khoản");
+        }
+        if (file.getSize() > 5L * 1024 * 1024) {
+            throw new AppError(HttpStatus.CONTENT_TOO_LARGE, "IMAGE_TOO_LARGE", "Ảnh tối đa 5 MB");
+        }
+        if (file.getContentType() == null || !Set.of("image/jpeg", "image/png", "image/webp").contains(file.getContentType())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "IMAGE_TYPE", "Chỉ nhận ảnh JPG, PNG hoặc WEBP");
+        }
+        try {
+            // shortcut: DB rollback may leave an unlinked R2 file; add cleanup if these accumulate.
+            storage.uploadBytes("refund-proofs/" + refundId, file.getBytes(), file.getContentType());
+        } catch (IOException ex) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "IMAGE_READ", "Không đọc được ảnh");
+        }
+        return completeRefund(refundId, staffId,
+                new CompleteRefundRequest(null, "/api/v1/refunds/" + refundId + "/proof"));
+    }
+
+    // FIN-09, NFR-04: transfer receipts are private to the refund owner and reviewers.
+    @Transactional(readOnly = true)
+    public ResponseInputStream<GetObjectResponse> proof(UUID refundId, UUID callerId, boolean reviewer) {
+        Refund refund = refundRepository.findById(refundId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "REFUND_NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền"));
+        if (!reviewer && !refund.getParentId().equals(callerId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không xem được bằng chứng này");
+        }
+        if (!("/api/v1/refunds/" + refundId + "/proof").equals(refund.getProofImageUrl())) {
+            throw new AppError(HttpStatus.NOT_FOUND, "PROOF_NOT_FOUND", "Chưa có bằng chứng chuyển khoản");
+        }
+        return storage.getObject("refund-proofs/" + refundId);
+    }
 
     /**
      * Parent gửi yêu cầu hoàn tiền cho 1 dòng chi tiết trong đơn hàng (FIN-07).
@@ -251,7 +297,7 @@ public class RefundService {
         // FIN-09: hoàn từ HELD không trừ tiền khả dụng của đơn khác; vẫn ghi đủ lịch sử REFUND.
         ledgerService.recordEntry(payment.getTeacherId(), "REFUND", teacherAmount, payment.getId(),
                 refund.getId(), null, "Hoàn " + refund.getTotalAmount() + " VND cho đơn " + refund.getOrderId()
-                        + " qua mã GD: " + request.getTransactionCode(), staffId,
+                        + (request.getTransactionCode() == null ? " (kèm ảnh bằng chứng)" : " qua mã GD: " + request.getTransactionCode()), staffId,
                 payment.getStatus() == PaymentStatus.RELEASED);
         refundRepository.flush();
         if (refundRepository.sumCompletedByPaymentId(payment.getId()).compareTo(payment.getAmount()) >= 0) {

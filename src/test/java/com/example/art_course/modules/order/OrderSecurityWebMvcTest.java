@@ -61,6 +61,17 @@ public class OrderSecurityWebMvcTest {
     @Import({SecurityConfig.class, JwtAuthFilter.class, GlobalExceptionHandler.class})
     static class TestSecurityConfig {
         @Bean
+        public com.example.art_course.modules.refund.service.RefundService refundService() {
+            return mock(com.example.art_course.modules.refund.service.RefundService.class);
+        }
+
+        @Bean
+        public com.example.art_course.modules.refund.controller.RefundController refundController(
+                com.example.art_course.modules.refund.service.RefundService service) {
+            return new com.example.art_course.modules.refund.controller.RefundController(service,
+                    mock(com.example.art_course.common.TeacherNames.class));
+        }
+        @Bean
         public OrderService orderService() {
             return mock(OrderService.class);
         }
@@ -188,6 +199,24 @@ public class OrderSecurityWebMvcTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/videos/upload")
                 .file(file).header("Authorization", "Bearer " + createToken(teacherId, "TEACHER", "ACCESS")))
                 .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void onlyStaffAndAdminCanCompleteRefundWithProof() throws Exception {
+        UUID id = UUID.randomUUID();
+        var file = new org.springframework.mock.web.MockMultipartFile("file", "proof.png", "image/png", new byte[]{1});
+        for (String role : java.util.List.of("PARENT", "CHILD", "TEACHER")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/refunds/" + id + "/complete")
+                    .file(file).header("Authorization", "Bearer " + createToken(UUID.randomUUID(), role, "ACCESS")))
+                    .andExpect(status().isForbidden());
+        }
+        for (String role : java.util.List.of("STAFF", "ADMIN")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/refunds/" + id + "/complete")
+                    .file(file).header("Authorization", "Bearer " + createToken(teacherId, role, "ACCESS")))
+                    .andExpect(status().isOk());
+        }
+        verify(context.getBean(com.example.art_course.modules.refund.service.RefundService.class), times(2))
+                .completeWithProof(eq(id), eq(teacherId), any());
     }
 
     @Test

@@ -13,10 +13,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.InputStreamResource;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 
 @Slf4j
 @RestController("be2RefundController")
@@ -98,7 +104,7 @@ public class RefundController {
     /**
      * Staff hoàn tất chi tiền hoàn kèm mã giao dịch (FIN-08, FIN-09).
      */
-    @PostMapping("/{refundId}/complete")
+    @PostMapping(value = "/{refundId}/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<RefundResponseDto> completeRefund(
             @PathVariable UUID refundId,
@@ -108,5 +114,24 @@ public class RefundController {
         UUID staffId = UUID.fromString(auth.getName());
         RefundResponseDto dto = refundService.completeRefund(refundId, staffId, req);
         return ApiResponse.ok("Xác nhận hoàn tiền thành công", dto);
+    }
+
+    @PostMapping(value = "/{refundId}/complete", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ApiResponse<RefundResponseDto> completeWithProof(@PathVariable UUID refundId,
+            @RequestParam(value = "file", required = false) MultipartFile file, Authentication auth) {
+        return ApiResponse.ok("Xác nhận hoàn tiền thành công",
+                refundService.completeWithProof(refundId, UUID.fromString(auth.getName()), file));
+    }
+
+    @GetMapping("/{refundId}/proof")
+    @PreAuthorize("hasAnyRole('PARENT', 'STAFF', 'ADMIN')")
+    public ResponseEntity<Resource> proof(@PathVariable UUID refundId, Authentication auth) {
+        boolean reviewer = auth.getAuthorities().stream()
+                .anyMatch(a -> Set.of("ROLE_STAFF", "ROLE_ADMIN").contains(a.getAuthority()));
+        var object = refundService.proof(refundId, UUID.fromString(auth.getName()), reviewer);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(object.response().contentType()))
+                .header("X-Content-Type-Options", "nosniff").header("Cache-Control", "private, no-store")
+                .body(new InputStreamResource(object));
     }
 }

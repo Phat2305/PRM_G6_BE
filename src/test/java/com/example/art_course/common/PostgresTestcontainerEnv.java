@@ -270,7 +270,7 @@ public final class PostgresTestcontainerEnv {
                 com.example.art_course.customize_request.repository.CustomizeRequestRepository requests,
                 com.example.art_course.course.repository.CourseRepository courses) {
             return new RefundService(refunds, items, orders, details, payments, supplies, enrollment, ledger,
-                    notifications, mock(com.example.art_course.modules.moderation.service.ModerationService.class), requests, courses);
+                    notifications, mock(com.example.art_course.modules.moderation.service.ModerationService.class), requests, courses, org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
         }
 
         @Bean

@@ -239,15 +239,21 @@ Content-Type: application/json
   "reason": "Dụng cụ đã giao đúng và đủ"
 }
 
-### 5.6 Staff hoàn tất chi tiền hoàn cho phụ huynh (FIN-09: ghi sổ cái REFUND)
+### 5.6 Staff hoàn tất chi tiền hoàn bằng ảnh chuyển khoản (FIN-09)
 POST {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/complete
 Authorization: Bearer {{staffToken}}
-Content-Type: application/json
+Content-Type: multipart/form-data; boundary=receipt
 
-{
-  "transactionCode": "REF-FT261015001122",
-  "proofImageUrl": "https://storage.artcourse.com/proofs/refund_receipt.jpg"
-}
+--receipt
+Content-Disposition: form-data; name="file"; filename="proof.png"
+Content-Type: image/png
+
+< ./proof.png
+--receipt--
+
+### 5.6b Xem bằng chứng: Staff/Admin hoặc phụ huynh sở hữu yêu cầu
+GET {{baseUrl}}/api/v1/refunds/66666666-6666-6666-6666-666666666666/proof
+Authorization: Bearer {{staffToken}}
 
 ### 5.7 Staff kiểm duyệt dụng cụ vi phạm (STF-01: HIDE và tự ghi moderation_reviews)
 POST {{baseUrl}}/api/v1/staff/supplies/d0000000-0000-0000-0000-000000000001/moderate

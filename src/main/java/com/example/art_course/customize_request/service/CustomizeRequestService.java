@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Objects;
 
 /**
  * Bài đăng yêu cầu customize của phụ huynh (CUS-01..). Bài mới ở PENDING_REVIEW cho tới khi Staff duyệt thì OPEN
@@ -106,11 +109,10 @@ public class CustomizeRequestService {
         }
 
         // Giáo viên chỉ thấy bài đã được duyệt (OPEN) của phụ huynh này.
-        return repository.findAllByParentId(parentId)
+        return toResponses(repository.findAllByParentId(parentId)
                 .stream()
                 .filter(r -> seesAll || OPEN.equalsIgnoreCase(r.getStatus()))
-                .map(this::toResponse)
-                .toList();
+                .toList());
     }
 
     @Transactional(readOnly = true)
@@ -126,10 +128,7 @@ public class CustomizeRequestService {
             throw forbidden();
         }
 
-        return repository.findAllByStatus(normalized)
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(repository.findAllByStatus(normalized));
     }
 
     @Transactional(readOnly = true)
@@ -146,11 +145,10 @@ public class CustomizeRequestService {
         }
 
         boolean admin = hasRole(user, "ADMIN");
-        return repository.findAllByCategoryIgnoreCase(category.trim())
+        return toResponses(repository.findAllByCategoryIgnoreCase(category.trim())
                 .stream()
                 .filter(r -> admin || OPEN.equalsIgnoreCase(r.getStatus()))
-                .map(this::toResponse)
-                .toList();
+                .toList());
     }
 
     @Transactional
@@ -349,8 +347,18 @@ public class CustomizeRequestService {
 
     private CustomizeRequestResponse toResponse(
             CustomizeRequest entity) {
+        return toResponses(List.of(entity)).getFirst();
+    }
 
-        return CustomizeRequestResponse.builder()
+    private List<CustomizeRequestResponse> toResponses(List<CustomizeRequest> entities) {
+        List<UUID> ids = entities.stream().map(CustomizeRequest::getId).filter(Objects::nonNull).toList();
+        Map<UUID, Long> counts = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (var count : repository.countTeacherContacts(ids)) {
+                counts.put(count.getRequestId(), count.getContacted());
+            }
+        }
+        return entities.stream().map(entity -> CustomizeRequestResponse.builder()
                 .id(entity.getId())
                 .parentId(entity.getParentId())
                 .title(entity.getTitle())
@@ -360,8 +368,9 @@ public class CustomizeRequestService {
                 .budget(entity.getBudget())
                 .deadline(entity.getDeadline())
                 .status(entity.getStatus())
+                .contacted(counts.getOrDefault(entity.getId(), 0L))
                 .rejectionCount(entity.getRejectionCount())
                 .reviewNote(entity.getReviewNote())
-                .build();
+                .build()).toList();
     }
 }

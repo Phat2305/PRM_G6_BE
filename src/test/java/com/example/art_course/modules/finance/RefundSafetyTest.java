@@ -42,9 +42,10 @@ class RefundSafetyTest {
     private final SupplyRepository supplies = mock(SupplyRepository.class);
     private final LedgerService ledger = mock(LedgerService.class);
     private final NotificationService notifications = mock(NotificationService.class);
+    private final com.example.art_course.video.service.R2StorageService storage = mock(com.example.art_course.video.service.R2StorageService.class);
     private final RefundService service = new RefundService(refunds, items, orders, details, payments, supplies,
             mock(IEnrollmentContract.class), ledger, notifications, mock(ModerationService.class),
-            mock(CustomizeRequestRepository.class), mock(CourseRepository.class));
+            mock(CustomizeRequestRepository.class), mock(CourseRepository.class), storage);
     private Order order;
     private OrderDetail line;
     private Payment payment;
@@ -166,5 +167,58 @@ class RefundSafetyTest {
         service.completeRefund(refund.getId(), order.getTeacherId(), completion());
         verify(ledger).recordEntry(eq(order.getTeacherId()), eq("REFUND"), eq(new BigDecimal("90000")),
                 eq(payment.getId()), eq(refund.getId()), isNull(), anyString(), eq(order.getTeacherId()), eq(true));
+    }
+
+    @Test
+    void imageProofCompletesRefundWithoutInventingATransactionCode() {
+        refund.setStatus("APPROVED");
+        var png = new org.springframework.mock.web.MockMultipartFile("file", "proof.png", "image/png", new byte[]{1, 2, 3});
+        var result = service.completeWithProof(refund.getId(), order.getTeacherId(), png);
+        assertEquals("COMPLETED", result.getStatus());
+        assertNull(result.getRefundTransactionCode());
+        assertEquals("/api/v1/refunds/" + refund.getId() + "/proof", result.getProofImageUrl());
+        verify(storage).uploadBytes("refund-proofs/" + refund.getId(), new byte[]{1, 2, 3}, "image/png");
+        assertEquals(PaymentStatus.REFUNDED, payment.getStatus());
+    }
+
+    @Test
+    void missingWrongTypeAndOversizedProofsNeverCompleteTheRefund() {
+        refund.setStatus("APPROVED");
+        assertThrows(AppError.class, () -> service.completeWithProof(refund.getId(), order.getTeacherId(), null));
+        var files = List.of(
+                new org.springframework.mock.web.MockMultipartFile("file", new byte[0]),
+                new org.springframework.mock.web.MockMultipartFile("file", "proof.pdf", "application/pdf", new byte[]{1}),
+                new org.springframework.mock.web.MockMultipartFile("file", "proof.png", "image/png", new byte[5 * 1024 * 1024 + 1]));
+        for (var file : files) assertThrows(AppError.class, () -> service.completeWithProof(refund.getId(), order.getTeacherId(), file));
+        assertEquals("APPROVED", refund.getStatus());
+        verifyNoInteractions(storage, ledger);
+    }
+
+    @Test
+    void failedUploadAndRepeatedCompletionCannotWriteTheLedger() {
+        refund.setStatus("APPROVED");
+        var png = new org.springframework.mock.web.MockMultipartFile("file", "proof.png", "image/png", new byte[]{1});
+        doThrow(new IllegalStateException("storage unavailable")).when(storage).uploadBytes(anyString(), any(), anyString());
+        assertThrows(IllegalStateException.class, () -> service.completeWithProof(refund.getId(), order.getTeacherId(), png));
+        assertEquals("APPROVED", refund.getStatus());
+        clearInvocations(storage);
+        refund.setStatus("COMPLETED");
+        assertThrows(AppError.class, () -> service.completeWithProof(refund.getId(), order.getTeacherId(), png));
+        verifyNoInteractions(storage, ledger);
+    }
+
+    @Test
+    void onlyRefundOwnerAndReviewersCanReadProof() {
+        when(refunds.findById(refund.getId())).thenReturn(Optional.of(refund));
+        refund.setProofImageUrl("/api/v1/refunds/" + refund.getId() + "/proof");
+        assertEquals("FORBIDDEN", assertThrows(AppError.class,
+                () -> service.proof(refund.getId(), UUID.randomUUID(), false)).getErrorCode());
+        verifyNoInteractions(storage);
+        service.proof(refund.getId(), order.getParentId(), false);
+        service.proof(refund.getId(), UUID.randomUUID(), true);
+        verify(storage, times(2)).getObject("refund-proofs/" + refund.getId());
+        refund.setProofImageUrl(null);
+        assertEquals("PROOF_NOT_FOUND", assertThrows(AppError.class,
+                () -> service.proof(refund.getId(), order.getParentId(), false)).getErrorCode());
     }
 }

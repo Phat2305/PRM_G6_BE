@@ -277,7 +277,7 @@ public class FinanceTests {
                 refundRepo, refundItemRepo, orderRepo, orderDetailRepo,
                 paymentRepo, supplyRepo, enrollmentContract, ledgerService, notifService,
                 mock(ModerationService.class), mock(CustomizeRequestRepository.class), mock(CourseRepository.class)
-        );
+        , org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
 
         UUID orderId = UUID.randomUUID();
         UUID parentId = UUID.randomUUID();
@@ -337,7 +337,7 @@ public class FinanceTests {
         return new RefundService(refundRepo, mock(RefundItemRepository.class), orders,
                 mock(OrderDetailRepository.class), mock(PaymentRepository.class), mock(SupplyRepository.class),
                 mock(IEnrollmentContract.class), mock(LedgerService.class), notif, moderation,
-                mock(CustomizeRequestRepository.class), mock(CourseRepository.class));
+                mock(CustomizeRequestRepository.class), mock(CourseRepository.class), org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
     }
 
     @Test
@@ -399,7 +399,7 @@ public class FinanceTests {
         RefundService refundService = new RefundService(refundRepo, refundItemRepo, orders,
                 orderDetailRepo, payments, mock(SupplyRepository.class), enrollmentContract,
                 mock(LedgerService.class), mock(NotificationService.class), mock(ModerationService.class),
-                requestRepo, courseRepo);
+                requestRepo, courseRepo, org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
 
         UUID requestId = UUID.randomUUID();
         UUID childId = UUID.randomUUID();

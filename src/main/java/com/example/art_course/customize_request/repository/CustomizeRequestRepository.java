@@ -6,9 +6,29 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Collection;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface CustomizeRequestRepository
         extends JpaRepository<CustomizeRequest, UUID> {
+
+    interface ContactCount {
+        UUID getRequestId();
+        long getContacted();
+    }
+
+    // CUS-04/15: a teacher counts once across conversations and all their quote revisions.
+    @Query(value = """
+            SELECT request_id AS "requestId", COUNT(DISTINCT teacher_id) AS contacted
+            FROM (
+                SELECT request_id, teacher_id FROM offers WHERE request_id IN (:requestIds)
+                UNION ALL
+                SELECT context_id AS request_id, teacher_id FROM conversations
+                WHERE UPPER(TRIM(context_type)) = 'CUSTOMIZE_REQUEST' AND context_id IN (:requestIds)
+            ) contacts GROUP BY request_id
+            """, nativeQuery = true)
+    List<ContactCount> countTeacherContacts(@Param("requestIds") Collection<UUID> requestIds);
 
     List<CustomizeRequest> findAllByParentId(UUID parentId);
 
