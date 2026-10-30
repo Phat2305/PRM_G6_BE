@@ -166,7 +166,8 @@ public class NotificationService {
 
     public void notifyWithdrawalPaid(UUID requestId, UUID teacherId, BigDecimal amount, String transactionCode) {
         sendNotificationAsync(teacherId, "Chi trả rút tiền thành công",
-                "Đã chuyển khoản thành công " + amount + " VND (Mã GD: " + transactionCode + ")", "WITHDRAWAL_PAID", requestId);
+                "Đã chuyển khoản thành công " + amount + " VND"
+                        + (transactionCode == null ? ". Bằng chứng có trong lịch sử rút tiền." : " (Mã GD: " + transactionCode + ")"), "WITHDRAWAL_PAID", requestId);
     }
 
     public void notifyRefundCompleted(UUID refundId, UUID parentId, BigDecimal amount, String transactionCode) {

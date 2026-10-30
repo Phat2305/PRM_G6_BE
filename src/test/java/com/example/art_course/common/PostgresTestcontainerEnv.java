@@ -283,7 +283,7 @@ public final class PostgresTestcontainerEnv {
         @Bean
         public WithdrawalService withdrawalService(WithdrawalRequestRepository withdrawals, LedgerService ledger,
                 MoneyLedgerRepository entries, NotificationService notifications) {
-            return new WithdrawalService(withdrawals, entries, ledger, notifications);
+            return new WithdrawalService(withdrawals, entries, ledger, notifications, org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
         }
     }
 }

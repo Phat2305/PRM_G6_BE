@@ -77,6 +77,26 @@ public class OrderSecurityWebMvcTest {
         }
 
         @Bean
+        public com.example.art_course.modules.withdrawal.service.WithdrawalService withdrawalService() {
+            return mock(com.example.art_course.modules.withdrawal.service.WithdrawalService.class);
+        }
+
+        @Bean
+        public com.example.art_course.modules.finance.controller.AdminFinanceController adminFinanceController(
+                com.example.art_course.modules.withdrawal.service.WithdrawalService service) {
+            return new com.example.art_course.modules.finance.controller.AdminFinanceController(service,
+                    mock(com.example.art_course.modules.systemconfig.service.ConfigService.class), mock(com.example.art_course.common.TeacherNames.class));
+        }
+
+        @Bean
+        public com.example.art_course.modules.finance.controller.TeacherFinanceController teacherFinanceController(
+                com.example.art_course.modules.withdrawal.service.WithdrawalService service) {
+            return new com.example.art_course.modules.finance.controller.TeacherFinanceController(
+                    mock(com.example.art_course.modules.finance.service.LedgerService.class), service,
+                    mock(com.example.art_course.modules.finance.service.RevenueService.class));
+        }
+
+        @Bean
         public UserRepository userRepository() {
             return mock(UserRepository.class);
         }
@@ -199,6 +219,49 @@ public class OrderSecurityWebMvcTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/videos/upload")
                 .file(file).header("Authorization", "Bearer " + createToken(teacherId, "TEACHER", "ACCESS")))
                 .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void onlyStaffAndAdminCanMarkWithdrawalPaidWithProof() throws Exception {
+        UUID id = UUID.randomUUID();
+        var service = context.getBean(com.example.art_course.modules.withdrawal.service.WithdrawalService.class);
+        reset(service);
+        var file = new org.springframework.mock.web.MockMultipartFile("file", "proof.png", "image/png", new byte[]{1});
+        for (String role : java.util.List.of("PARENT", "CHILD", "TEACHER")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/admin/finance/withdrawals/" + id + "/paid")
+                    .file(file).header("Authorization", "Bearer " + createToken(UUID.randomUUID(), role, "ACCESS")))
+                    .andExpect(status().isForbidden());
+        }
+        for (String role : java.util.List.of("STAFF", "ADMIN")) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/v1/admin/finance/withdrawals/" + id + "/paid")
+                    .file(file).header("Authorization", "Bearer " + createToken(teacherId, role, "ACCESS")))
+                    .andExpect(status().isOk());
+        }
+        verify(service, times(2)).markPaidWithProof(eq(id), eq(teacherId), any());
+    }
+
+    @Test
+    void withdrawalProofRouteRestrictsRolesAndPassesReviewerFlagFromToken() throws Exception {
+        UUID id = UUID.randomUUID();
+        var service = context.getBean(com.example.art_course.modules.withdrawal.service.WithdrawalService.class);
+        reset(service);
+        when(service.proof(eq(id), eq(teacherId), anyBoolean())).thenAnswer(i ->
+                new software.amazon.awssdk.core.ResponseInputStream<>(
+                        software.amazon.awssdk.services.s3.model.GetObjectResponse.builder().contentType("image/png").build(),
+                        software.amazon.awssdk.http.AbortableInputStream.create(new java.io.ByteArrayInputStream(new byte[]{1}))));
+        for (String role : java.util.List.of("PARENT", "CHILD")) {
+            mockMvc.perform(get("/api/v1/teacher/finance/withdrawals/" + id + "/proof")
+                    .header("Authorization", "Bearer " + createToken(teacherId, role, "ACCESS")))
+                    .andExpect(status().isForbidden());
+        }
+        for (String role : java.util.List.of("TEACHER", "STAFF", "ADMIN")) {
+            mockMvc.perform(get("/api/v1/teacher/finance/withdrawals/" + id + "/proof")
+                    .header("Authorization", "Bearer " + createToken(teacherId, role, "ACCESS")))
+                    .andExpect(status().isOk())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", "private, no-store"));
+        }
+        verify(service).proof(id, teacherId, false);
+        verify(service, times(2)).proof(id, teacherId, true);
     }
 
     @Test

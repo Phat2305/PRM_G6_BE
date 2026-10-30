@@ -14,7 +14,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -77,7 +79,7 @@ public class AdminFinanceController {
     /**
      * Staff/Admin chuyển khoản thủ công và đánh dấu PAID (FIN-06).
      */
-    @PostMapping("/withdrawals/{requestId}/paid")
+    @PostMapping(value = "/withdrawals/{requestId}/paid", consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
     public ApiResponse<WithdrawalResponseDto> markPaid(
             @PathVariable UUID requestId,
@@ -87,6 +89,15 @@ public class AdminFinanceController {
         UUID staffId = UUID.fromString(auth.getName());
         WithdrawalResponseDto dto = withdrawalService.markPaidWithdrawal(requestId, staffId, req);
         return ApiResponse.ok("Xác nhận chi trả thành công", dto);
+    }
+
+    // FIN-06: xác nhận đã chi bằng ảnh, giữ API JSON cho client cũ.
+    @PostMapping(value = "/withdrawals/{requestId}/paid", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('STAFF', 'ADMIN')")
+    public ApiResponse<WithdrawalResponseDto> markPaidWithProof(@PathVariable UUID requestId,
+            @RequestParam(value = "file", required = false) MultipartFile file, Authentication auth) {
+        return ApiResponse.ok("Xác nhận chi trả thành công",
+                withdrawalService.markPaidWithProof(requestId, UUID.fromString(auth.getName()), file));
     }
 
     /**

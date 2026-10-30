@@ -24,7 +24,7 @@ class WithdrawalMinimumTest {
     private final MoneyLedgerRepository balances = mock(MoneyLedgerRepository.class);
     private final LedgerService ledger = mock(LedgerService.class);
     private final WithdrawalService service = new WithdrawalService(requests, balances, ledger,
-            mock(NotificationService.class));
+            mock(NotificationService.class), mock(com.example.art_course.video.service.R2StorageService.class));
     private final UUID teacherId = UUID.randomUUID();
 
     private CreateWithdrawalRequest request(BigDecimal amount) {

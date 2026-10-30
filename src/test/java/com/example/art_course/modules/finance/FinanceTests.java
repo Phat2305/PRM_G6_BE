@@ -144,7 +144,7 @@ public class FinanceTests {
         NotificationService notifService = mock(NotificationService.class);
 
         WithdrawalService withdrawalService = new WithdrawalService(
-                withdrawalRepo, ledgerRepo, ledgerService, notifService
+                withdrawalRepo, ledgerRepo, ledgerService, notifService, mock(com.example.art_course.video.service.R2StorageService.class)
         );
 
         UUID teacherId = UUID.randomUUID();
@@ -182,7 +182,7 @@ public class FinanceTests {
         NotificationService notifService = mock(NotificationService.class);
 
         WithdrawalService withdrawalService = new WithdrawalService(
-                withdrawalRepo, ledgerRepo, ledgerService, notifService
+                withdrawalRepo, ledgerRepo, ledgerService, notifService, mock(com.example.art_course.video.service.R2StorageService.class)
         );
 
         UUID teacherId = UUID.randomUUID();
@@ -217,7 +217,7 @@ public class FinanceTests {
         NotificationService notifService = mock(NotificationService.class);
 
         WithdrawalService withdrawalService = new WithdrawalService(
-                withdrawalRepo, ledgerRepo, ledgerService, notifService
+                withdrawalRepo, ledgerRepo, ledgerService, notifService, mock(com.example.art_course.video.service.R2StorageService.class)
         );
 
         UUID requestId = UUID.randomUUID();

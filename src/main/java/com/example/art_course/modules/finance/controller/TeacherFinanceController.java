@@ -12,9 +12,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -26,6 +31,18 @@ public class TeacherFinanceController {
     private final LedgerService ledgerService;
     private final WithdrawalService withdrawalService;
     private final RevenueService revenueService;
+
+    // FIN-06, NFR-04: kiểm tra chủ yêu cầu trước khi đọc ảnh từ R2.
+    @GetMapping("/withdrawals/{requestId}/proof")
+    @PreAuthorize("hasAnyRole('TEACHER', 'STAFF', 'ADMIN')")
+    public ResponseEntity<Resource> proof(@PathVariable UUID requestId, Authentication auth) {
+        boolean reviewer = auth.getAuthorities().stream()
+                .anyMatch(a -> Set.of("ROLE_STAFF", "ROLE_ADMIN").contains(a.getAuthority()));
+        var object = withdrawalService.proof(requestId, UUID.fromString(auth.getName()), reviewer);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(object.response().contentType()))
+                .header("X-Content-Type-Options", "nosniff").header("Cache-Control", "private, no-store")
+                .body(new InputStreamResource(object));
+    }
 
     /**
      * Tra cứu số dư thời gian thực của Teacher (FIN-03).

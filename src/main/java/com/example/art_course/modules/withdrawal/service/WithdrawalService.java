@@ -12,14 +12,20 @@ import com.example.art_course.modules.withdrawal.dto.RejectWithdrawalRequest;
 import com.example.art_course.modules.withdrawal.dto.WithdrawalResponseDto;
 import com.example.art_course.modules.withdrawal.entity.WithdrawalRequest;
 import com.example.art_course.modules.withdrawal.repository.WithdrawalRequestRepository;
+import com.example.art_course.video.service.R2StorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -31,6 +37,45 @@ public class WithdrawalService {
     private final MoneyLedgerRepository moneyLedgerRepository;
     private final LedgerService ledgerService;
     private final NotificationService notificationService;
+    private final R2StorageService storage;
+
+    // FIN-06: giữ khóa yêu cầu trong suốt lúc tải bằng chứng và ghi nhận chi trả.
+    @Transactional
+    public WithdrawalResponseDto markPaidWithProof(UUID requestId, UUID staffId, MultipartFile file) {
+        WithdrawalRequest request = findRequest(requestId);
+        validateTransition(request.getStatus(), WithdrawalStatus.PAID);
+        if (file == null || file.isEmpty()) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "IMAGE_REQUIRED", "Chưa chọn ảnh bằng chứng chuyển khoản");
+        }
+        if (file.getSize() > 5L * 1024 * 1024) {
+            throw new AppError(HttpStatus.CONTENT_TOO_LARGE, "IMAGE_TOO_LARGE", "Ảnh tối đa 5 MB");
+        }
+        if (file.getContentType() == null || !Set.of("image/jpeg", "image/png", "image/webp").contains(file.getContentType())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "IMAGE_TYPE", "Chỉ nhận ảnh JPG, PNG hoặc WEBP");
+        }
+        try {
+            // shortcut: DB rollback có thể để lại ảnh R2 chưa liên kết; thêm dọn ảnh nếu tích tụ.
+            storage.uploadBytes("withdrawal-proofs/" + requestId, file.getBytes(), file.getContentType());
+        } catch (IOException ex) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "IMAGE_READ", "Không đọc được ảnh");
+        }
+        return markPaidWithdrawal(requestId, staffId,
+                new MarkPaidRequest(null, "/api/v1/teacher/finance/withdrawals/" + requestId + "/proof"));
+    }
+
+    // FIN-06, NFR-04: bằng chứng chỉ dành cho chủ yêu cầu và Staff/Admin.
+    @Transactional(readOnly = true)
+    public ResponseInputStream<GetObjectResponse> proof(UUID requestId, UUID callerId, boolean reviewer) {
+        WithdrawalRequest request = withdrawalRequestRepository.findById(requestId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "WITHDRAWAL_NOT_FOUND", "Không tìm thấy yêu cầu rút tiền"));
+        if (!reviewer && !request.getTeacherId().equals(callerId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không xem được bằng chứng này");
+        }
+        if (!("/api/v1/teacher/finance/withdrawals/" + requestId + "/proof").equals(request.getProofImageUrl())) {
+            throw new AppError(HttpStatus.NOT_FOUND, "PROOF_NOT_FOUND", "Chưa có bằng chứng chuyển khoản");
+        }
+        return storage.getObject("withdrawal-proofs/" + requestId);
+    }
 
     /**
      * Teacher gửi yêu cầu rút tiền (FIN-04, BR-15).
@@ -147,7 +192,7 @@ public class WithdrawalService {
     }
 
     /**
-     * Staff chuyển khoản thủ công và đánh dấu PAID kèm mã giao dịch + ảnh chứng từ (FIN-06).
+     * Staff chuyển khoản thủ công và đánh dấu PAID kèm bằng chứng (FIN-06).
      * Ghi sổ cái PAYOUT.
      */
     @Transactional
@@ -170,7 +215,8 @@ public class WithdrawalService {
                 null,
                 null,
                 request.getId(),
-                "Chi trả thành công yêu cầu rút tiền qua mã giao dịch: " + req.getTransactionCode(),
+                req.getTransactionCode() == null ? "Chi trả thành công yêu cầu rút tiền, đã lưu bằng chứng chuyển khoản"
+                        : "Chi trả thành công yêu cầu rút tiền qua mã giao dịch: " + req.getTransactionCode(),
                 staffId
         );
 

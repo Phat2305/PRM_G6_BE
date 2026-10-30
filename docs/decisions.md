@@ -28,3 +28,5 @@ SHOP-06 (29/10/2026, yêu cầu người dùng): mỗi phụ huynh dùng một �
 18	CUS-12, SHOP-09: khóa customize chỉ được đánh giá sau khi phụ huynh nhận khóa và yêu cầu COMPLETED. Người đánh giá phải là chủ yêu cầu, có bé đang được cấp quyền học khóa đó. FE dùng ID khóa từ bản bàn giao đã nhận; đơn thật thiếu ID khóa hoặc API lưu thất bại không được báo đánh giá thành công. Khóa thường giữ điều kiện đánh giá theo quyền học hiện có.
 
 19	FIN-04 (yêu cầu người dùng): giáo viên rút tối thiểu 10.000 VND mỗi yêu cầu, áp dụng cả FE và BE; vẫn không được vượt số dư khả dụng và chỉ có tối đa một yêu cầu PENDING/APPROVED.
+
+20	FIN-06 (yêu cầu người dùng): Staff xác nhận đã chi rút tiền bằng ảnh JPG/PNG/WEBP tối đa 5 MB thay nhập mã giao dịch. Upload và ghi PAID dùng chung khóa yêu cầu/transaction; lưu proof_image_url có sẵn, mã giao dịch để trống trên luồng ảnh. Chỉ giáo viên sở hữu và Staff/Admin được xem bằng chứng. Giữ API JSON/mã giao dịch lịch sử cho client cũ; không đổi schema.
