@@ -16,7 +16,7 @@ import java.math.BigDecimal;
 public class CreateWithdrawalRequest {
 
     @NotNull(message = "Số tiền rút không được để trống")
-    @DecimalMin(value = "50000", message = "Số tiền rút tối thiểu là 50.000 VND")
+    @DecimalMin(value = "10000", message = "Số tiền rút tối thiểu là 10.000 VND")
     @JsonAlias({"amount", "money", "totalAmount", "total_amount"})
     private BigDecimal amount;
 

@@ -40,8 +40,9 @@ public class WithdrawalService {
     @Transactional
     public WithdrawalResponseDto requestWithdrawal(UUID teacherId, CreateWithdrawalRequest request) {
         BigDecimal amount = request.getAmount();
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_AMOUNT", "Số tiền rút phải lớn hơn 0");
+        // FIN-04: áp dụng mức tối thiểu cả khi gọi service ngoài controller.
+        if (amount == null || amount.compareTo(BigDecimal.valueOf(10000)) < 0) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_AMOUNT", "Số tiền rút tối thiểu là 10.000 VND");
         }
 
         // BR-15: Tối đa 1 yêu cầu PENDING hoặc APPROVED tại một thời điểm
