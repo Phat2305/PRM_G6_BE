@@ -13,6 +13,7 @@ import com.example.art_course.modules.notification.NotificationService;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.entity.OrderDetail;
 import com.example.art_course.modules.order.repository.OrderDetailRepository;
+import com.example.art_course.modules.order.repository.ChildrenCourseRepository;
 import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.payment.entity.Payment;
 import com.example.art_course.modules.payment.repository.PaymentRepository;
@@ -56,6 +57,7 @@ public class RefundService {
     private final RefundItemRepository refundItemRepository;
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final ChildrenCourseRepository childrenCourseRepository;
     private final PaymentRepository paymentRepository;
     private final SupplyRepository supplyRepository;
     private final IEnrollmentContract enrollmentContract;
@@ -205,7 +207,11 @@ public class RefundService {
                 }
                 if ("COURSE".equalsIgnoreCase(detail.getProductType())) {
                     // Thu hồi quyền học BE1 (BR-12)
-                    enrollmentContract.revokeAccess(detail.getChildId(), detail.getCourseId(), refund.getId());
+                    var assigned = childrenCourseRepository.findByOrderIdAndCourseId(order.getId(), detail.getCourseId());
+                    if (assigned.isEmpty()) enrollmentContract.revokeAccess(detail.getChildId(), detail.getCourseId(), refund.getId());
+                    for (var child : assigned) {
+                        enrollmentContract.revokeAccess(child.getChildId(), detail.getCourseId(), refund.getId());
+                    }
                     log.info("[REFUND-REVOKE] Đã thu hồi quyền học của Child {} - Course {}", detail.getChildId(), detail.getCourseId());
                     detail.setDeliveryStatus(DeliveryStatus.REFUNDED);
                     orderDetailRepository.save(detail);
@@ -229,11 +235,15 @@ public class RefundService {
                         request.setStatus("CANCELLED");
                         customizeRequestRepository.save(request);
                     });
-                    if (detail.getChildId() != null) {
-                        courseRepository.findFirstByCustomizeRequestId(detail.getCustomizeRequestId())
-                                .ifPresent(course -> enrollmentContract.revokeAccess(
-                                        detail.getChildId(), course.getId(), refund.getId()));
-                    }
+                    courseRepository.findFirstByCustomizeRequestId(detail.getCustomizeRequestId())
+                            .ifPresent(course -> {
+                                var assigned = childrenCourseRepository.findByOrderId(order.getId());
+                                if (assigned.isEmpty() && detail.getChildId() != null) enrollmentContract.revokeAccess(
+                                        detail.getChildId(), course.getId(), refund.getId());
+                                for (var child : assigned) {
+                                    enrollmentContract.revokeAccess(child.getChildId(), course.getId(), refund.getId());
+                                }
+                            });
                 }
             }
         }

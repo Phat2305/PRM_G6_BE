@@ -35,9 +35,13 @@ public class LedgerService {
     public TeacherBalanceDto getTeacherBalance(UUID teacherId) {
         // 1. Tiền đang giữ (Escrow / HELD)
         List<Payment> payments = paymentRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId);
-        BigDecimal heldBalance = payments.stream()
+        List<TeacherBalanceDto.HeldOrder> heldOrders = payments.stream()
                 .filter(p -> p.getStatus() == PaymentStatus.HELD)
-                .map(p -> p.getNetAmount().subtract(refundRepository.sumCompletedTeacherAmount(p.getId())).max(BigDecimal.ZERO))
+                .map(p -> new TeacherBalanceDto.HeldOrder(p.getOrderId(),
+                        p.getNetAmount().subtract(refundRepository.sumCompletedTeacherAmount(p.getId())).max(BigDecimal.ZERO)))
+                .filter(p -> p.amount().signum() > 0).toList();
+        BigDecimal heldBalance = heldOrders.stream()
+                .map(TeacherBalanceDto.HeldOrder::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 2. Tiền có thể rút (Available Balance từ sổ cái money_ledger)
@@ -69,6 +73,7 @@ public class LedgerService {
                 .pendingBalance(pendingBalance)
                 .withdrawnBalance(withdrawnBalance)
                 .history(history)
+                .heldOrders(heldOrders)
                 .build();
     }
 

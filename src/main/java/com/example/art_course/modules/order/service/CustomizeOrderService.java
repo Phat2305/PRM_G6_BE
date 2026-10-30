@@ -7,7 +7,9 @@ import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.entity.OrderDetail;
+import com.example.art_course.modules.order.entity.ChildrenCourse;
 import com.example.art_course.modules.order.repository.OrderDetailRepository;
+import com.example.art_course.modules.order.repository.ChildrenCourseRepository;
 import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import com.example.art_course.offer.entity.Offer;
@@ -28,6 +30,8 @@ public class CustomizeOrderService {
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final ChildrenCourseRepository childrenCourseRepository;
+    private final com.example.art_course.child.repository.ChildRepository childRepository;
     private final CustomizeRequestRepository requestRepository;
     private final OfferRepository offerRepository;
     private final ConfigService configService;
@@ -38,7 +42,12 @@ public class CustomizeOrderService {
      */
     @Transactional
     public Order orderFor(UUID requestId, UUID parentId) {
-        CustomizeRequest request = requestRepository.findById(requestId)
+        return orderFor(requestId, parentId, null);
+    }
+
+    @Transactional
+    public Order orderFor(UUID requestId, UUID parentId, UUID childId) {
+        CustomizeRequest request = requestRepository.findByIdForUpdate(requestId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "REQUEST_NOT_FOUND", "Không tìm thấy yêu cầu"));
         if (!parentId.equals(request.getParentId())) {
             throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Yêu cầu này không thuộc về bạn");
@@ -53,6 +62,7 @@ public class CustomizeOrderService {
             if (existing == null) continue;
             if (existing.getStatus() == OrderStatus.PENDING_PAYMENT
                     && (existing.getExpiredAt() == null || existing.getExpiredAt().isAfter(Instant.now()))) {
+                addPendingChild(existing.getId(), detail, parentId, childId);
                 return existing;
             }
             if (existing.getStatus() != OrderStatus.CANCELLED && existing.getStatus() != OrderStatus.EXPIRED
@@ -79,7 +89,7 @@ public class CustomizeOrderService {
                 .expiredAt(Instant.now().plus(configService.getQuotePaymentTimeoutHours(), ChronoUnit.HOURS))
                 .build());
 
-        orderDetailRepository.save(OrderDetail.builder()
+        OrderDetail detail = OrderDetail.builder()
                 .orderId(order.getId())
                 .customizeRequestId(requestId)
                 .productName(request.getTitle())
@@ -89,8 +99,25 @@ public class CustomizeOrderService {
                 .commissionRate(configService.getCommissionRateCourse())
                 .commissionAmount(commission.commission().getAmount())
                 .netAmount(commission.net().getAmount())
-                .build());
+                .build();
+        orderDetailRepository.save(detail);
+        addPendingChild(order.getId(), detail, parentId, childId);
         return order;
+    }
+
+    private void addPendingChild(UUID orderId, OrderDetail detail, UUID parentId, UUID childId) {
+        if (childId == null) return;
+        childRepository.findByUserIdAndParentId(childId, parentId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "CHILD_NOT_FOUND", "Không tìm thấy bé của bạn"));
+        var assigned = childrenCourseRepository.findByOrderId(orderId);
+        if (assigned.stream().anyMatch(a -> childId.equals(a.getChildId()))) return;
+        childrenCourseRepository.save(ChildrenCourse.builder()
+                .orderId(orderId).childId(childId)
+                .price(assigned.isEmpty() ? detail.getUnitPrice() : java.math.BigDecimal.ZERO).build());
+        if (detail.getChildId() == null) {
+            detail.setChildId(childId);
+            orderDetailRepository.save(detail);
+        }
     }
 
     /** Hủy các đơn còn chờ thanh toán của yêu cầu (khi phụ huynh thu hồi báo giá đã chấp nhận). */

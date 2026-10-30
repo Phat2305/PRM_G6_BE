@@ -97,7 +97,7 @@ class SubmissionServiceTest {
         assertForbidden(() -> service.upload(lessonId, png, childId.toString()));
         verifyNoInteractions(r2);
 
-        when(enrollRepo.existsByIdChildIdAndIdCourseId(childId, courseId)).thenReturn(true);
+        when(enrollRepo.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(childId, courseId, "active")).thenReturn(true);
         var response = service.upload(lessonId, png, childId.toString());
 
         assertEquals("/api/submissions/" + submissionId + "/image", response.getImageUrl());
@@ -109,7 +109,7 @@ class SubmissionServiceTest {
     @DisplayName("nộp ảnh: phụ huynh không nộp thay; file sai định dạng bị từ chối")
     void uploadValidatesCallerAndFile() {
         assertForbidden(() -> service.upload(lessonId, png, parentId.toString()));
-        when(enrollRepo.existsByIdChildIdAndIdCourseId(childId, courseId)).thenReturn(true);
+        when(enrollRepo.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(childId, courseId, "active")).thenReturn(true);
         var gif = new MockMultipartFile("file", "a.gif", "image/gif", new byte[]{1});
         AppError error = assertThrows(AppError.class,
                 () -> service.upload(lessonId, gif, childId.toString()));

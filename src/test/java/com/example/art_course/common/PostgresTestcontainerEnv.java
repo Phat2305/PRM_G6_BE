@@ -197,20 +197,21 @@ public final class PostgresTestcontainerEnv {
         public OrderService orderService(
                 com.example.art_course.modules.order.repository.OrderRepository orderRepo,
                 com.example.art_course.modules.order.repository.OrderDetailRepository orderDetailRepo,
+                com.example.art_course.modules.order.repository.ChildrenCourseRepository childrenCourseRepo,
                 com.example.art_course.modules.cart.repository.CartRepository cartRepo,
                 com.example.art_course.modules.cart.repository.CartItemRepository cartItemRepo,
                 com.example.art_course.course.repository.CourseRepository courseRepo,
                 com.example.art_course.supply.repository.SupplyRepository supplyRepo,
                 EntityManagerFactory emf,
                 ConfigService configService,
-                EnrollmentGrantService enrollmentGrantService,
+                IEnrollmentContract enrollmentContract,
                 com.example.art_course.child.repository.ChildRepository childRepository
         ) {
             jakarta.persistence.EntityManager sharedEm = org.springframework.orm.jpa.SharedEntityManagerCreator.createSharedEntityManager(emf);
-            return new OrderService(orderRepo, orderDetailRepo, cartRepo, cartItemRepo, courseRepo, supplyRepo, sharedEm,
+            return new OrderService(orderRepo, orderDetailRepo, childrenCourseRepo, cartRepo, cartItemRepo, courseRepo, supplyRepo, sharedEm,
                     new com.example.art_course.common.TeacherNames(sharedEm),
                     childRepository,
-                    enrollmentGrantService, configService);
+                    enrollmentContract, configService);
         }
 
         @Bean
@@ -265,19 +266,24 @@ public final class PostgresTestcontainerEnv {
         @Bean
         public RefundService refundService(RefundRepository refunds, RefundItemRepository items,
                 OrderRepository orders, OrderDetailRepository details, PaymentRepository payments,
+                com.example.art_course.modules.order.repository.ChildrenCourseRepository childrenCourses,
                 SupplyRepository supplies, IEnrollmentContract enrollment, LedgerService ledger,
                 NotificationService notifications,
                 com.example.art_course.customize_request.repository.CustomizeRequestRepository requests,
                 com.example.art_course.course.repository.CourseRepository courses) {
-            return new RefundService(refunds, items, orders, details, payments, supplies, enrollment, ledger,
+            return new RefundService(refunds, items, orders, details, childrenCourses, payments, supplies, enrollment, ledger,
                     notifications, mock(com.example.art_course.modules.moderation.service.ModerationService.class), requests, courses, org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
         }
 
         @Bean
         public EscrowReleaseService escrowReleaseService(PaymentRepository payments, OrderRepository orders,
                 OrderDetailRepository details, com.example.art_course.modules.course.repository.CourseReviewRepository reviews,
+                com.example.art_course.modules.order.repository.ChildrenCourseRepository childrenCourses,
                 RefundRepository refunds, LedgerService ledger, NotificationService notifications, ConfigService config) {
-            return new EscrowReleaseService(payments, orders, details, reviews, refunds, ledger, notifications, config);
+            return new EscrowReleaseService(payments, orders, details, childrenCourses, reviews, refunds, ledger, notifications, config,
+                    mock(com.example.art_course.child_progress.repository.ChildProgressRepository.class),
+                    mock(com.example.art_course.lesson.repository.LessonRepository.class),
+                    mock(com.example.art_course.customize_request.repository.CustomizeRequestRepository.class));
         }
 
         @Bean

@@ -38,7 +38,7 @@ public class JwtTokenProvider {
                 .claim("role", role)
                 .claim("type", "ACCESS")
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusSeconds(expiration)))
+                .expiration(Date.from(now.plusMillis(expiration)))
                 .signWith(key);
 
         return builder.compact();

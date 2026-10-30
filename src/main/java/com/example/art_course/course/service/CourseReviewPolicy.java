@@ -44,7 +44,7 @@ public final class CourseReviewPolicy {
 
     /**
      * Giáo viên vừa sửa nội dung (khóa hoặc bài học). Khóa thường đang công khai quay về chờ duyệt;
-     * khóa customize đã được duyệt và bàn giao thì khóa chỉnh sửa (muốn sửa phải để phụ huynh yêu cầu sửa).
+     * khóa customize đã bàn giao phải được đưa về FUNDED/DRAFT trước khi sửa.
      * Người gọi tự lưu khóa.
      */
     public static void onContentChanged(Course course) {

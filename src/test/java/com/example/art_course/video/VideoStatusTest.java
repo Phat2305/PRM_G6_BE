@@ -61,7 +61,7 @@ class VideoStatusTest {
         VideoLessonService service = new VideoLessonService(repo,
                 mock(CourseRepository.class), mock(UserRepository.class),
                 mock(VideoStorageService.class), mock(VideoProcessingPublisher.class),
-                mock(R2StorageService.class));
+                mock(R2StorageService.class), mock(com.example.art_course.course.service.CourseService.class));
         Lesson lesson = new Lesson();
         lesson.setId(lessonId);
         when(repo.findById(lessonId)).thenReturn(Optional.of(lesson));
@@ -83,7 +83,8 @@ class VideoStatusTest {
         UserRepository users = mock(UserRepository.class);
         R2StorageService r2 = mock(R2StorageService.class);
         VideoLessonService service = new VideoLessonService(repo, courses, users,
-                mock(VideoStorageService.class), mock(VideoProcessingPublisher.class), r2);
+                mock(VideoStorageService.class), mock(VideoProcessingPublisher.class), r2,
+                mock(com.example.art_course.course.service.CourseService.class));
         java.util.UUID teacherId = java.util.UUID.randomUUID();
         java.util.UUID courseId = java.util.UUID.randomUUID();
         Lesson lesson = new Lesson();

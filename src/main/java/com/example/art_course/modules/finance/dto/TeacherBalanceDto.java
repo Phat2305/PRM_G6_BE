@@ -19,4 +19,7 @@ public class TeacherBalanceDto {
     private BigDecimal pendingBalance;   // Đang chờ rút
     private BigDecimal withdrawnBalance; // Đã rút
     private List<MoneyLedger> history;   // Lịch sử biến động sổ cái
+    private List<HeldOrder> heldOrders;
+
+    public record HeldOrder(UUID orderId, BigDecimal amount) {}
 }

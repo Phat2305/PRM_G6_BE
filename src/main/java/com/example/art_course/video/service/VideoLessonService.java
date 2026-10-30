@@ -31,6 +31,7 @@ public class VideoLessonService {
     private final VideoStorageService videoStorageService;
     private final VideoProcessingPublisher videoProcessingPublisher;
     private final R2StorageService r2StorageService;
+    private final com.example.art_course.course.service.CourseService courseService;
 
     public VideoLessonService(
             LessonRepository lessonRepository,
@@ -38,7 +39,8 @@ public class VideoLessonService {
             UserRepository userRepository,
             VideoStorageService videoStorageService,
             VideoProcessingPublisher videoProcessingPublisher,
-            R2StorageService r2StorageService) {
+            R2StorageService r2StorageService,
+            com.example.art_course.course.service.CourseService courseService) {
 
         this.lessonRepository = lessonRepository;
         this.courseRepository = courseRepository;
@@ -46,6 +48,7 @@ public class VideoLessonService {
         this.videoStorageService = videoStorageService;
         this.videoProcessingPublisher = videoProcessingPublisher;
         this.r2StorageService = r2StorageService;
+        this.courseService = courseService;
     }
 
     @Transactional
@@ -69,6 +72,7 @@ public class VideoLessonService {
         Lesson lesson = ownedLesson(lessonId, userId);
         // Đổi video là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.
         courseRepository.findById(lesson.getCourseId()).ifPresent(course -> {
+            courseService.prepareCustomizeEdit(course);
             String before = course.getStatus();
             CourseReviewPolicy.onContentChanged(course);
             if (before == null ? course.getStatus() != null : !before.equals(course.getStatus())) {
@@ -102,6 +106,7 @@ public class VideoLessonService {
     @Transactional
     public void deleteLessonVideo(UUID lessonId, String userId) {
         Lesson lesson = ownedLesson(lessonId, userId);
+        courseRepository.findById(lesson.getCourseId()).ifPresent(courseService::prepareCustomizeEdit);
         String status = lesson.getVideoStatus();
         if ("QUEUED".equals(status) || "PROCESSING".equals(status)) {
             throw new AppError(HttpStatus.CONFLICT, "VIDEO_PROCESSING",

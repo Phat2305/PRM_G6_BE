@@ -44,11 +44,13 @@ import java.util.UUID;
 public class CustomizeDeliveryService {
 
     private final CustomizeRequestRepository requestRepository;
+    private final com.example.art_course.customize_request.repository.CustomizeDeliveryHistoryRepository deliveryHistoryRepository;
     private final OfferRepository offerRepository;
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
     private final ChildRepository childRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final com.example.art_course.modules.order.repository.ChildrenCourseRepository childrenCourseRepository;
     private final OrderRepository orderRepository;
     private final IEnrollmentContract enrollmentContract;
     private final EscrowReleaseService escrowReleaseService;
@@ -70,10 +72,13 @@ public class CustomizeDeliveryService {
                                List<LessonView> lessons, String reviewStatus, int rejectionCount, String reviewNote,
                                UUID orderId, UUID orderDetailId) {}
 
+    public record DeliveryHistoryView(UUID courseId, String courseName, int lessonCount,
+                                      Instant deliveredAt, Instant resolvedAt, String result, String reason) {}
+
     @Transactional
     public DeliveryView deliver(UUID requestId, UUID courseId, String principal) {
         User teacher = user(principal);
-        CustomizeRequest request = request(requestId);
+        CustomizeRequest request = requestForUpdate(requestId);
         requireAcceptedTeacher(request, teacher);
         if (!"FUNDED".equalsIgnoreCase(request.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only paid (FUNDED) requests can be delivered");
@@ -88,6 +93,10 @@ public class CustomizeDeliveryService {
         }
         if (course.getCustomizeRequestId() != null && !requestId.equals(course.getCustomizeRequestId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This course belongs to another request");
+        }
+        if (courseRepository.findFirstByCustomizeRequestId(requestId)
+                .filter(linked -> !linked.getId().equals(courseId)).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu này đã có khóa học; hãy bàn giao lại khóa hiện có");
         }
         // Chỉ gửi được bản nháp hoặc bản bị Staff từ chối (chưa đủ số lần); đang chờ duyệt hay đã duyệt thì không.
         if (!CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)
@@ -123,33 +132,62 @@ public class CustomizeDeliveryService {
         return view(request, course);
     }
 
+    @Transactional(readOnly = true)
+    public List<DeliveryHistoryView> history(UUID requestId, String principal) {
+        User caller = user(principal);
+        CustomizeRequest request = request(requestId);
+        if (!caller.getId().equals(request.getParentId())) requireAcceptedTeacher(request, caller);
+        return deliveryHistoryRepository.findAllByRequestIdOrderByDeliveredAtDesc(requestId).stream()
+                .map(h -> new DeliveryHistoryView(h.getCourseId(), h.getCourseName(), h.getLessonCount(),
+                        h.getDeliveredAt(), h.getResolvedAt(), h.getResult(), h.getReason()))
+                .toList();
+    }
+
     @Transactional
     public DeliveryView complete(UUID requestId, UUID childId, String principal) {
         User parent = user(principal);
-        CustomizeRequest request = request(requestId);
+        CustomizeRequest request = requestForUpdate(requestId);
         if (!parent.getId().equals(request.getParentId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This request is not yours");
         }
         if (!"DELIVERED".equalsIgnoreCase(request.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only delivered requests can be completed");
         }
-        if (childId == null || childRepository.findByUserIdAndParentId(childId, parent.getId()).isEmpty()) {
+        if (childId != null && childRepository.findByUserIdAndParentId(childId, parent.getId()).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose one of your children");
         }
         Course course = courseRepository.findFirstByCustomizeRequestId(requestId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not delivered yet"));
 
         OrderDetail line = paidLine(requestId);
-        if (!enrollmentContract.isEnrolled(childId, course.getId())) {
-            enrollmentContract.grantAccess(childId, course.getId(), line.getOrderId());
+        orderRepository.findByIdForUpdate(line.getOrderId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Paid order not found"));
+        var assigned = new java.util.ArrayList<>(childrenCourseRepository.findByOrderId(line.getOrderId()));
+        if (childId != null && assigned.stream().noneMatch(a -> childId.equals(a.getChildId()))) {
+            var added = com.example.art_course.modules.order.entity.ChildrenCourse.builder()
+                    .orderId(line.getOrderId()).courseId(course.getId()).childId(childId)
+                    .price(assigned.isEmpty() ? line.getUnitPrice() : java.math.BigDecimal.ZERO).build();
+            childrenCourseRepository.save(added);
+            assigned.add(added);
         }
-        line.setChildId(childId);
+        for (var assignment : assigned) {
+            if (assignment.getCourseId() != null && !course.getId().equals(assignment.getCourseId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Bé đã gắn với khóa học khác");
+            }
+            assignment.setCourseId(course.getId());
+            childrenCourseRepository.save(assignment);
+            if (!enrollmentContract.isEnrolled(assignment.getChildId(), course.getId())) {
+                enrollmentContract.grantAccess(assignment.getChildId(), course.getId(), line.getOrderId());
+            }
+        }
+        if (line.getChildId() == null && !assigned.isEmpty()) line.setChildId(assigned.getFirst().getChildId());
         line.setDeliveryStatus(DeliveryStatus.COMPLETED);
         line.setConfirmedDeliveredAt(Instant.now());
         orderDetailRepository.save(line);
 
         request.setStatus("COMPLETED");
         requestRepository.save(request);
+        resolveHistory(requestId, "CONFIRMED", null);
         // Giải ngân ngay nếu mọi dòng của đơn đã đủ điều kiện (#26); chưa đủ thì job định kỳ xét lại.
         escrowReleaseService.tryReleaseEscrow(line.getOrderId());
         notificationService.notifyCustomizeCompleted(requestId, course.getTeacherId(), course.getName());
@@ -164,7 +202,7 @@ public class CustomizeDeliveryService {
     @Transactional
     public DeliveryView rejectDelivery(UUID requestId, String reason, String principal) {
         User parent = user(principal);
-        CustomizeRequest request = request(requestId);
+        CustomizeRequest request = requestForUpdate(requestId);
         if (!parent.getId().equals(request.getParentId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This request is not yours");
         }
@@ -178,12 +216,17 @@ public class CustomizeDeliveryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not delivered yet"));
 
         String why = reason.trim();
+        resolveHistory(requestId, "REJECTED", why);
         request.setStatus("FUNDED");
         requestRepository.save(request);
         course.setStatus(CourseReviewPolicy.DRAFT);
         course.setRejectionCount(0);
         course.setReviewNote("Phụ huynh chưa đồng ý: " + why);
         courseRepository.save(course);
+        for (OrderDetail line : orderDetailRepository.findByCustomizeRequestId(requestId)) {
+            line.setDeliveredAt(null);
+            orderDetailRepository.save(line);
+        }
 
         Conversation conversation = conversationRepository
                 .findFirstByContextTypeAndContextIdAndTeacherId("CUSTOMIZE_REQUEST", requestId, course.getTeacherId())
@@ -247,6 +290,21 @@ public class CustomizeDeliveryService {
 
     private CustomizeRequest request(UUID id) {
         return requestRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customize request not found"));
+    }
+
+    private void resolveHistory(UUID requestId, String result, String reason) {
+        deliveryHistoryRepository.findFirstByRequestIdAndResolvedAtIsNullOrderByDeliveredAtDesc(requestId)
+                .ifPresent(history -> {
+                    history.setResolvedAt(Instant.now());
+                    history.setResult(result);
+                    history.setReason(reason);
+                    deliveryHistoryRepository.save(history);
+                });
+    }
+
+    private CustomizeRequest requestForUpdate(UUID id) {
+        return requestRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customize request not found"));
     }
 

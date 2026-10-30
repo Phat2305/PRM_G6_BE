@@ -84,8 +84,8 @@ public class SubmissionService {
                 .orElseThrow(() -> forbidden());
         Lesson lesson = getLesson(lessonId);
         if (lesson.getCourseId() == null
-                || !enrollmentRepository.existsByIdChildIdAndIdCourseId(
-                        child.getUserId(), lesson.getCourseId())) {
+                || !enrollmentRepository.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(
+                        child.getUserId(), lesson.getCourseId(), "active")) {
             throw forbidden();
         }
 

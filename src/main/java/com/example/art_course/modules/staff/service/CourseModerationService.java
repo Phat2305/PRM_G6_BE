@@ -8,6 +8,8 @@ import com.example.art_course.course.repository.CourseRepository;
 import com.example.art_course.course.service.CourseReviewPolicy;
 import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
+import com.example.art_course.customize_request.repository.CustomizeDeliveryHistoryRepository;
+import com.example.art_course.customize_request.entity.CustomizeDeliveryHistory;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
 import com.example.art_course.modules.notification.NotificationService;
@@ -38,6 +40,8 @@ public class CourseModerationService {
     private final IModerationContract moderationContract;
     private final NotificationService notificationService;
     private final TeacherNames names;
+    private final com.example.art_course.modules.order.repository.OrderDetailRepository orderDetails;
+    private final CustomizeDeliveryHistoryRepository deliveryHistoryRepository;
 
     @Transactional(readOnly = true)
     public List<CourseReviewDtos.Item> pending() {
@@ -66,6 +70,9 @@ public class CourseModerationService {
     public CourseReviewDtos.Detail detail(UUID courseId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
+        if (CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)) {
+            throw new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học");
+        }
         List<CourseReviewDtos.LessonItem> lessons = lessonRepository.findAllByCourseId(courseId).stream()
                 .map(l -> new CourseReviewDtos.LessonItem(l.getId(), l.getTitle(), Boolean.TRUE.equals(l.getIsTrial()),
                         Boolean.TRUE.equals(l.getHasAssignment()), l.getVideoStatus(), l.getVideoUrl()))
@@ -79,7 +86,8 @@ public class CourseModerationService {
     @Transactional
     public void approve(UUID courseId, UUID staffId) {
         Course course = lockPending(courseId);
-        CourseReviewPolicy.requireReviewable(course, lessonRepository.findAllByCourseId(courseId));
+        List<Lesson> courseLessons = lessonRepository.findAllByCourseId(courseId);
+        CourseReviewPolicy.requireReviewable(course, courseLessons);
 
         CustomizeRequest request = null;
         if (CourseReviewPolicy.isCustomize(course)) {
@@ -98,6 +106,15 @@ public class CourseModerationService {
         if (request != null) {
             request.setStatus("DELIVERED");
             requestRepository.save(request);
+            var deliveredAt = java.time.Instant.now();
+            deliveryHistoryRepository.save(CustomizeDeliveryHistory.builder()
+                    .requestId(request.getId()).courseId(courseId).courseName(course.getName())
+                    .lessonCount(courseLessons.size()).deliveredAt(deliveredAt).build());
+            // CUS-12: mốc X ngày bắt đầu từ lần bàn giao đã được Staff duyệt.
+            for (var line : orderDetails.findByCustomizeRequestId(request.getId())) {
+                line.setDeliveredAt(deliveredAt);
+                orderDetails.save(line);
+            }
             notificationService.notifyCustomizeDelivered(request.getId(), request.getParentId(), course.getName());
         } else {
             notificationService.notifyCourseApproved(course.getId(), course.getTeacherId(), course.getName());

@@ -5,15 +5,16 @@ import com.example.art_course.child.repository.ChildRepository;
 import com.example.art_course.common.statemachine.OrderStatus;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.contracts.IEnrollmentContract;
 import com.example.art_course.modules.cart.repository.*;
 import com.example.art_course.modules.order.entity.*;
 import com.example.art_course.modules.order.repository.*;
 import com.example.art_course.modules.order.service.OrderService;
-import com.example.art_course.modules.payment.service.EnrollmentGrantService;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,14 +31,17 @@ import static org.mockito.Mockito.*;
 class OrderServiceSafetyTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderDetailRepository details = mock(OrderDetailRepository.class);
+    private final ChildrenCourseRepository childrenCourses = mock(ChildrenCourseRepository.class);
     private final CourseRepository courses = mock(CourseRepository.class);
     private final SupplyRepository supplies = mock(SupplyRepository.class);
     private final ChildRepository children = mock(ChildRepository.class);
     private final ConfigService config = mock(ConfigService.class);
+    private final EntityManager entityManager = mock(EntityManager.class);
+    private final IEnrollmentContract enrollment = mock(IEnrollmentContract.class);
     private final TeacherNames names = mock(TeacherNames.class);
-    private final OrderService service = new OrderService(orders, details, mock(CartRepository.class),
-            mock(CartItemRepository.class), courses, supplies, mock(EntityManager.class), names, children,
-            mock(EnrollmentGrantService.class), config);
+    private final OrderService service = new OrderService(orders, details, childrenCourses, mock(CartRepository.class),
+            mock(CartItemRepository.class), courses, supplies, entityManager, names, children,
+            enrollment, config);
     private final UUID parentId = UUID.randomUUID();
     private Course first;
     private Course second;
@@ -115,6 +119,69 @@ class OrderServiceSafetyTest {
                 () -> service.createOrdersFromCheckout(parentId, request)).getErrorCode());
         verify(children).findByUserIdAndParentId(item.getChildId(), parentId);
         verify(orders, never()).save(any());
+    }
+
+    @Test
+    void paidCourseCanAssignMoreThanTwoChildrenWithOnePurchase() {
+        Order paid = Order.builder().id(UUID.randomUUID()).parentId(parentId).status(OrderStatus.PAID).build();
+        OrderDetail line = OrderDetail.builder().id(UUID.randomUUID()).orderId(paid.getId())
+                .courseId(first.getId()).unitPrice(first.getPrice()).build();
+        UUID childA = UUID.randomUUID();
+        UUID childB = UUID.randomUUID();
+        UUID childC = UUID.randomUUID();
+        when(orders.findByIdForUpdate(paid.getId())).thenReturn(Optional.of(paid));
+        when(details.findById(line.getId())).thenReturn(Optional.of(line));
+        when(children.findByUserIdAndParentId(any(), eq(parentId))).thenReturn(Optional.of(new Child()));
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.setParameter(anyString(), any())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+        ChildrenCourse firstAssignment = ChildrenCourse.builder().childId(childA).build();
+        ChildrenCourse secondAssignment = ChildrenCourse.builder().childId(childB).build();
+        ChildrenCourse thirdAssignment = ChildrenCourse.builder().childId(childC).build();
+        when(childrenCourses.findByOrderIdAndCourseId(paid.getId(), first.getId()))
+                .thenReturn(List.of(), List.of(firstAssignment),
+                        List.of(firstAssignment, secondAssignment),
+                        List.of(firstAssignment, secondAssignment, thirdAssignment));
+
+        service.assignChild(paid.getId(), line.getId(), parentId, childA);
+        service.assignChild(paid.getId(), line.getId(), parentId, childB);
+        service.assignChild(paid.getId(), line.getId(), parentId, childC);
+        service.assignChild(paid.getId(), line.getId(), parentId, childA);
+        var saved = org.mockito.ArgumentCaptor.forClass(ChildrenCourse.class);
+        verify(childrenCourses, times(3)).save(saved.capture());
+        assertEquals(first.getPrice(), saved.getAllValues().get(0).getPrice());
+        assertEquals(BigDecimal.ZERO, saved.getAllValues().get(1).getPrice());
+        assertEquals(BigDecimal.ZERO, saved.getAllValues().get(2).getPrice());
+        verify(enrollment).grantAccess(childA, first.getId(), paid.getId());
+        verify(enrollment).grantAccess(childB, first.getId(), paid.getId());
+        verify(enrollment).grantAccess(childC, first.getId(), paid.getId());
+    }
+
+    @Test
+    void paidCustomizeCanAssignThirdChildBeforeDelivery() {
+        Order paid = Order.builder().id(UUID.randomUUID()).parentId(parentId).status(OrderStatus.PAID).build();
+        UUID firstChild = UUID.randomUUID();
+        UUID secondChild = UUID.randomUUID();
+        UUID thirdChild = UUID.randomUUID();
+        OrderDetail line = OrderDetail.builder().id(UUID.randomUUID()).orderId(paid.getId())
+                .customizeRequestId(UUID.randomUUID()).childId(firstChild)
+                .unitPrice(new BigDecimal("400000")).build();
+        when(orders.findByIdForUpdate(paid.getId())).thenReturn(Optional.of(paid));
+        when(details.findById(line.getId())).thenReturn(Optional.of(line));
+        when(children.findByUserIdAndParentId(thirdChild, parentId)).thenReturn(Optional.of(new Child()));
+        when(childrenCourses.findByOrderId(paid.getId())).thenReturn(List.of(
+                ChildrenCourse.builder().orderId(paid.getId()).childId(firstChild).build(),
+                ChildrenCourse.builder().orderId(paid.getId()).childId(secondChild).build()));
+
+        service.assignChild(paid.getId(), line.getId(), parentId, thirdChild);
+
+        var saved = org.mockito.ArgumentCaptor.forClass(ChildrenCourse.class);
+        verify(childrenCourses).save(saved.capture());
+        assertEquals(thirdChild, saved.getValue().getChildId());
+        assertNull(saved.getValue().getCourseId());
+        assertEquals(BigDecimal.ZERO, saved.getValue().getPrice());
+        verify(enrollment, never()).grantAccess(any(), any(), any());
     }
 
     @Test

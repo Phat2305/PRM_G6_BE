@@ -78,8 +78,12 @@ public class FinanceTests {
         ConfigService configService = mock(ConfigService.class);
 
         EscrowReleaseService escrowService = new EscrowReleaseService(
-                paymentRepo, orderRepo, orderDetailRepo, courseReviewRepo,
-                refundRepo, ledgerService, notifService, configService
+                paymentRepo, orderRepo, orderDetailRepo,
+                mock(com.example.art_course.modules.order.repository.ChildrenCourseRepository.class), courseReviewRepo,
+                refundRepo, ledgerService, notifService, configService,
+                mock(com.example.art_course.child_progress.repository.ChildProgressRepository.class),
+                mock(com.example.art_course.lesson.repository.LessonRepository.class),
+                mock(com.example.art_course.customize_request.repository.CustomizeRequestRepository.class)
         );
 
         UUID orderId = UUID.randomUUID();
@@ -275,6 +279,7 @@ public class FinanceTests {
 
         RefundService refundService = new RefundService(
                 refundRepo, refundItemRepo, orderRepo, orderDetailRepo,
+                mock(com.example.art_course.modules.order.repository.ChildrenCourseRepository.class),
                 paymentRepo, supplyRepo, enrollmentContract, ledgerService, notifService,
                 mock(ModerationService.class), mock(CustomizeRequestRepository.class), mock(CourseRepository.class)
         , org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
@@ -335,7 +340,8 @@ public class FinanceTests {
         OrderRepository orders = mock(OrderRepository.class);
         when(orders.findByIdForUpdate(any())).thenReturn(Optional.of(Order.builder().status(com.example.art_course.common.statemachine.OrderStatus.PAID).build()));
         return new RefundService(refundRepo, mock(RefundItemRepository.class), orders,
-                mock(OrderDetailRepository.class), mock(PaymentRepository.class), mock(SupplyRepository.class),
+                mock(OrderDetailRepository.class), mock(com.example.art_course.modules.order.repository.ChildrenCourseRepository.class),
+                mock(PaymentRepository.class), mock(SupplyRepository.class),
                 mock(IEnrollmentContract.class), mock(LedgerService.class), notif, moderation,
                 mock(CustomizeRequestRepository.class), mock(CourseRepository.class), org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
     }
@@ -397,7 +403,8 @@ public class FinanceTests {
         when(orders.findByIdForUpdate(any())).thenReturn(Optional.of(Order.builder().status(com.example.art_course.common.statemachine.OrderStatus.PAID).build()));
         when(payments.findById(any())).thenReturn(Optional.of(Payment.builder().status(PaymentStatus.HELD).build()));
         RefundService refundService = new RefundService(refundRepo, refundItemRepo, orders,
-                orderDetailRepo, payments, mock(SupplyRepository.class), enrollmentContract,
+                orderDetailRepo, mock(com.example.art_course.modules.order.repository.ChildrenCourseRepository.class),
+                payments, mock(SupplyRepository.class), enrollmentContract,
                 mock(LedgerService.class), mock(NotificationService.class), mock(ModerationService.class),
                 requestRepo, courseRepo, org.mockito.Mockito.mock(com.example.art_course.video.service.R2StorageService.class));
 

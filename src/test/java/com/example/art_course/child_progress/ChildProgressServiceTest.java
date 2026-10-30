@@ -37,8 +37,24 @@ class ChildProgressServiceTest {
     private final LessonRepository lessonRepo = mock(LessonRepository.class);
     private final CourseRepository courseRepo = mock(CourseRepository.class);
     private final EnrollmentRepository enrollRepo = mock(EnrollmentRepository.class);
+    private final org.springframework.context.ApplicationEventPublisher events =
+            mock(org.springframework.context.ApplicationEventPublisher.class);
     private final ChildProgressService service =
-            new ChildProgressService(progressRepo, childRepo, lessonRepo, courseRepo, enrollRepo);
+            new ChildProgressService(progressRepo, childRepo, lessonRepo, courseRepo, enrollRepo,
+                    events);
+
+    @Test
+    void completingLastLessonEmitsCourseCompletion() {
+        enroll("active");
+        when(lessonRepo.findAllByCourseId(courseId)).thenReturn(List.of(lesson));
+        var completed = new ChildProgress(new ChildProgressId(childId, lessonId), 90, true);
+        var before = new ChildProgress(new ChildProgressId(childId, lessonId), 30, false);
+        when(progressRepo.findByIdChildIdAndIdLessonId(childId, lessonId))
+                .thenReturn(Optional.of(before), Optional.of(completed));
+        when(progressRepo.findAllByIdChildId(childId)).thenReturn(List.of(completed));
+        service.updateProgress(childId, childId, lessonId, request(90, true));
+        verify(events).publishEvent(any(com.example.art_course.contracts.events.CourseCompletedEvent.class));
+    }
 
     private final UUID childId = UUID.randomUUID();
     private final UUID parentId = UUID.randomUUID();

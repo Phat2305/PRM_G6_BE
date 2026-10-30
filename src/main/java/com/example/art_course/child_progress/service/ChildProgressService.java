@@ -14,6 +14,8 @@ import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.art_course.contracts.events.CourseCompletedEvent;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -30,18 +32,21 @@ public class ChildProgressService {
     private final LessonRepository lessonRepository;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final ApplicationEventPublisher events;
 
     public ChildProgressService(
             ChildProgressRepository progressRepository,
             ChildRepository childRepository,
             LessonRepository lessonRepository,
             CourseRepository courseRepository,
-            EnrollmentRepository enrollmentRepository) {
+            EnrollmentRepository enrollmentRepository,
+            ApplicationEventPublisher events) {
         this.progressRepository = progressRepository;
         this.childRepository = childRepository;
         this.lessonRepository = lessonRepository;
         this.courseRepository = courseRepository;
         this.enrollmentRepository = enrollmentRepository;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -159,15 +164,27 @@ public class ChildProgressService {
         boolean completed = Boolean.TRUE.equals(request.getIsCompleted())
                 && watchedEnough(childId, lesson, request.getWatchedSeconds());
 
+        boolean alreadyCompleted = progressRepository.findByIdChildIdAndIdLessonId(childId, lessonId)
+                .map(p -> Boolean.TRUE.equals(p.getIsCompleted())).orElse(false);
         progressRepository.upsert(
                 childId,
                 lessonId,
                 request.getWatchedSeconds(),
                 completed);
 
-        return toResponse(progressRepository
+        ChildProgress saved = progressRepository
                 .findByIdChildIdAndIdLessonId(childId, lessonId)
-                .orElseThrow());
+                .orElseThrow();
+        if (!alreadyCompleted && Boolean.TRUE.equals(saved.getIsCompleted())) {
+            Set<UUID> lessonIds = lessonRepository.findAllByCourseId(lesson.getCourseId()).stream()
+                    .map(Lesson::getId).collect(Collectors.toSet());
+            if (!lessonIds.isEmpty() && progressRepository.findAllByIdChildId(childId).stream()
+                    .filter(p -> Boolean.TRUE.equals(p.getIsCompleted()))
+                    .map(p -> p.getId().getLessonId()).collect(Collectors.toSet()).containsAll(lessonIds)) {
+                events.publishEvent(new CourseCompletedEvent(this, lesson.getCourseId(), childId));
+            }
+        }
+        return toResponse(saved);
     }
 
     // At least 90% of the video, counting what was reported before. Lessons without a known length are not checked.

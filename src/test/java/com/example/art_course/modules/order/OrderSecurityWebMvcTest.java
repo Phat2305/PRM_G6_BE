@@ -478,7 +478,8 @@ public class OrderSecurityWebMvcTest {
                 .expiredAt(Instant.now().plusSeconds(900))
                 .build();
 
-        OrderService.OrderDetailResponse response = new OrderService.OrderDetailResponse(order, Collections.emptyList());
+        OrderService.OrderDetailResponse response = new OrderService.OrderDetailResponse(
+                order, Collections.emptyList(), Collections.emptyList());
         when(orderService.getOrderDetail(eq(orderAId), eq(parentAId), eq("PARENT"))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/orders/" + orderAId)

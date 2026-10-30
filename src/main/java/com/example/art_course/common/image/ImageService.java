@@ -33,6 +33,7 @@ public class ImageService {
     private final SupplyRepository supplyRepository;
     private final CourseRepository courseRepository;
     private final R2StorageService r2StorageService;
+    private final com.example.art_course.course.service.CourseService courseService;
 
     // Đổi ảnh là đổi thứ người mua nhìn thấy: dụng cụ quay về chờ Staff duyệt (CRS-06/07).
     @Transactional
@@ -59,6 +60,7 @@ public class ImageService {
         if (course.getTeacherId() == null || !course.getTeacherId().equals(teacherId)) {
             throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không quản lý khóa học này");
         }
+        courseService.prepareCustomizeEdit(course);
         String old = course.getCoverImageUrl();
         String url = store(COURSES, file);
         course.setCoverImageUrl(url);
@@ -68,9 +70,16 @@ public class ImageService {
         return url;
     }
 
-    public ResponseInputStream<GetObjectResponse> read(String kind, UUID id) {
+    public ResponseInputStream<GetObjectResponse> read(String kind, UUID id, UUID viewerId) {
         if (!SUPPLIES.equals(kind) && !COURSES.equals(kind)) {
             throw new AppError(HttpStatus.NOT_FOUND, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh");
+        }
+        if (COURSES.equals(kind)) {
+            Course course = courseRepository.findByCoverImageUrl(URL_PREFIX + kind + "/" + id).orElse(null);
+            if (course != null && CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)
+                    && !java.util.Objects.equals(course.getTeacherId(), viewerId)) {
+                throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không được xem ảnh bản nháp");
+            }
         }
         return r2StorageService.getObject(key(kind, id));
     }

@@ -34,5 +34,6 @@ public class EnrollmentGrantService {
     public void recoverGrantAccess(Exception ex, UUID childId, UUID courseId, UUID orderId) {
         log.error("[RETRYABLE-BE1-FAIL] Cấp quyền học thất bại sau các lần thử lại: Child {}, Course {}, Order {}. Lỗi: {}",
                 childId, courseId, orderId, ex.getMessage());
+        throw ex instanceof RuntimeException runtime ? runtime : new IllegalStateException(ex);
     }
 }

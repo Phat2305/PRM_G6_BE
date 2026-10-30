@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +44,15 @@ class PaymentReconcileTests {
         return Payment.builder().id(id).orderId(UUID.randomUUID()).gateway("PAYOS").status(PaymentStatus.PENDING)
                 .amount(new BigDecimal("1000")).netAmount(new BigDecimal("900")).teacherId(UUID.randomUUID())
                 .createdAt(Instant.now()).build();
+    }
+
+    @Test
+    void pendingPaymentsOlderThan24HoursAreStillReconciled() {
+        Payment old = pending(UUID.randomUUID());
+        old.setCreatedAt(Instant.now().minus(2, ChronoUnit.DAYS));
+        when(paymentRepo.findByStatus(PaymentStatus.PENDING)).thenReturn(List.of(old));
+
+        assertEquals(List.of(old.getId()), service.findReconcilablePaymentIds());
     }
 
     @Test

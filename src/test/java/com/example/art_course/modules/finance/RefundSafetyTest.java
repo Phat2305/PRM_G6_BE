@@ -38,13 +38,16 @@ class RefundSafetyTest {
     private final RefundItemRepository items = mock(RefundItemRepository.class);
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderDetailRepository details = mock(OrderDetailRepository.class);
+    private final ChildrenCourseRepository childrenCourses = mock(ChildrenCourseRepository.class);
+    private final IEnrollmentContract enrollment = mock(IEnrollmentContract.class);
     private final PaymentRepository payments = mock(PaymentRepository.class);
     private final SupplyRepository supplies = mock(SupplyRepository.class);
     private final LedgerService ledger = mock(LedgerService.class);
     private final NotificationService notifications = mock(NotificationService.class);
     private final com.example.art_course.video.service.R2StorageService storage = mock(com.example.art_course.video.service.R2StorageService.class);
-    private final RefundService service = new RefundService(refunds, items, orders, details, payments, supplies,
-            mock(IEnrollmentContract.class), ledger, notifications, mock(ModerationService.class),
+    private final RefundService service = new RefundService(refunds, items, orders, details,
+            childrenCourses, payments, supplies,
+            enrollment, ledger, notifications, mock(ModerationService.class),
             mock(CustomizeRequestRepository.class), mock(CourseRepository.class), storage);
     private Order order;
     private OrderDetail line;
@@ -123,6 +126,25 @@ class RefundSafetyTest {
         service.approveRefund(refund.getId(), UUID.randomUUID());
         assertEquals(9, supply.getStockQuantity());
         verifyNoInteractions(supplies);
+    }
+
+    @Test
+    void courseRefundRevokesBothAssignedChildren() {
+        UUID courseId = UUID.randomUUID();
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        line.setSupplyId(null);
+        line.setCourseId(courseId);
+        line.setChildId(first);
+        when(childrenCourses.findByOrderIdAndCourseId(order.getId(), courseId)).thenReturn(List.of(
+                ChildrenCourse.builder().childId(first).build(),
+                ChildrenCourse.builder().childId(second).build()));
+
+        service.approveRefund(refund.getId(), UUID.randomUUID());
+
+        verify(enrollment).revokeAccess(first, courseId, refund.getId());
+        verify(enrollment).revokeAccess(second, courseId, refund.getId());
+        assertEquals(DeliveryStatus.REFUNDED, line.getDeliveryStatus());
     }
 
     private CompleteRefundRequest completion() {

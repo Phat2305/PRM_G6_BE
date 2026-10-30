@@ -6,6 +6,7 @@ import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.customize_request.repository.CustomizeRequestRepository;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.entity.OrderDetail;
+import com.example.art_course.modules.order.entity.ChildrenCourse;
 import com.example.art_course.modules.order.repository.OrderDetailRepository;
 import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.modules.order.service.CustomizeOrderService;
@@ -39,6 +40,10 @@ class CustomizePaymentFlowTest {
     private final UserRepository users = mock(UserRepository.class);
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderDetailRepository details = mock(OrderDetailRepository.class);
+    private final com.example.art_course.modules.order.repository.ChildrenCourseRepository childrenCourses =
+            mock(com.example.art_course.modules.order.repository.ChildrenCourseRepository.class);
+    private final com.example.art_course.child.repository.ChildRepository children =
+            mock(com.example.art_course.child.repository.ChildRepository.class);
     private final ConfigService config = mock(ConfigService.class);
 
     private final UUID parentId = UUID.randomUUID();
@@ -95,13 +100,13 @@ class CustomizePaymentFlowTest {
             o.setId(UUID.randomUUID());
             return o;
         });
-        return new CustomizeOrderService(orders, details, requests, offers, config);
+        return new CustomizeOrderService(orders, details, childrenCourses, children, requests, offers, config);
     }
 
     @Test
     void orderFor_createsCustomizeLineAtOfferPrice() {
         request.setStatus("ACCEPTED");
-        when(requests.findById(request.getId())).thenReturn(Optional.of(request));
+        when(requests.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
         Offer accepted = offer("ACCEPTED");
         when(offers.findAllByRequestId(request.getId())).thenReturn(List.of(offer("rejected"), accepted));
         when(details.findByCustomizeRequestId(request.getId())).thenReturn(List.of());
@@ -119,9 +124,32 @@ class CustomizePaymentFlowTest {
     }
 
     @Test
+    void paymentCanAssignAChildInChildrenCourseWithoutRequiringOne() {
+        request.setStatus("ACCEPTED");
+        when(requests.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(details.findByCustomizeRequestId(request.getId())).thenReturn(List.of());
+        when(offers.findAllByRequestId(request.getId())).thenReturn(List.of(offer("accepted")));
+        UUID childId = UUID.randomUUID();
+        when(children.findByUserIdAndParentId(childId, parentId)).thenReturn(Optional.of(new com.example.art_course.child.entity.Child()));
+
+        CustomizeOrderService service = orderService();
+        Order selected = service.orderFor(request.getId(), parentId, childId);
+        ArgumentCaptor<ChildrenCourse> assigned = ArgumentCaptor.forClass(ChildrenCourse.class);
+        verify(childrenCourses).save(assigned.capture());
+        assertEquals(selected.getId(), assigned.getValue().getOrderId());
+        assertNull(assigned.getValue().getCourseId());
+        assertEquals(childId, assigned.getValue().getChildId());
+        assertEquals(0, new BigDecimal("400000").compareTo(assigned.getValue().getPrice()));
+
+        clearInvocations(childrenCourses);
+        service.orderFor(request.getId(), parentId);
+        verify(childrenCourses, never()).save(any());
+    }
+
+    @Test
     void orderFor_reusesPendingOrder_andRejectsWrongParentOrStatus() {
         request.setStatus("ACCEPTED");
-        when(requests.findById(request.getId())).thenReturn(Optional.of(request));
+        when(requests.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
         Order pending = Order.builder().id(UUID.randomUUID()).parentId(parentId)
                 .status(OrderStatus.PENDING_PAYMENT).expiredAt(Instant.now().plus(1, ChronoUnit.HOURS)).build();
         when(details.findByCustomizeRequestId(request.getId()))
@@ -138,6 +166,30 @@ class CustomizePaymentFlowTest {
         request.setStatus("OPEN");
         AppError open = assertThrows(AppError.class, () -> service.orderFor(request.getId(), parentId));
         assertEquals("REQUEST_NOT_ACCEPTED", open.getErrorCode());
+    }
+
+    @Test
+    void pendingCustomizeOrderCanSelectThirdChildWithoutExtraCharge() {
+        request.setStatus("ACCEPTED");
+        when(requests.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        Order pending = Order.builder().id(UUID.randomUUID()).parentId(parentId)
+                .status(OrderStatus.PENDING_PAYMENT).expiredAt(Instant.now().plus(1, ChronoUnit.HOURS)).build();
+        OrderDetail line = OrderDetail.builder().orderId(pending.getId())
+                .unitPrice(new BigDecimal("400000")).build();
+        when(details.findByCustomizeRequestId(request.getId())).thenReturn(List.of(line));
+        when(orders.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
+        UUID childId = UUID.randomUUID();
+        when(children.findByUserIdAndParentId(childId, parentId)).thenReturn(Optional.of(new com.example.art_course.child.entity.Child()));
+        when(childrenCourses.findByOrderId(pending.getId())).thenReturn(List.of(
+                ChildrenCourse.builder().childId(UUID.randomUUID()).build(),
+                ChildrenCourse.builder().childId(UUID.randomUUID()).build()));
+
+        assertSame(pending, orderService().orderFor(request.getId(), parentId, childId));
+
+        ArgumentCaptor<ChildrenCourse> assigned = ArgumentCaptor.forClass(ChildrenCourse.class);
+        verify(childrenCourses).save(assigned.capture());
+        assertEquals(childId, assigned.getValue().getChildId());
+        assertEquals(BigDecimal.ZERO, assigned.getValue().getPrice());
     }
 
     @Test

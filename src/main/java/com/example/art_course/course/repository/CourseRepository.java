@@ -10,6 +10,7 @@ import java.util.UUID;
 public interface CourseRepository extends JpaRepository<Course, UUID> {
 
     List<Course> findAllByTeacherId(UUID teacherId);
+    java.util.Optional<Course> findByCoverImageUrl(String coverImageUrl);
     // Khóa học riêng đã làm cho một yêu cầu customize (CUS-11)
     java.util.Optional<Course> findFirstByCustomizeRequestId(UUID customizeRequestId);
 

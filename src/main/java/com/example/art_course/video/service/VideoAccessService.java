@@ -56,11 +56,16 @@ public class VideoAccessService {
             return false;
         }
         String r = role.trim().toUpperCase();
-        if (r.equals("STAFF") || r.equals("ADMIN")) {
-            return true;
-        }
-        for (LessonRef ref : refsOf(hlsId)) {
-            if (ref.trial() || allowedForCourse(ref.courseId(), userId, r)) {
+        List<LessonRef> refs = refsOf(hlsId);
+        if (refs.isEmpty() && (r.equals("STAFF") || r.equals("ADMIN"))) return true;
+        for (LessonRef ref : refs) {
+            Course course = courseRepository.findById(ref.courseId()).orElse(null);
+            if (course != null && "DRAFT".equalsIgnoreCase(course.getStatus())) {
+                if (r.equals("TEACHER") && userId.equals(course.getTeacherId())) return true;
+                continue;
+            }
+            if (r.equals("STAFF") || r.equals("ADMIN")
+                    || ref.trial() || allowedForCourse(ref.courseId(), userId, r)) {
                 return true;
             }
         }

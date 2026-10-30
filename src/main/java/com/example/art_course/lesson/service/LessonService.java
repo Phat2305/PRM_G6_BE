@@ -24,15 +24,18 @@ public class LessonService {
     private final LessonRepository lessonRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final com.example.art_course.course.service.CourseService courseService;
 
     public LessonService(
             LessonRepository lessonRepository,
             CourseRepository courseRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            com.example.art_course.course.service.CourseService courseService) {
 
         this.lessonRepository = lessonRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
+        this.courseService = courseService;
     }
 
     @Transactional(readOnly = true)
@@ -162,6 +165,7 @@ public class LessonService {
 
     // Sửa bài học là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.
     private void touchCourse(Course course) {
+        courseService.prepareCustomizeEdit(course);
         String before = course.getStatus();
         CourseReviewPolicy.onContentChanged(course);
         if (before == null ? course.getStatus() != null : !before.equals(course.getStatus())) {

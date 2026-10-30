@@ -24,7 +24,9 @@ class ImageServiceTest {
     private final SupplyRepository supplies = mock(SupplyRepository.class);
     private final CourseRepository courses = mock(CourseRepository.class);
     private final R2StorageService r2 = mock(R2StorageService.class);
-    private final ImageService service = new ImageService(supplies, courses, r2);
+    private final com.example.art_course.course.service.CourseService courseService =
+            mock(com.example.art_course.course.service.CourseService.class);
+    private final ImageService service = new ImageService(supplies, courses, r2, courseService);
     private final UUID teacherId = UUID.randomUUID();
     private final MockMultipartFile png = new MockMultipartFile("file", "a.png", "image/png", new byte[]{1, 2, 3});
 
@@ -59,8 +61,34 @@ class ImageServiceTest {
 
         service.uploadCourseCover(id, teacherId, png);
 
+        verify(courseService).prepareCustomizeEdit(course);
         verify(r2, never()).deleteObject(any());
         assertTrue(course.getCoverImageUrl().startsWith("/api/images/courses/"));
+    }
+
+    @Test
+    void draftCoverIsOnlyVisibleToItsTeacher() {
+        UUID imageId = UUID.randomUUID();
+        Course draft = Course.builder().teacherId(teacherId).status("DRAFT").build();
+        when(courses.findByCoverImageUrl("/api/images/courses/" + imageId)).thenReturn(Optional.of(draft));
+
+        assertEquals(403, assertThrows(AppError.class,
+                () -> service.read("courses", imageId, UUID.randomUUID())).getStatus().value());
+        service.read("courses", imageId, teacherId);
+        verify(r2).getObject("images/courses/" + imageId);
+    }
+
+    @Test
+    void confirmedCustomizeCoverCannotBeChanged() {
+        UUID id = UUID.randomUUID();
+        Course course = Course.builder().teacherId(teacherId).customizeRequestId(UUID.randomUUID()).build();
+        when(courses.findById(id)).thenReturn(Optional.of(course));
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT)).when(courseService).prepareCustomizeEdit(course);
+
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> service.uploadCourseCover(id, teacherId, png));
+        verifyNoInteractions(r2);
     }
 
     @Test

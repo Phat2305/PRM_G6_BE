@@ -17,7 +17,7 @@ public class DefaultEnrollmentContract implements IEnrollmentContract {
     private final EnrollmentRepository enrollmentRepository;
 
     @Override
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @org.springframework.transaction.annotation.Transactional
     public void grantAccess(UUID childId, UUID courseId, UUID orderId) {
         log.info("[Enrollment Contract] Cấp quyền học cho childId: {}, courseId: {}, orderId: {}", childId, courseId, orderId);
         if (childId != null && courseId != null) {
@@ -31,7 +31,7 @@ public class DefaultEnrollmentContract implements IEnrollmentContract {
     }
 
     @Override
-    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @org.springframework.transaction.annotation.Transactional
     public void revokeAccess(UUID childId, UUID courseId, UUID refundId) {
         log.info("[Enrollment Contract] Thu hồi quyền học cho childId: {}, courseId: {}, refundId: {}", childId, courseId, refundId);
         if (childId != null && courseId != null) {

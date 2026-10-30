@@ -6,6 +6,7 @@ import com.example.art_course.lesson.dto.LessonResponse;
 import com.example.art_course.lesson.dto.UpdateLessonRequest;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.service.LessonService;
+import com.example.art_course.course.service.CourseService;
 
 import jakarta.validation.Valid;
 
@@ -21,14 +22,18 @@ import java.util.UUID;
 public class LessonController {
 
     private final LessonService lessonService;
+    private final CourseService courseService;
 
-    public LessonController(LessonService lessonService) {
+    public LessonController(LessonService lessonService, CourseService courseService) {
         this.lessonService = lessonService;
+        this.courseService = courseService;
     }
 
     @GetMapping("/course/{courseId}")
     public List<LessonResponse> getLessonsByCourseId(
-            @PathVariable UUID courseId) {
+            @PathVariable UUID courseId, Authentication authentication) {
+
+        courseService.getVisibleCourseById(courseId, authentication.getName());
 
         return lessonService.getLessonsByCourseId(courseId)
                 .stream()
@@ -38,11 +43,10 @@ public class LessonController {
 
     @GetMapping("/{lessonId}")
     public LessonResponse getLessonById(
-            @PathVariable UUID lessonId) {
-
-        return toResponse(
-                lessonService.getLessonById(lessonId)
-        );
+            @PathVariable UUID lessonId, Authentication authentication) {
+        Lesson lesson = lessonService.getLessonById(lessonId);
+        courseService.getVisibleCourseById(lesson.getCourseId(), authentication.getName());
+        return toResponse(lesson);
     }
 
     @PostMapping

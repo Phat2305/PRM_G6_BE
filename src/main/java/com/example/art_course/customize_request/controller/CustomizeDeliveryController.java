@@ -7,6 +7,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
+import java.util.List;
 
 // CUS-11/12: gửi khóa riêng cho Staff duyệt, phụ huynh nhận hoặc chưa đồng ý, xác nhận hoàn thành.
 @RestController
@@ -32,6 +33,12 @@ public class CustomizeDeliveryController {
     @GetMapping("/delivery")
     public DeliveryView delivery(@PathVariable UUID requestId, Authentication auth) {
         return service.delivery(requestId, auth.getName());
+    }
+
+    @GetMapping("/delivery-history")
+    public List<CustomizeDeliveryService.DeliveryHistoryView> history(
+            @PathVariable UUID requestId, Authentication auth) {
+        return service.history(requestId, auth.getName());
     }
 
     // Phụ huynh chưa đồng ý với bản bàn giao: nêu lý do, gửi cho giáo viên qua tin nhắn, yêu cầu về FUNDED để sửa.

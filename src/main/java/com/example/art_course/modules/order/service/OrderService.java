@@ -12,7 +12,9 @@ import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
 import com.example.art_course.modules.order.entity.Order;
 import com.example.art_course.modules.order.entity.OrderDetail;
+import com.example.art_course.modules.order.entity.ChildrenCourse;
 import com.example.art_course.modules.order.repository.OrderDetailRepository;
+import com.example.art_course.modules.order.repository.ChildrenCourseRepository;
 import com.example.art_course.modules.order.repository.OrderRepository;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
@@ -36,6 +38,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final ChildrenCourseRepository childrenCourseRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final CourseRepository courseRepository;
@@ -43,7 +46,7 @@ public class OrderService {
     private final EntityManager entityManager;
     private final com.example.art_course.common.TeacherNames teacherNames;
     private final com.example.art_course.child.repository.ChildRepository childRepository;
-    private final com.example.art_course.modules.payment.service.EnrollmentGrantService enrollmentGrantService;
+    private final com.example.art_course.contracts.IEnrollmentContract enrollmentContract;
     private final com.example.art_course.modules.systemconfig.service.ConfigService configService;
 
     /**
@@ -203,6 +206,11 @@ public class OrderService {
                         .deliveryStatus("SUPPLY".equalsIgnoreCase(it.productType) ? DeliveryStatus.PENDING : null)
                         .build();
                 orderDetailRepository.save(detail);
+                if (it.courseId != null && it.childId != null) {
+                    childrenCourseRepository.save(ChildrenCourse.builder()
+                            .orderId(order.getId()).courseId(it.courseId).childId(it.childId)
+                            .price(it.unitPrice).build());
+                }
             }
 
             createdOrders.add(order);
@@ -264,21 +272,33 @@ public class OrderService {
         OrderDetail detail = orderDetailRepository.findById(detailId)
                 .filter(d -> d.getOrderId().equals(orderId))
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "ORDER_DETAIL_NOT_FOUND", "Không tìm thấy dòng đơn hàng"));
-        if (!"COURSE".equalsIgnoreCase(detail.getProductType())) {
+        boolean customize = "CUSTOMIZE".equalsIgnoreCase(detail.getProductType());
+        if (!"COURSE".equalsIgnoreCase(detail.getProductType()) && !customize) {
             throw new AppError(HttpStatus.BAD_REQUEST, "NOT_A_COURSE", "Chỉ khóa học mới gán cho bé");
         }
         if (detail.getDeliveryStatus() == DeliveryStatus.REFUNDED) {
             throw new AppError(HttpStatus.CONFLICT, "ITEM_REFUNDED", "Khóa học đã được hoàn tiền");
         }
-        if (detail.getChildId() != null) {
-            throw new AppError(HttpStatus.CONFLICT, "CHILD_ALREADY_ASSIGNED", "Khóa học đã được gán cho bé");
-        }
         requireOwnedChild(parentId, childId);
-        requireChildNotEnrolled(childId, detail.getCourseId());
-
-        detail.setChildId(childId);
-        orderDetailRepository.save(detail);
-        enrollmentGrantService.grantAccessWithRetry(childId, detail.getCourseId(), orderId);
+        UUID courseId = detail.getCourseId();
+        if (customize && detail.getDeliveryStatus() == DeliveryStatus.COMPLETED) {
+            courseId = courseRepository.findFirstByCustomizeRequestId(detail.getCustomizeRequestId())
+                    .orElseThrow(() -> new AppError(HttpStatus.CONFLICT, "COURSE_NOT_DELIVERED", "Chưa có khóa đã bàn giao"))
+                    .getId();
+        }
+        List<ChildrenCourse> assigned = customize
+                ? childrenCourseRepository.findByOrderId(orderId)
+                : childrenCourseRepository.findByOrderIdAndCourseId(orderId, courseId);
+        if (assigned.stream().anyMatch(a -> childId.equals(a.getChildId()))) return detail;
+        if (courseId != null) requireChildNotEnrolled(childId, courseId);
+        childrenCourseRepository.save(ChildrenCourse.builder()
+                .orderId(orderId).courseId(courseId).childId(childId)
+                .price(assigned.isEmpty() ? detail.getUnitPrice() : BigDecimal.ZERO).build());
+        if (detail.getChildId() == null) {
+            detail.setChildId(childId);
+            orderDetailRepository.save(detail);
+        }
+        if (courseId != null) enrollmentContract.grantAccess(childId, courseId, orderId);
         return detail;
     }
 
@@ -325,7 +345,7 @@ public class OrderService {
         order.setTeacherName(teacherNames.byId(order.getTeacherId()));
         order.setParentName(teacherNames.parentsByIds(List.of(order.getParentId())).get(order.getParentId()));
         List<OrderDetail> details = orderDetailRepository.findByOrderId(orderId);
-        return new OrderDetailResponse(order, details);
+        return new OrderDetailResponse(order, details, childrenCourseRepository.findByOrderId(orderId));
     }
 
     /**
@@ -405,7 +425,7 @@ public class OrderService {
             String productName, BigDecimal unitPrice, int quantity, BigDecimal commissionRate
     ) {}
 
-    public record OrderDetailResponse(Order order, List<OrderDetail> details) {}
+    public record OrderDetailResponse(Order order, List<OrderDetail> details, List<ChildrenCourse> childrenCourses) {}
 
     @Data
     @NoArgsConstructor

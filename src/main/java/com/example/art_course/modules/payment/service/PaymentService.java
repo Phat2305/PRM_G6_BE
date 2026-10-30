@@ -44,7 +44,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Slf4j
@@ -412,13 +411,11 @@ public class PaymentService {
     }
 
     /**
-     * Id các thanh toán còn PENDING tạo trong 24 giờ qua, để job đối soát (PAY-11) xử lý từng cái.
+     * Id tất cả thanh toán còn PENDING, để job đối soát (PAY-11) xử lý từng cái.
      */
     @Transactional(readOnly = true)
     public List<UUID> findReconcilablePaymentIds() {
-        Instant since = Instant.now().minus(24, ChronoUnit.HOURS);
         return paymentRepository.findByStatus(PaymentStatus.PENDING).stream()
-                .filter(payment -> payment.getCreatedAt().isAfter(since))
                 .map(Payment::getId)
                 .toList();
     }

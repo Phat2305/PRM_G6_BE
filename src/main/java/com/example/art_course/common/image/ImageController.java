@@ -40,8 +40,10 @@ public class ImageController {
 
     // Công khai (SecurityConfig): ảnh danh mục hiện cho mọi người dùng, kể cả chưa đăng nhập.
     @GetMapping("/api/images/{kind}/{id}")
-    public ResponseEntity<Resource> image(@PathVariable String kind, @PathVariable UUID id) {
-        ResponseInputStream<GetObjectResponse> object = imageService.read(kind, id);
+    public ResponseEntity<Resource> image(@PathVariable String kind, @PathVariable UUID id,
+                                          Authentication auth) {
+        UUID viewerId = auth != null && auth.getPrincipal() instanceof UUID userId ? userId : null;
+        ResponseInputStream<GetObjectResponse> object = imageService.read(kind, id, viewerId);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(object.response().contentType()))
                 .header("X-Content-Type-Options", "nosniff")

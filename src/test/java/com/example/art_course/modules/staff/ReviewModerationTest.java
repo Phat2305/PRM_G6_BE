@@ -35,8 +35,11 @@ class ReviewModerationTest {
     private final IModerationContract moderation = mock(IModerationContract.class);
     private final NotificationService notifications = mock(NotificationService.class);
     private final TeacherNames names = mock(TeacherNames.class);
+    private final com.example.art_course.customize_request.repository.CustomizeDeliveryHistoryRepository history =
+            mock(com.example.art_course.customize_request.repository.CustomizeDeliveryHistoryRepository.class);
     private final CourseModerationService courseService =
-            new CourseModerationService(courses, lessons, requests, moderation, notifications, names);
+            new CourseModerationService(courses, lessons, requests, moderation, notifications, names,
+                    mock(com.example.art_course.modules.order.repository.OrderDetailRepository.class), history);
     private final RequestModerationService requestService =
             new RequestModerationService(requests, moderation, notifications, names);
 
@@ -55,6 +58,15 @@ class ReviewModerationTest {
     }
 
     // ---- khóa học ----
+
+    @Test
+    void staffCannotReadTeacherDraftDetails() {
+        course.setStatus("DRAFT");
+        when(courses.findById(course.getId())).thenReturn(Optional.of(course));
+
+        assertThrows(AppError.class, () -> courseService.detail(course.getId()));
+        verify(lessons, never()).findAllByCourseId(course.getId());
+    }
 
     @Test
     void hidePublishedCourse_setsHiddenWithReason_logsAndNotifiesTeacher() {
@@ -131,6 +143,13 @@ class ReviewModerationTest {
 
         assertEquals("PUBLISHED", course.getStatus());
         assertEquals("DELIVERED", request.getStatus());
+        var delivered = org.mockito.ArgumentCaptor.forClass(
+                com.example.art_course.customize_request.entity.CustomizeDeliveryHistory.class);
+        verify(history).save(delivered.capture());
+        assertEquals(request.getId(), delivered.getValue().getRequestId());
+        assertEquals(course.getId(), delivered.getValue().getCourseId());
+        assertEquals(1, delivered.getValue().getLessonCount());
+        assertNotNull(delivered.getValue().getDeliveredAt());
         verify(notifications).notifyCustomizeDelivered(request.getId(), parentId, "Màu nước");
         verify(notifications, never()).notifyCourseApproved(any(), any(), anyString());
     }

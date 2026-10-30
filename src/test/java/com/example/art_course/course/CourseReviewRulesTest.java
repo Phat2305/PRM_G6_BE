@@ -31,9 +31,52 @@ class CourseReviewRulesTest {
     private final CourseRepository courses = mock(CourseRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final LessonRepository lessons = mock(LessonRepository.class);
-    private final CourseService service = new CourseService(courses, users, mock(CustomizeRequestRepository.class),
-            mock(OfferRepository.class), lessons);
-    private final LessonService lessonService = new LessonService(lessons, courses, users);
+    private final CustomizeRequestRepository requests = mock(CustomizeRequestRepository.class);
+    private final com.example.art_course.customize_request.repository.CustomizeDeliveryHistoryRepository history =
+            mock(com.example.art_course.customize_request.repository.CustomizeDeliveryHistoryRepository.class);
+    private final OfferRepository offers = mock(OfferRepository.class);
+    private final CourseService service = new CourseService(courses, users, requests,
+            history, offers, lessons);
+    private final LessonService lessonService = new LessonService(lessons, courses, users, service);
+
+    @Test
+    void draftIsVisibleOnlyToItsTeacher() {
+        stubCourse();
+        assertSame(course, service.getVisibleCourseById(course.getId(), teacherId.toString()));
+        assertThrows(ResponseStatusException.class,
+                () -> service.getVisibleCourseById(course.getId(), UUID.randomUUID().toString()));
+    }
+
+    @Test
+    void deliveredCustomizeCanBeEditedButCompletedCannot() {
+        stubCourse();
+        String teacher = login(teacherId, "TEACHER");
+        UUID requestId = UUID.randomUUID();
+        course.setCustomizeRequestId(requestId);
+        course.setStatus("PUBLISHED");
+        var request = com.example.art_course.customize_request.entity.CustomizeRequest.builder()
+                .id(requestId).status("DELIVERED").build();
+        when(requests.findByIdForUpdate(requestId)).thenReturn(Optional.of(request));
+        var delivered = com.example.art_course.customize_request.entity.CustomizeDeliveryHistory.builder()
+                .requestId(requestId).courseId(course.getId()).build();
+        when(history.findFirstByRequestIdAndResolvedAtIsNullOrderByDeliveredAtDesc(requestId))
+                .thenReturn(Optional.of(delivered));
+        UpdateCourseRequest same = new UpdateCourseRequest();
+        same.setName(course.getName());
+        assertEquals("PUBLISHED", service.updateCourse(course.getId(), same, teacher).getStatus());
+        assertEquals("DELIVERED", request.getStatus());
+
+        UpdateCourseRequest edit = new UpdateCourseRequest();
+        edit.setDescription("Bản sửa");
+        assertEquals("DRAFT", service.updateCourse(course.getId(), edit, teacher).getStatus());
+        assertEquals("FUNDED", request.getStatus());
+        assertEquals("REVISED", delivered.getResult());
+        assertNotNull(delivered.getResolvedAt());
+
+        request.setStatus("COMPLETED");
+        edit.setDescription("Bản sửa tiếp");
+        assertThrows(ResponseStatusException.class, () -> service.updateCourse(course.getId(), edit, teacher));
+    }
 
     private final UUID teacherId = UUID.randomUUID();
     private final Course course = Course.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Màu nước")
@@ -79,6 +122,36 @@ class CourseReviewRulesTest {
     }
 
     @Test
+    void secondCourseCannotBeLinkedToTheSameCustomizeRequest() {
+        UUID requestId = UUID.randomUUID();
+        when(requests.findByIdForUpdate(requestId)).thenReturn(Optional.of(
+                com.example.art_course.customize_request.entity.CustomizeRequest.builder()
+                        .id(requestId).status("FUNDED").build()));
+        when(offers.findAllByRequestIdAndTeacherId(requestId, teacherId)).thenReturn(List.of(
+                com.example.art_course.offer.entity.Offer.builder().status("accepted").build()));
+        when(courses.findFirstByCustomizeRequestId(requestId)).thenReturn(Optional.of(course));
+        CreateCourseRequest draft = new CreateCourseRequest();
+        draft.setName("Khóa khác");
+        draft.setCustomizeRequestId(requestId);
+
+        assertThrows(ResponseStatusException.class,
+                () -> service.createCourse(draft, login(teacherId, "TEACHER")));
+        verify(courses, never()).save(any());
+    }
+
+    @Test
+    void deliveredCustomizeCourseCannotBeDeletedAndReplaced() {
+        stubCourse();
+        UUID requestId = UUID.randomUUID();
+        course.setCustomizeRequestId(requestId);
+        when(history.existsByRequestId(requestId)).thenReturn(true);
+
+        assertThrows(ResponseStatusException.class,
+                () -> service.deleteCourse(course.getId(), login(teacherId, "TEACHER")));
+        verify(courses, never()).delete(course);
+    }
+
+    @Test
     void teacherCannotPublishOrRejectOwnCourse() {
         stubCourse();
         String teacher = login(teacherId, "TEACHER");
@@ -101,6 +174,9 @@ class CourseReviewRulesTest {
 
         // Khóa customize chỉ có một người nhận, không lên danh mục nên không cần ảnh bìa.
         course.setCustomizeRequestId(UUID.randomUUID());
+        when(requests.findByIdForUpdate(course.getCustomizeRequestId())).thenReturn(Optional.of(
+                com.example.art_course.customize_request.entity.CustomizeRequest.builder()
+                        .id(course.getCustomizeRequestId()).status("FUNDED").build()));
         assertEquals("PENDING_REVIEW", service.updateCourse(course.getId(), status("PENDING_REVIEW"), teacher).getStatus());
     }
 
@@ -172,7 +248,7 @@ class CourseReviewRulesTest {
     }
 
     @Test
-    void deliveredCustomizeCourseIsLockedForTheTeacher() {
+    void missingCustomizeRequestBlocksEdit() {
         stubCourse();
         String teacher = login(teacherId, "TEACHER");
         course.setStatus("PUBLISHED");

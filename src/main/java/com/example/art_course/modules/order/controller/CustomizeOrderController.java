@@ -22,10 +22,15 @@ public class CustomizeOrderController {
 
     @PostMapping("/{requestId}")
     @PreAuthorize("hasRole('PARENT')")
-    public ApiResponse<Order> orderFor(@PathVariable UUID requestId, Authentication auth) {
+    public ApiResponse<Order> orderFor(@PathVariable UUID requestId,
+                                      @RequestBody(required = false) AssignChildRequest body,
+                                      Authentication auth) {
         if (auth == null || !(auth.getPrincipal() instanceof UUID parentId)) {
             throw new AppError(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Token không hợp lệ");
         }
-        return ApiResponse.ok(customizeOrderService.orderFor(requestId, parentId));
+        return ApiResponse.ok(customizeOrderService.orderFor(requestId, parentId,
+                body == null ? null : body.childId()));
     }
+
+    public record AssignChildRequest(UUID childId) {}
 }

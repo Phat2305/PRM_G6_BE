@@ -95,6 +95,16 @@ class VideoAccessServiceTest {
     }
 
     @Test
+    void draftVideoIsOnlyForItsTeacherEvenWhenTrial() {
+        lessonWith(true);
+        course.setStatus("DRAFT");
+        assertTrue(service.canStream(hlsId, teacherId, "TEACHER"));
+        assertFalse(service.canStream(hlsId, UUID.randomUUID(), "TEACHER"));
+        assertFalse(service.canStream(hlsId, UUID.randomUUID(), "PARENT"));
+        assertFalse(service.canStream(hlsId, UUID.randomUUID(), "STAFF"));
+    }
+
+    @Test
     void parentOfADeliveredCustomizeCourseMayPreviewItBeforeAccepting() {
         lessonWith(false);
         UUID parent = UUID.randomUUID();

@@ -36,16 +36,16 @@ public class CourseController {
 
     @GetMapping("/{id}")
     public CourseResponse getCourseById(
-            @PathVariable UUID id
+            @PathVariable UUID id, Authentication authentication
     ) {
-        return toResponse(courseService.getCourseById(id));
+        return toResponse(courseService.getVisibleCourseById(id, authentication.getName()));
     }
 
     @GetMapping("/teacher/{teacherId}")
     public List<CourseResponse> getCoursesByTeacher(
-            @PathVariable UUID teacherId
+            @PathVariable UUID teacherId, Authentication authentication
     ) {
-        return courseService.getCoursesByTeacher(teacherId)
+        return courseService.getVisibleCoursesByTeacher(teacherId, authentication.getName())
                 .stream()
                 .map(this::toResponse)
                 .toList();

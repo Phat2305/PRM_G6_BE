@@ -27,7 +27,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -37,14 +36,16 @@ public class EscrowReleaseService {
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
+    private final com.example.art_course.modules.order.repository.ChildrenCourseRepository childrenCourseRepository;
     private final CourseReviewRepository courseReviewRepository;
     private final RefundRepository refundRepository;
     private final LedgerService ledgerService;
     private final NotificationService notificationService;
     private final ConfigService configService;
 
-    // Bộ nhớ tạm lưu các khóa học đã được BE1 báo hoàn thành bởi trẻ (childId + courseId)
-    private final ConcurrentHashMap<String, Boolean> completedCoursesMap = new ConcurrentHashMap<>();
+    private final com.example.art_course.child_progress.repository.ChildProgressRepository progressRepository;
+    private final com.example.art_course.lesson.repository.LessonRepository lessonRepository;
+    private final com.example.art_course.customize_request.repository.CustomizeRequestRepository customizeRequests;
 
     /**
      * Kiểm tra và giải phóng tiền ký quỹ cho một đơn hàng (Mục 7.1 & #26).
@@ -118,10 +119,18 @@ public class EscrowReleaseService {
                 return true;
             }
 
-            // 2. Trẻ đã hoàn thành khóa học (CourseCompletedEvent)
-            if (detail.getChildId() != null && detail.getCourseId() != null) {
-                String key = detail.getChildId() + ":" + detail.getCourseId();
-                if (Boolean.TRUE.equals(completedCoursesMap.get(key))) {
+            // 2. Tiến độ đã lưu trong DB vẫn đúng sau khi khởi động lại.
+            if (detail.getCourseId() != null) {
+                var lessonIds = lessonRepository.findAllByCourseId(detail.getCourseId()).stream()
+                        .map(com.example.art_course.lesson.entity.Lesson::getId).toList();
+                var childIds = childrenCourseRepository.findByOrderIdAndCourseId(order.getId(), detail.getCourseId())
+                        .stream().map(com.example.art_course.modules.order.entity.ChildrenCourse::getChildId).toList();
+                if (childIds.isEmpty() && detail.getChildId() != null) childIds = List.of(detail.getChildId());
+                if (!lessonIds.isEmpty() && !childIds.isEmpty() && childIds.stream().allMatch(childId ->
+                        progressRepository.findAllByIdChildId(childId).stream()
+                                .filter(p -> Boolean.TRUE.equals(p.getIsCompleted()))
+                                .map(p -> p.getId().getLessonId()).collect(java.util.stream.Collectors.toSet())
+                                .containsAll(lessonIds))) {
                     return true;
                 }
             }
@@ -149,8 +158,11 @@ public class EscrowReleaseService {
                 return true;
             }
             Optional<Integer> autoConfirmDays = configService.getCustomizeAutoConfirmDays();
-            if (autoConfirmDays.isPresent() && autoConfirmDays.get() > 0) {
-                Instant deadline = order.getCreatedAt().plus(autoConfirmDays.get(), ChronoUnit.DAYS);
+            if (autoConfirmDays.isPresent() && autoConfirmDays.get() > 0
+                    && detail.getDeliveredAt() != null
+                    && customizeRequests.findById(detail.getCustomizeRequestId())
+                            .map(r -> "DELIVERED".equalsIgnoreCase(r.getStatus())).orElse(false)) {
+                Instant deadline = detail.getDeliveredAt().plus(autoConfirmDays.get(), ChronoUnit.DAYS);
                 return Instant.now().isAfter(deadline);
             }
             return false;
@@ -179,8 +191,6 @@ public class EscrowReleaseService {
     @Transactional
     public void onCourseCompleted(CourseCompletedEvent event) {
         log.info("[ESCROW-EVENT] Nhận sự kiện trẻ {} hoàn thành khóa học {}", event.getChildId(), event.getCourseId());
-        String key = event.getChildId() + ":" + event.getCourseId();
-        completedCoursesMap.put(key, true);
 
         // Quét và giải phóng các đơn hàng liên quan
         List<Payment> heldPayments = paymentRepository.findByStatus(PaymentStatus.HELD);
