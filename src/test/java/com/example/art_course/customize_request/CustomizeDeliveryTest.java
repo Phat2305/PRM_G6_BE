@@ -155,6 +155,30 @@ class CustomizeDeliveryTest {
     }
 
     @Test
+    void delivery_includesLessonPlaybackAndAssignmentDataBeforeAcceptance() {
+        setup();
+        request.setStatus("DELIVERED");
+        course.setStatus("PUBLISHED");
+        when(courses.findFirstByCustomizeRequestId(request.getId())).thenReturn(Optional.of(course));
+        UUID lessonId = UUID.randomUUID();
+        when(lessons.findAllByCourseId(course.getId())).thenReturn(List.of(Lesson.builder()
+                .id(lessonId).title("Mèo ngồi").isTrial(false).hasAssignment(true)
+                .videoStatus("READY").durationSeconds(300)
+                .assignmentTitle("Vẽ mèo nhà em").assignmentPrompt("Vẽ một chú mèo đang ngồi.").build()));
+
+        var lesson = service.delivery(request.getId(), login(parentId, "PARENT")).lessons().getFirst();
+
+        assertEquals(lessonId, lesson.id());
+        assertEquals("Mèo ngồi", lesson.title());
+        assertFalse(lesson.trial());
+        assertTrue(lesson.hasAssignment());
+        assertEquals("READY", lesson.videoStatus());
+        assertEquals(300, lesson.durationSeconds());
+        assertEquals("Vẽ mèo nhà em", lesson.assignmentTitle());
+        assertEquals("Vẽ một chú mèo đang ngồi.", lesson.assignmentPrompt());
+    }
+
+    @Test
     void delivery_parentOfACancelledButPaidRequestSeesItToAskForRefund() {
         setup();
         course.setCustomizeRequestId(request.getId());

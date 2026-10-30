@@ -130,6 +130,38 @@ class OrderServiceSafetyTest {
     }
 
     @Test
+    void teacherOrdersLoadParentProfileNamesInOneBatch() {
+        UUID teacherId = first.getTeacherId();
+        UUID otherParent = UUID.randomUUID();
+        Order a = Order.builder().parentId(parentId).teacherId(teacherId).build();
+        Order b = Order.builder().parentId(parentId).teacherId(teacherId).build();
+        Order c = Order.builder().parentId(otherParent).teacherId(teacherId).build();
+        when(orders.findByTeacherIdOrderByCreatedAtDesc(teacherId)).thenReturn(List.of(a, b, c));
+        when(names.parentsByIds(List.of(parentId, otherParent))).thenReturn(Map.of(parentId, "Chị Mai"));
+
+        var result = service.getTeacherOrders(teacherId);
+
+        assertEquals("Chị Mai", result.get(0).getParentName());
+        assertEquals("Chị Mai", result.get(1).getParentName());
+        assertNull(result.get(2).getParentName());
+        verify(names).parentsByIds(List.of(parentId, otherParent));
+    }
+
+    @Test
+    void orderDetailReturnsParentProfileNameSeparatelyFromRecipient() {
+        Order order = Order.builder().id(UUID.randomUUID()).parentId(parentId)
+                .teacherId(first.getTeacherId()).recipientName("Người nhận khác").build();
+        when(orders.findById(order.getId())).thenReturn(Optional.of(order));
+        when(names.parentsByIds(List.of(parentId))).thenReturn(Map.of(parentId, "Chị Mai"));
+
+        var result = service.getOrderDetail(order.getId(), first.getTeacherId(), "TEACHER");
+
+        assertEquals("Chị Mai", result.order().getParentName());
+        assertEquals("Người nhận khác", result.order().getRecipientName());
+        assertThrows(AppError.class, () -> service.getOrderDetail(order.getId(), UUID.randomUUID(), "TEACHER"));
+    }
+
+    @Test
     void repeatedCancellationOnlyReleasesReservationOnce() {
         Order pending = Order.builder().id(UUID.randomUUID()).parentId(parentId).status(OrderStatus.PENDING_PAYMENT).build();
         supply.setReservedQuantity(1);

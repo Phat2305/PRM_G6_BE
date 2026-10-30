@@ -58,7 +58,10 @@ public class CustomizeDeliveryService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
 
-    public record LessonView(String title, boolean trial, boolean hasAssignment) {}
+    // CUS-12: đủ dữ liệu để phụ huynh xem video và đề bài trước khi nhận khóa.
+    public record LessonView(UUID id, String title, boolean trial, boolean hasAssignment,
+                             String videoStatus, Integer durationSeconds,
+                             String assignmentTitle, String assignmentPrompt) {}
 
     // reviewStatus = trạng thái duyệt của khóa (PENDING_REVIEW/REJECTED/PUBLISHED...), rejectionCount/reviewNote = lần
     // và lý do từ chối gần nhất; orderId/orderDetailId là dòng đơn đã thanh toán để phụ huynh xin hoàn tiền.
@@ -231,8 +234,9 @@ public class CustomizeDeliveryService {
 
     private DeliveryView view(CustomizeRequest request, Course course) {
         List<LessonView> lessons = lessonRepository.findAllByCourseId(course.getId()).stream()
-                .map((Lesson l) -> new LessonView(l.getTitle(),
-                        Boolean.TRUE.equals(l.getIsTrial()), Boolean.TRUE.equals(l.getHasAssignment())))
+                .map((Lesson l) -> new LessonView(l.getId(), l.getTitle(),
+                        Boolean.TRUE.equals(l.getIsTrial()), Boolean.TRUE.equals(l.getHasAssignment()),
+                        l.getVideoStatus(), l.getDurationSeconds(), l.getAssignmentTitle(), l.getAssignmentPrompt()))
                 .toList();
         OrderDetail line = paidLineOrNull(request.getId());
         return new DeliveryView(request.getId(), request.getStatus(), course.getId(), course.getName(),

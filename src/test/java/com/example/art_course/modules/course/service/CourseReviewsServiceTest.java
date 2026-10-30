@@ -6,11 +6,17 @@ import com.example.art_course.contracts.IVideoAccessContract;
 import com.example.art_course.modules.course.dto.CourseSummaryDto;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.customize_request.entity.CustomizeRequest;
+import com.example.art_course.contracts.events.CourseReviewedEvent;
+import com.example.art_course.modules.course.entity.CourseReview;
 import com.example.art_course.modules.course.repository.CourseReviewRepository;
 import com.example.art_course.modules.course.repository.CourseReviewRepository.RatingSummary;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
@@ -29,12 +35,101 @@ class CourseReviewsServiceTest {
     private final CourseRepository courseRepo = mock(CourseRepository.class);
     private final CourseReviewRepository reviewRepo = mock(CourseReviewRepository.class);
     private final TeacherNames names = mock(TeacherNames.class);
+    private final EntityManager entityManager = mock(EntityManager.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final CourseService service = new CourseService(
-            courseRepo, reviewRepo, mock(ApplicationEventPublisher.class), mock(EntityManager.class),
+            courseRepo, reviewRepo, events, entityManager,
             mock(IVideoAccessContract.class), names);
 
     private final UUID teacherId = UUID.randomUUID();
     private final UUID courseId = UUID.randomUUID();
+    private final UUID parentId = UUID.randomUUID();
+    private final UUID childId = UUID.randomUUID();
+
+    private CustomizeRequest customize(String status) {
+        CustomizeRequest request = CustomizeRequest.builder().id(UUID.randomUUID())
+                .parentId(parentId).status(status).build();
+        Course course = course(courseId);
+        course.setCustomizeRequestId(request.getId());
+        when(courseRepo.findById(courseId)).thenReturn(Optional.of(course));
+        when(entityManager.find(CustomizeRequest.class, request.getId())).thenReturn(request);
+        return request;
+    }
+
+    private void enrollment(List<UUID> children) {
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.setParameter(anyString(), any())).thenReturn(query);
+        when(query.getResultList()).thenReturn(children);
+        when(reviewRepo.save(any())).thenAnswer(i -> i.getArgument(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"PENDING_REVIEW", "OPEN", "ACCEPTED", "FUNDED", "DELIVERED", "REJECTED", "CANCELLED"})
+    void customizeCannotBeReviewedBeforeParentAcceptance(String status) {
+        customize(status);
+
+        AppError error = assertThrows(AppError.class,
+                () -> service.createCourseReview(courseId, parentId, 5, "Hay"));
+
+        assertEquals("NOT_ELIGIBLE", error.getErrorCode());
+        verify(entityManager, never()).createNativeQuery(anyString());
+        verifyNoInteractions(reviewRepo, events);
+    }
+
+    @Test
+    void completedCustomizeRequiresItsParentAndAnExistingRequest() {
+        CustomizeRequest request = customize("COMPLETED");
+        assertThrows(AppError.class,
+                () -> service.createCourseReview(courseId, UUID.randomUUID(), 5, "Hay"));
+        when(entityManager.find(CustomizeRequest.class, request.getId())).thenReturn(null);
+        assertThrows(AppError.class,
+                () -> service.createCourseReview(courseId, parentId, 5, "Hay"));
+        verifyNoInteractions(reviewRepo, events);
+    }
+
+    @Test
+    void acceptedCustomizeStillRequiresAnActivelyEnrolledChild() {
+        customize("COMPLETED");
+        enrollment(List.of());
+        assertEquals("NOT_ELIGIBLE", assertThrows(AppError.class,
+                () -> service.createCourseReview(courseId, parentId, 5, "Hay")).getErrorCode());
+        verifyNoInteractions(reviewRepo, events);
+    }
+
+    @Test
+    void completedCustomizeSavesReviewForTheEnrolledCourseAndPublishesEvent() {
+        customize("COMPLETED");
+        enrollment(List.of(childId));
+
+        CourseReview review = service.createCourseReview(courseId, parentId, 5, "Hay");
+
+        assertEquals(courseId, review.getCourseId());
+        assertEquals(parentId, review.getParentId());
+        assertEquals(childId, review.getChildId());
+        verify(reviewRepo).save(review);
+        verify(events).publishEvent(any(CourseReviewedEvent.class));
+    }
+
+    @Test
+    void ordinaryEnrolledCourseCanStillBeReviewedWithoutCustomizeAcceptance() {
+        when(courseRepo.findById(courseId)).thenReturn(Optional.of(course(courseId)));
+        enrollment(List.of(childId));
+        assertEquals(courseId, service.createCourseReview(courseId, parentId, 4, "Ổn").getCourseId());
+        verify(entityManager, never()).find(eq(CustomizeRequest.class), any());
+    }
+
+    @Test
+    void completedCustomizeStillRejectsDuplicateReviews() {
+        customize("COMPLETED");
+        enrollment(List.of(childId));
+        when(reviewRepo.findByCourseIdAndParentId(courseId, parentId))
+                .thenReturn(Optional.of(CourseReview.builder().build()));
+        assertEquals("ALREADY_REVIEWED", assertThrows(AppError.class,
+                () -> service.createCourseReview(courseId, parentId, 5, "Hay")).getErrorCode());
+        verify(reviewRepo, never()).save(any());
+        verifyNoInteractions(events);
+    }
 
     private static RatingSummary summary(UUID courseId, double average, long total) {
         return new RatingSummary() {

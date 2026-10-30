@@ -3,6 +3,7 @@ package com.example.art_course.modules.course.service;
 import com.example.art_course.common.AppError;
 import com.example.art_course.contracts.events.CourseReviewedEvent;
 import com.example.art_course.course.entity.Course;
+import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.modules.course.entity.CourseReview;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.course.repository.CourseRepository;
@@ -189,6 +190,18 @@ public class CourseService {
     public CourseReview createCourseReview(UUID courseId, UUID parentId, int rating, String comment) {
         if (rating < 1 || rating > 5) {
             throw new AppError(HttpStatus.BAD_REQUEST, "INVALID_RATING", "Đánh giá phải từ 1 đến 5 sao (SHOP-09)");
+        }
+
+        // CUS-12, SHOP-09: chỉ đánh giá khóa riêng sau khi chính phụ huynh đã nhận khóa.
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
+        if (course.getCustomizeRequestId() != null) {
+            CustomizeRequest request = entityManager.find(CustomizeRequest.class, course.getCustomizeRequestId());
+            if (request == null || !parentId.equals(request.getParentId())
+                    || !"COMPLETED".equalsIgnoreCase(request.getStatus())) {
+                throw new AppError(HttpStatus.FORBIDDEN, "NOT_ELIGIBLE",
+                        "Chỉ được đánh giá khóa học riêng sau khi nhận khóa và xác nhận hoàn thành (CUS-12)");
+            }
         }
 
         // 1. Kiểm tra con của phụ huynh đã sở hữu khóa học hay chưa

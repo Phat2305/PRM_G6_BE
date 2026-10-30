@@ -30,6 +30,10 @@ public class Order {
     @Transient
     private String teacherName;
 
+    // SHOP-06: tên chủ đơn từ hồ sơ phụ huynh, không phải tên người nhận hàng.
+    @Transient
+    private String parentName;
+
     // SHOP-03: thông tin nhận hàng tại thời điểm đặt, độc lập với hồ sơ về sau.
     @Column(name = "recipient_name", length = 255)
     private String recipientName;

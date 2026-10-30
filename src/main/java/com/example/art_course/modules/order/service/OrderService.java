@@ -298,7 +298,10 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<Order> getTeacherOrders(UUID teacherId) {
-        return withTeacherNames(orderRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId));
+        List<Order> orders = withTeacherNames(orderRepository.findByTeacherIdOrderByCreatedAtDesc(teacherId));
+        Map<UUID, String> parents = teacherNames.parentsByIds(orders.stream().map(Order::getParentId).distinct().toList());
+        orders.forEach(o -> o.setParentName(parents.get(o.getParentId())));
+        return orders;
     }
 
     private List<Order> withTeacherNames(List<Order> orders) {
@@ -320,6 +323,7 @@ public class OrderService {
         }
 
         order.setTeacherName(teacherNames.byId(order.getTeacherId()));
+        order.setParentName(teacherNames.parentsByIds(List.of(order.getParentId())).get(order.getParentId()));
         List<OrderDetail> details = orderDetailRepository.findByOrderId(orderId);
         return new OrderDetailResponse(order, details);
     }
