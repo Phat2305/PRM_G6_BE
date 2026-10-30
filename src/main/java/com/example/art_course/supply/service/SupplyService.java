@@ -2,6 +2,7 @@
 package com.example.art_course.supply.service;
 
 import com.example.art_course.supply.dto.CreateSupplyRequest;
+import com.example.art_course.common.TeacherNames;
 import com.example.art_course.supply.dto.UpdateSupplyRequest;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -21,17 +23,24 @@ public class SupplyService {
 
     private final SupplyRepository supplyRepository;
     private final UserRepository userRepository;
+    private final TeacherNames teacherNames;
 
     public SupplyService(
             SupplyRepository supplyRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            TeacherNames teacherNames) {
         this.supplyRepository = supplyRepository;
         this.userRepository = userRepository;
+        this.teacherNames = teacherNames;
     }
 
     @Transactional(readOnly = true)
     public List<Supply> getAllSupplies() {
-        return supplyRepository.findAll();
+        // STF-01: tra họ tên một lần cho danh sách dụng cụ chờ kiểm duyệt.
+        List<Supply> supplies = supplyRepository.findAll();
+        Map<UUID, String> names = teacherNames.byIds(supplies.stream().map(Supply::getTeacherId).distinct().toList());
+        supplies.forEach(supply -> supply.setTeacherName(names.get(supply.getTeacherId())));
+        return supplies;
     }
 
     @Transactional(readOnly = true)

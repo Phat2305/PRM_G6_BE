@@ -15,6 +15,7 @@ import java.util.UUID;
 @Repository
 public interface MoneyLedgerRepository extends JpaRepository<MoneyLedger, UUID> {
     List<MoneyLedger> findByTeacherIdOrderByCreatedAtDesc(UUID teacherId);
+    List<MoneyLedger> findByCreatedByAndEntryTypeInOrderByCreatedAtDesc(UUID createdBy, java.util.Collection<String> entryTypes);
 
     // ADM-04: tra cứu sổ cái có phân trang.
     Page<MoneyLedger> findByTeacherId(UUID teacherId, Pageable pageable);

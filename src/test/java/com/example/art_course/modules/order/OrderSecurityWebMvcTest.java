@@ -102,6 +102,27 @@ public class OrderSecurityWebMvcTest {
         }
 
         @Bean
+        public com.example.art_course.modules.admin.service.AdminAuditDetailsService auditDetailsService() {
+            return mock(com.example.art_course.modules.admin.service.AdminAuditDetailsService.class);
+        }
+
+        @Bean
+        public com.example.art_course.modules.admin.controller.AdminAnalyticsController adminAnalyticsController(
+                com.example.art_course.modules.admin.service.AdminAuditDetailsService audit) {
+            return new com.example.art_course.modules.admin.controller.AdminAnalyticsController(
+                    mock(com.example.art_course.modules.admin.service.AdminService.class),
+                    mock(com.example.art_course.common.TeacherNames.class),
+                    mock(com.example.art_course.modules.finance.service.RevenueService.class), audit);
+        }
+
+        @Bean
+        public com.example.art_course.modules.moderation.controller.ModerationController moderationController(
+                com.example.art_course.modules.admin.service.AdminAuditDetailsService audit) {
+            return new com.example.art_course.modules.moderation.controller.ModerationController(
+                    mock(com.example.art_course.modules.moderation.service.ModerationService.class), audit);
+        }
+
+        @Bean
         public OrderController orderController(OrderService orderService, UserRepository userRepository) {
             return new OrderController(orderService, userRepository);
         }
@@ -219,6 +240,19 @@ public class OrderSecurityWebMvcTest {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/videos/upload")
                 .file(file).header("Authorization", "Bearer " + createToken(teacherId, "TEACHER", "ACCESS")))
                 .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void enrichedLedgerAndStaffActivityRemainAdminOnly() throws Exception {
+        for (String path : java.util.List.of("/api/v1/admin/analytics/ledger-audit",
+                "/api/v1/moderation/reviews/staff/" + UUID.randomUUID())) {
+            for (String role : java.util.List.of("PARENT", "CHILD", "TEACHER", "STAFF")) {
+                mockMvc.perform(get(path).header("Authorization", "Bearer " + createToken(teacherId, role, "ACCESS")))
+                        .andExpect(status().isForbidden());
+            }
+            mockMvc.perform(get(path).header("Authorization", "Bearer " + createToken(teacherId, "ADMIN", "ACCESS")))
+                    .andExpect(status().isOk());
+        }
     }
 
     @Test

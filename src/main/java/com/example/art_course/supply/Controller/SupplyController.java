@@ -94,6 +94,7 @@ public class SupplyController {
         return new SupplyResponse(
                 supply.getId(),
                 supply.getTeacherId(),
+                supply.getTeacherName(),
                 supply.getName(),
                 supply.getDescription(),
                 supply.getImageUrl(),

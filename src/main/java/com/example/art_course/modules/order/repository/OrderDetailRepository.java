@@ -33,6 +33,7 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, UUID> 
     List<UUID> findMissingEnrollmentIds();
 
     List<OrderDetail> findByOrderId(UUID orderId);
+    List<OrderDetail> findByOrderIdIn(java.util.Collection<UUID> orderIds);
     List<OrderDetail> findByOrderIdAndSupplyIdIsNotNull(UUID orderId);
     List<OrderDetail> findByOrderIdAndCustomizeRequestIdIsNotNull(UUID orderId);
     List<OrderDetail> findByCustomizeRequestId(UUID customizeRequestId);

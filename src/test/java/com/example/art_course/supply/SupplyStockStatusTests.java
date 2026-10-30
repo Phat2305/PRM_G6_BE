@@ -14,18 +14,23 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 @DisplayName("Dụng cụ: trạng thái do server quyết định theo kiểm duyệt và tồn kho")
 class SupplyStockStatusTests {
 
     private final SupplyRepository supplyRepo = mock(SupplyRepository.class);
     private final UserRepository userRepo = mock(UserRepository.class);
-    private final SupplyService service = new SupplyService(supplyRepo, userRepo);
+    private final com.example.art_course.common.TeacherNames names = mock(com.example.art_course.common.TeacherNames.class);
+    private final SupplyService service = new SupplyService(supplyRepo, userRepo, names);
     private final UUID teacherId = UUID.randomUUID();
     private final UUID supplyId = UUID.randomUUID();
     private Supply supply;
@@ -50,6 +55,23 @@ class SupplyStockStatusTests {
         r.setStockQuantity(stock);
         r.setStatus(clientStatus);
         return r;
+    }
+
+    @Test
+    void supplyListReturnsProfileNamesInApiResponseWithOneLookup() {
+        UUID otherTeacherId = UUID.randomUUID();
+        Supply second = Supply.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Giấy").build();
+        Supply missingProfile = Supply.builder().id(UUID.randomUUID()).teacherId(otherTeacherId).name("Màu").build();
+        when(supplyRepo.findAll()).thenReturn(List.of(supply, second, missingProfile));
+        when(names.byIds(List.of(teacherId, otherTeacherId))).thenReturn(Map.of(teacherId, "Cô Lan"));
+
+        var response = new com.example.art_course.supply.Controller.SupplyController(service).getAllSupplies();
+
+        assertEquals("Cô Lan", response.get(0).getTeacherName());
+        assertEquals("Cô Lan", response.get(1).getTeacherName());
+        assertNull(response.get(2).getTeacherName());
+        assertEquals(supplyId, response.get(0).getId());
+        verify(names).byIds(List.of(teacherId, otherTeacherId));
     }
 
     @Test

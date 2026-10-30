@@ -13,6 +13,7 @@ public class SupplyResponse {
 
     private UUID id;
     private UUID teacherId;
+    private String teacherName;
     private String name;
     private String description;
     private String imageUrl;

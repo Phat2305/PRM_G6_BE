@@ -30,3 +30,5 @@ SHOP-06 (29/10/2026, yêu cầu người dùng): mỗi phụ huynh dùng một �
 19	FIN-04 (yêu cầu người dùng): giáo viên rút tối thiểu 10.000 VND mỗi yêu cầu, áp dụng cả FE và BE; vẫn không được vượt số dư khả dụng và chỉ có tối đa một yêu cầu PENDING/APPROVED.
 
 20	FIN-06 (yêu cầu người dùng): Staff xác nhận đã chi rút tiền bằng ảnh JPG/PNG/WEBP tối đa 5 MB thay nhập mã giao dịch. Upload và ghi PAID dùng chung khóa yêu cầu/transaction; lưu proof_image_url có sẵn, mã giao dịch để trống trên luồng ảnh. Chỉ giáo viên sở hữu và Staff/Admin được xem bằng chứng. Giữ API JSON/mã giao dịch lịch sử cho client cũ; không đổi schema.
+
+21	ADM-04/05: nhật ký Staff và sổ cái kèm thông tin đối tượng/đơn hiện tại, mặt hàng và ảnh bằng chứng riêng tư khi có. Nhật ký bổ sung chi/hoàn tiền và từ chối rút tiền từ bút toán đã ghi bởi Staff, không dựng lại sự kiện chưa từng được ghi. Giữ nguyên lịch sử/số tiền/ghi chú gốc; FE hiển thị mã DH/HT/RT và 8 ký tự đầu UUID, có sao chép UUID gốc để đối soát. Mã ngắn chỉ để hiển thị, không thay khóa định danh trong DB/API.

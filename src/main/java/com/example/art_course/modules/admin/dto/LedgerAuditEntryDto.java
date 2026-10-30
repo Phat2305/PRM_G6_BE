@@ -18,11 +18,12 @@ public record LedgerAuditEntryDto(
         UUID withdrawalId,
         String note,
         UUID createdBy,
-        Instant createdAt
+        Instant createdAt,
+        AuditDetailsDto details
 ) {
-    public static LedgerAuditEntryDto of(MoneyLedger m, String teacherName) {
+    public static LedgerAuditEntryDto of(MoneyLedger m, String teacherName, AuditDetailsDto details) {
         return new LedgerAuditEntryDto(m.getId(), m.getTeacherId(), teacherName, m.getEntryType(), m.getAmount(),
                 m.getPaymentId(), m.getRefundId(), m.getWithdrawalId(), m.getNote(), m.getCreatedBy(),
-                m.getCreatedAt());
+                m.getCreatedAt(), details);
     }
 }

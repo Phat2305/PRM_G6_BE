@@ -18,6 +18,7 @@ import java.util.UUID;
 @Repository("be2RefundRepository")
 public interface RefundRepository extends JpaRepository<Refund, UUID> {
     List<Refund> findByOrderId(UUID orderId);
+    List<Refund> findByOrderIdIn(java.util.Collection<UUID> orderIds);
     List<Refund> findByParentIdOrderByCreatedAtDesc(UUID parentId);
     List<Refund> findByStatus(String status);
 
