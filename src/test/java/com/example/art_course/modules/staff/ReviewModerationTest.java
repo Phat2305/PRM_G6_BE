@@ -69,6 +69,15 @@ class ReviewModerationTest {
     }
 
     @Test
+    void staffCannotReadSoftDeletedCourseDetails() {
+        course.setStatus("DELETED");
+        when(courses.findById(course.getId())).thenReturn(Optional.of(course));
+
+        assertThrows(AppError.class, () -> courseService.detail(course.getId()));
+        verify(lessons, never()).findAllByCourseId(course.getId());
+    }
+
+    @Test
     void hidePublishedCourse_setsHiddenWithReason_logsAndNotifiesTeacher() {
         course.setStatus("PUBLISHED");
         stubCourse(true);

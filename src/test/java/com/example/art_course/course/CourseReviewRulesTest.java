@@ -185,6 +185,52 @@ class CourseReviewRulesTest {
         verify(courses, never()).delete(course);
     }
 
+    // Xóa mềm: chưa ai mua thì ẩn khóa (giữ bài học), đã có người mua thì từ chối.
+    @Test
+    void unsoldCourseIsSoftDeletedAndKeepsItsLessons() {
+        stubCourse();
+
+        service.deleteCourse(course.getId(), login(teacherId, "TEACHER"));
+
+        assertEquals("DELETED", course.getStatus());
+        verify(courses).save(course);
+        verify(courses, never()).delete(any());
+        verifyNoInteractions(lessons);
+    }
+
+    @Test
+    void courseWithBuyersCannotBeDeleted() {
+        stubCourse();
+        when(courses.hasBuyers(course.getId())).thenReturn(true);
+
+        var e = assertThrows(ResponseStatusException.class,
+                () -> service.deleteCourse(course.getId(), login(teacherId, "TEACHER")));
+
+        assertEquals(409, e.getStatusCode().value());
+        assertEquals("DRAFT", course.getStatus());
+        verify(courses, never()).save(any());
+        verify(courses, never()).delete(any());
+    }
+
+    @Test
+    void deletedCourseIsHiddenFromEveryApiEvenForItsTeacher() {
+        stubCourse();
+        course.setStatus("DELETED");
+        when(courses.findAllByTeacherId(teacherId)).thenReturn(List.of(course));
+        String teacher = login(teacherId, "TEACHER");
+
+        assertEquals(404, assertThrows(ResponseStatusException.class,
+                () -> service.getCourseById(course.getId())).getStatusCode().value());
+        assertThrows(ResponseStatusException.class, () -> service.getVisibleCourseById(course.getId(), teacher));
+        assertThrows(ResponseStatusException.class, () -> service.getCourseForViewer(course.getId(), teacher));
+        assertTrue(service.getCoursesByTeacher(teacherId).isEmpty());
+        assertTrue(service.getCoursesForViewer(teacherId, teacher).isEmpty());
+        // Không "sống lại" bằng cách sửa hoặc xóa lần nữa.
+        assertThrows(ResponseStatusException.class, () -> service.updateCourse(course.getId(), status("DRAFT"), teacher));
+        assertThrows(ResponseStatusException.class, () -> service.deleteCourse(course.getId(), teacher));
+        assertEquals("DELETED", course.getStatus());
+    }
+
     @Test
     void teacherCannotPublishOrRejectOwnCourse() {
         stubCourse();

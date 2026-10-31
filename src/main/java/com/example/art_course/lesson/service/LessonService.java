@@ -175,6 +175,7 @@ public class LessonService {
 
     private Course getCourseById(UUID courseId) {
         return courseRepository.findById(courseId)
+                .filter(course -> !CourseReviewPolicy.is(course, CourseReviewPolicy.DELETED))
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Course not found: " + courseId

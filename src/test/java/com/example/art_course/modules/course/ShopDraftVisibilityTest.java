@@ -72,6 +72,20 @@ class ShopDraftVisibilityTest {
         assertThrows(AppError.class, () -> service.getCourseDetail(customize.getId()));
     }
 
+    // Khóa đã xóa mềm không hiện ở chi tiết shop lẫn bài xem thử.
+    @Test
+    void shopDetailAndTrialDoNotExposeDeletedCourse() {
+        Course deleted = Course.builder().id(UUID.randomUUID()).teacherId(UUID.randomUUID()).name("Đã xóa")
+                .status("DELETED").build();
+        UUID lessonId = UUID.randomUUID();
+        when(courses.findById(deleted.getId())).thenReturn(Optional.of(deleted));
+        when(entityManager.find(Lesson.class, lessonId)).thenReturn(
+                Lesson.builder().id(lessonId).courseId(deleted.getId()).isTrial(true).build());
+
+        assertThrows(AppError.class, () -> service.getCourseDetail(deleted.getId()));
+        assertThrows(AppError.class, () -> service.getFreeTrialLesson(lessonId));
+    }
+
     @Test
     void trialDetailsDoNotExposeDraftLesson() {
         UUID lessonId = UUID.randomUUID();

@@ -22,6 +22,8 @@ public final class CourseReviewPolicy {
     public static final String REJECTED = "REJECTED";
     // Staff gỡ khóa đang công khai vì vi phạm (STF-06): chỉ đổi status, không xóa; giáo viên sửa rồi gửi duyệt lại.
     public static final String HIDDEN = "HIDDEN";
+    // Giáo viên xóa mềm khóa chưa ai mua: ẩn khỏi mọi API, giữ dòng trong DB (khóa ngoại từ đơn, ghi danh không bị vỡ).
+    public static final String DELETED = "DELETED";
 
     private CourseReviewPolicy() {
     }

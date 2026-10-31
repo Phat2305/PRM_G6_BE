@@ -131,7 +131,8 @@ public class CourseService {
     public CourseDetailDto getCourseDetail(UUID courseId, UUID viewerId) {
         Course course = courseRepository.findById(courseId)
                 .filter(c -> c.getCustomizeRequestId() == null
-                        && !"DRAFT".equalsIgnoreCase(c.getStatus()))
+                        && !"DRAFT".equalsIgnoreCase(c.getStatus())
+                        && !"DELETED".equalsIgnoreCase(c.getStatus()))
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
 
         List<Lesson> lessons = entityManager.createQuery(
@@ -182,7 +183,8 @@ public class CourseService {
             throw new AppError(HttpStatus.FORBIDDEN, "TRIAL_NOT_ALLOWED", "Bài học này không hỗ trợ xem thử miễn phí (SHOP-10)");
         }
         if (courseRepository.findById(lesson.getCourseId())
-                .map(c -> "DRAFT".equalsIgnoreCase(c.getStatus())).orElse(false)) {
+                .map(c -> "DRAFT".equalsIgnoreCase(c.getStatus()) || "DELETED".equalsIgnoreCase(c.getStatus()))
+                .orElse(false)) {
             throw new AppError(HttpStatus.NOT_FOUND, "LESSON_NOT_FOUND", "Không tìm thấy bài học");
         }
 

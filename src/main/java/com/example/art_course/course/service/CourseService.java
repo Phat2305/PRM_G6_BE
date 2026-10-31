@@ -65,7 +65,9 @@ public class CourseService {
             );
         }
 
+        // Khóa đã xóa mềm coi như không tồn tại với mọi API (kể cả giáo viên chủ khóa, nên không "sống lại" bằng sửa).
         return courseRepository.findById(id)
+                .filter(course -> !CourseReviewPolicy.is(course, CourseReviewPolicy.DELETED))
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Course not found"
@@ -81,7 +83,9 @@ public class CourseService {
             );
         }
 
-        return courseRepository.findAllByTeacherId(teacherId);
+        return courseRepository.findAllByTeacherId(teacherId).stream()
+                .filter(course -> !CourseReviewPolicy.is(course, CourseReviewPolicy.DELETED))
+                .toList();
     }
 
     // CRS-01: bản nháp chỉ giáo viên tạo khóa được xem; trạng thái khác giữ cách đọc hiện có.
@@ -256,7 +260,18 @@ public class CourseService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Khóa đã từng bàn giao; hãy sửa khóa hiện có thay vì xóa");
         }
-        if (CourseReviewPolicy.isCustomize(course)) prepareCustomizeEdit(course);
+        if (!CourseReviewPolicy.isCustomize(course)) {
+            // Xóa mềm: khóa đã có người mua thì không xóa được (họ còn quyền học); chưa ai mua thì ẩn đi, giữ nguyên bài học.
+            if (courseRepository.hasBuyers(id)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Khóa đã có người mua nên không xóa được; bạn có thể gỡ khóa về bản nháp");
+            }
+            course.setStatus(CourseReviewPolicy.DELETED);
+            courseRepository.save(course);
+            return;
+        }
+        // Khóa riêng chưa bàn giao: xóa hẳn để yêu cầu tạo lại được khóa khác (mỗi yêu cầu chỉ một khóa).
+        prepareCustomizeEdit(course);
 
         courseRepository.delete(course);
     }

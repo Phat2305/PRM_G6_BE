@@ -70,7 +70,8 @@ public class CourseModerationService {
     public CourseReviewDtos.Detail detail(UUID courseId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
-        if (CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)) {
+        if (CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)
+                || CourseReviewPolicy.is(course, CourseReviewPolicy.DELETED)) {
             throw new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học");
         }
         List<CourseReviewDtos.LessonItem> lessons = lessonRepository.findAllByCourseId(courseId).stream()
