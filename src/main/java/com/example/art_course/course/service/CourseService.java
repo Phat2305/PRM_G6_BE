@@ -100,6 +100,33 @@ public class CourseService {
                 .toList();
     }
 
+    // CUS-10: khóa làm riêng chỉ hiện với giáo viên làm khóa và phụ huynh của yêu cầu; người khác coi như không có.
+    @Transactional(readOnly = true)
+    public Course getCourseForViewer(UUID id, String viewer) {
+        Course course = getVisibleCourseById(id, viewer);
+        if (!canSeeCustomize(course, viewer)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Course not found");
+        }
+        return course;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Course> getCoursesForViewer(UUID teacherId, String viewer) {
+        return getVisibleCoursesByTeacher(teacherId, viewer).stream()
+                .filter(course -> canSeeCustomize(course, viewer))
+                .toList();
+    }
+
+    private boolean canSeeCustomize(Course course, String viewer) {
+        if (course.getCustomizeRequestId() == null
+                || (course.getTeacherId() != null && course.getTeacherId().toString().equals(viewer))) {
+            return true;
+        }
+        return customizeRequestRepository.findById(course.getCustomizeRequestId())
+                .map(request -> request.getParentId() != null && request.getParentId().toString().equals(viewer))
+                .orElse(false);
+    }
+
     public void requireDraftOwner(Course course, String viewer) {
         if (CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)
                 && !course.getTeacherId().toString().equals(viewer)) {

@@ -212,6 +212,18 @@ class OrderServiceSafetyTest {
         verify(orders, never()).save(any());
     }
 
+    // CUS-10: khóa làm riêng cho một yêu cầu không đặt qua checkout thường (đi qua /orders/customize).
+    @Test
+    void checkoutRejectsACustomizeCourse() {
+        first.setCustomizeRequestId(UUID.randomUUID());
+
+        var request = new OrderService.CheckoutRequest(false, List.of(course(first)), null, null, null);
+
+        assertEquals("COURSE_UNAVAILABLE", assertThrows(AppError.class,
+                () -> service.createOrdersFromCheckout(parentId, request)).getErrorCode());
+        verify(orders, never()).save(any());
+    }
+
     @Test
     void checkoutRejectsTheSameCourseTwiceInOneRequest() {
         var request = new OrderService.CheckoutRequest(false, List.of(course(first), course(first)), null, null, null);

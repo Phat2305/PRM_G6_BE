@@ -56,6 +56,22 @@ class ShopDraftVisibilityTest {
         verifyNoInteractions(entityManager);
     }
 
+    // CUS-10: khóa làm riêng không bán công khai, dù đã PUBLISHED sau khi Staff duyệt bàn giao.
+    @Test
+    void shopCatalogAndDetailDoNotExposeCustomizeCourse() {
+        Course customize = Course.builder().id(UUID.randomUUID()).teacherId(UUID.randomUUID()).name("Riêng")
+                .status("PUBLISHED").customizeRequestId(UUID.randomUUID()).build();
+        Course ordinary = Course.builder().id(UUID.randomUUID()).teacherId(UUID.randomUUID()).name("Thường")
+                .status("PUBLISHED").build();
+        when(courses.findByStatusIgnoreCase("PUBLISHED")).thenReturn(List.of(customize, ordinary));
+        when(courses.findById(customize.getId())).thenReturn(Optional.of(customize));
+
+        var items = service.listCourses().stream().map(c -> c.getId()).toList();
+
+        assertEquals(List.of(ordinary.getId()), items);
+        assertThrows(AppError.class, () -> service.getCourseDetail(customize.getId()));
+    }
+
     @Test
     void trialDetailsDoNotExposeDraftLesson() {
         UUID lessonId = UUID.randomUUID();

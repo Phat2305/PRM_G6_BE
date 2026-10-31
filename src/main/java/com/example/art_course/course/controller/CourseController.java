@@ -38,14 +38,14 @@ public class CourseController {
     public CourseResponse getCourseById(
             @PathVariable UUID id, Authentication authentication
     ) {
-        return toResponse(courseService.getVisibleCourseById(id, authentication.getName()));
+        return toResponse(courseService.getCourseForViewer(id, authentication.getName()));
     }
 
     @GetMapping("/teacher/{teacherId}")
     public List<CourseResponse> getCoursesByTeacher(
             @PathVariable UUID teacherId, Authentication authentication
     ) {
-        return courseService.getVisibleCoursesByTeacher(teacherId, authentication.getName())
+        return courseService.getCoursesForViewer(teacherId, authentication.getName())
                 .stream()
                 .map(this::toResponse)
                 .toList();

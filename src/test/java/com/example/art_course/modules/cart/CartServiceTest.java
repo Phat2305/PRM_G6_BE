@@ -89,6 +89,23 @@ class CartServiceTest {
         assertEquals("COURSE_ALREADY_IN_CART", e.getErrorCode());
     }
 
+    // CUS-10: khóa làm riêng cho một yêu cầu không vào giỏ được.
+    @Test
+    @DisplayName("khóa customize → 400, không vào giỏ")
+    void customizeCourseCannotBeAddedToCart() {
+        Course c = new Course();
+        c.setId(courseId);
+        c.setStatus("PUBLISHED");
+        c.setCustomizeRequestId(UUID.randomUUID());
+        when(courses.findById(courseId)).thenReturn(Optional.of(c));
+        when(carts.findByParentId(parentId)).thenReturn(Optional.of(cart));
+
+        AppError e = assertThrows(AppError.class, () -> service.addToCart(parentId, course()));
+
+        assertEquals("COURSE_UNAVAILABLE", e.getErrorCode());
+        verify(items, never()).save(any());
+    }
+
     @Test
     @DisplayName("phụ huynh đã trả tiền khóa này (chưa gán bé hoặc khóa customize) → 409, không vào giỏ")
     void parentAlreadyOwnsCourse() {

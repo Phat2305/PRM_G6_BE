@@ -47,6 +47,40 @@ class CourseReviewRulesTest {
                 () -> service.getVisibleCourseById(course.getId(), UUID.randomUUID().toString()));
     }
 
+    // CUS-10: /api/courses/{id} và /teacher/{id} không lộ khóa làm riêng cho người ngoài.
+    @Test
+    void customizeCourseIsVisibleOnlyToItsTeacherAndTheRequestParent() {
+        stubCourse();
+        UUID requestId = UUID.randomUUID();
+        UUID parentId = UUID.randomUUID();
+        course.setCustomizeRequestId(requestId);
+        course.setStatus("PUBLISHED");
+        when(requests.findById(requestId)).thenReturn(Optional.of(
+                com.example.art_course.customize_request.entity.CustomizeRequest.builder()
+                        .id(requestId).parentId(parentId).status("DELIVERED").build()));
+        when(courses.findAllByTeacherId(teacherId)).thenReturn(List.of(course));
+        String stranger = UUID.randomUUID().toString();
+
+        assertSame(course, service.getCourseForViewer(course.getId(), teacherId.toString()));
+        assertSame(course, service.getCourseForViewer(course.getId(), parentId.toString()));
+        var hidden = assertThrows(ResponseStatusException.class,
+                () -> service.getCourseForViewer(course.getId(), stranger));
+        assertEquals(404, hidden.getStatusCode().value());
+
+        assertEquals(List.of(course), service.getCoursesForViewer(teacherId, teacherId.toString()));
+        assertEquals(List.of(course), service.getCoursesForViewer(teacherId, parentId.toString()));
+        assertTrue(service.getCoursesForViewer(teacherId, stranger).isEmpty());
+    }
+
+    @Test
+    void ordinaryPublishedCourseStaysVisibleToEveryone() {
+        stubCourse();
+        course.setStatus("PUBLISHED");
+        String anyone = UUID.randomUUID().toString();
+
+        assertSame(course, service.getCourseForViewer(course.getId(), anyone));
+    }
+
     @Test
     void deliveredCustomizeCanBeEditedButCompletedCannot() {
         stubCourse();
