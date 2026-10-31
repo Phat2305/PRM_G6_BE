@@ -13,6 +13,13 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     List<Lesson> findAllByCourseIdAndStatus(UUID courseId, String status);
 
+    // Tổng số bài của từng khóa: [course_id, số bài].
+    @org.springframework.data.jpa.repository.Query(value =
+            "SELECT course_id, COUNT(*) FROM lessons WHERE course_id IN (:courseIds) GROUP BY course_id",
+            nativeQuery = true)
+    List<Object[]> countByCourseIds(
+            @org.springframework.data.repository.query.Param("courseIds") java.util.Collection<UUID> courseIds);
+
     // Tìm bài học dùng một video HLS (kiểm quyền xem video).
     List<Lesson> findAllByVideoUrlContaining(String fragment);
 }

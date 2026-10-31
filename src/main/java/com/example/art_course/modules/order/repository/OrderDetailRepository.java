@@ -43,6 +43,15 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, UUID> 
             """, nativeQuery = true)
     boolean parentOwnsCourse(@Param("parentId") UUID parentId, @Param("courseId") UUID courseId);
 
+    // SHOP-04: dòng khóa học (hoặc khóa customize) phụ huynh đã trả tiền và chưa hoàn; cùng điều kiện với parentOwnsCourse.
+    @Query(value = """
+            SELECT d.* FROM order_details d JOIN orders o ON o.id = d.order_id
+            WHERE o.parent_id = :parentId AND o.status = 'PAID'
+              AND d.delivery_status IS DISTINCT FROM 'REFUNDED'
+              AND (d.course_id IS NOT NULL OR d.customize_request_id IS NOT NULL)
+            """, nativeQuery = true)
+    List<OrderDetail> findOwnedCourseLines(@Param("parentId") UUID parentId);
+
     List<OrderDetail> findByOrderId(UUID orderId);
     List<OrderDetail> findByOrderIdIn(java.util.Collection<UUID> orderIds);
     List<OrderDetail> findByOrderIdAndSupplyIdIsNotNull(UUID orderId);

@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public interface ChildrenCourseRepository extends JpaRepository<ChildrenCourse, UUID> {
     List<ChildrenCourse> findByOrderId(UUID orderId);
+    List<ChildrenCourse> findByOrderIdIn(java.util.Collection<UUID> orderIds);
     List<ChildrenCourse> findByOrderIdAndCourseId(UUID orderId, UUID courseId);
     boolean existsByOrderIdAndCourseIdAndChildId(UUID orderId, UUID courseId, UUID childId);
 }

@@ -16,6 +16,8 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
 
     List<Course> findAllByStatus(String status);
 
+    List<Course> findAllByCustomizeRequestIdIn(java.util.Collection<UUID> customizeRequestIds);
+
     List<Course> findByStatusIgnoreCase(String status);
 
     // Khóa dòng khi Staff duyệt/từ chối để hai Staff cùng xử lý một khóa thì chạy lần lượt.

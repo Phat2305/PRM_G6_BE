@@ -27,6 +27,16 @@ public interface ChildProgressRepository
             UUID lessonId
     );
 
+    // Số bài đã xong của từng (khóa, bé): [course_id, child_id, số bài]. Dùng cho trang khóa học đã mua của phụ huynh.
+    @Query(value = """
+            SELECT l.course_id, p.child_id, COUNT(*) FROM learning_progress p
+            JOIN lessons l ON l.id = p.lesson_id
+            WHERE p.is_completed AND l.course_id IN (:courseIds) AND p.child_id IN (:childIds)
+            GROUP BY l.course_id, p.child_id
+            """, nativeQuery = true)
+    List<Object[]> countCompletedByCourseAndChild(@Param("courseIds") Collection<UUID> courseIds,
+                                                  @Param("childIds") Collection<UUID> childIds);
+
     // Atomic upsert: two first-time requests for the same lesson cannot collide on the primary key,
     // watched time never goes down and a completed lesson stays completed.
     @Transactional
