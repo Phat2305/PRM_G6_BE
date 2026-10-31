@@ -236,6 +236,9 @@ public class CourseService {
             course.setPrice(request.getPrice());
         }
 
+        // Đổi nội dung (không tính chỉ đổi trạng thái như gỡ về nháp) thì khóa không được có người mua.
+        if (changed) requireEditable(course);
+
         if (CourseReviewPolicy.isCustomize(course) && (changed
                 || CourseReviewPolicy.DRAFT.equalsIgnoreCase(request.getStatus()))) {
             prepareCustomizeEdit(course);
@@ -264,7 +267,7 @@ public class CourseService {
             // Xóa mềm: khóa đã có người mua thì không xóa được (họ còn quyền học); chưa ai mua thì ẩn đi, giữ nguyên bài học.
             if (courseRepository.hasBuyers(id)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Khóa đã có người mua nên không xóa được; bạn có thể gỡ khóa về bản nháp");
+                        "Khóa đã có người mua nên không xóa được");
             }
             course.setStatus(CourseReviewPolicy.DELETED);
             courseRepository.save(course);
@@ -274,6 +277,23 @@ public class CourseService {
         prepareCustomizeEdit(course);
 
         courseRepository.delete(course);
+    }
+
+    // Khóa thường đã có người mua thì không sửa nội dung (thông tin, bài học, video, ảnh bìa): họ đã trả tiền cho đúng
+    // nội dung này. Khóa riêng có quy tắc riêng ở prepareCustomizeEdit (CUS-12) nên không kiểm ở đây.
+    public void requireEditable(Course course) {
+        if (CourseReviewPolicy.isCustomize(course) || !courseRepository.hasBuyers(course.getId())) {
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Khóa đã có người mua nên không sửa được");
+    }
+
+    // Các khóa (trong danh sách) đã có người mua, để FE tắt nút sửa/xóa.
+    @Transactional(readOnly = true)
+    public java.util.Set<UUID> courseIdsWithBuyers(java.util.Collection<UUID> courseIds) {
+        return courseIds.isEmpty()
+                ? java.util.Set.of()
+                : new java.util.HashSet<>(courseRepository.findCourseIdsWithBuyers(courseIds));
     }
 
     // CUS-12: chỉ khóa đã được phụ huynh xác nhận mới bất biến; sửa trước đó phải duyệt/bàn giao lại.

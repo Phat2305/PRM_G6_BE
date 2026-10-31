@@ -72,6 +72,7 @@ public class VideoLessonService {
         Lesson lesson = ownedLesson(lessonId, userId);
         // Đổi video là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.
         courseRepository.findById(lesson.getCourseId()).ifPresent(course -> {
+            courseService.requireEditable(course);
             courseService.prepareCustomizeEdit(course);
             String before = course.getStatus();
             CourseReviewPolicy.onContentChanged(course);
@@ -106,7 +107,10 @@ public class VideoLessonService {
     @Transactional
     public void deleteLessonVideo(UUID lessonId, String userId) {
         Lesson lesson = ownedLesson(lessonId, userId);
-        courseRepository.findById(lesson.getCourseId()).ifPresent(courseService::prepareCustomizeEdit);
+        courseRepository.findById(lesson.getCourseId()).ifPresent(course -> {
+            courseService.requireEditable(course);
+            courseService.prepareCustomizeEdit(course);
+        });
         String status = lesson.getVideoStatus();
         if ("QUEUED".equals(status) || "PROCESSING".equals(status)) {
             throw new AppError(HttpStatus.CONFLICT, "VIDEO_PROCESSING",

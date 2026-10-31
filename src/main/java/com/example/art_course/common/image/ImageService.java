@@ -60,6 +60,7 @@ public class ImageService {
         if (course.getTeacherId() == null || !course.getTeacherId().equals(teacherId)) {
             throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không quản lý khóa học này");
         }
+        courseService.requireEditable(course);
         courseService.prepareCustomizeEdit(course);
         String old = course.getCoverImageUrl();
         String url = store(COURSES, file);

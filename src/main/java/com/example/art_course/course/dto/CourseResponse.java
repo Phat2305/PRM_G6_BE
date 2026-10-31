@@ -23,4 +23,6 @@ public class CourseResponse {
     // Số lần Staff đã từ chối (tối đa 3 thì không gửi lại được) và lý do gần nhất.
     private int rejectionCount;
     private String reviewNote;
+    // Chỉ đúng với giáo viên chủ khóa (người khác luôn false): khóa đã có người mua thì không sửa/xóa được.
+    private boolean hasBuyers;
 }

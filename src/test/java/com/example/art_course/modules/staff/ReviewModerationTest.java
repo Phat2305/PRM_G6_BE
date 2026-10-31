@@ -118,6 +118,34 @@ class ReviewModerationTest {
         assertEquals(1, courseService.published().size());
     }
 
+    // Staff thấy ảnh bìa thật của từng khóa ở hàng chờ, hàng đang công khai và màn chi tiết.
+    @Test
+    void courseCoverImageIsReturnedInListsAndDetail() {
+        course.setStatus("PENDING_REVIEW");
+        Course noCover = Course.builder().id(UUID.randomUUID()).teacherId(teacherId).name("Chưa ảnh")
+                .status("PENDING_REVIEW").build();
+        when(courses.findAllByStatus("PENDING_REVIEW")).thenReturn(List.of(course, noCover));
+        when(courses.findById(course.getId())).thenReturn(Optional.of(course));
+        when(lessons.findAllByCourseId(any())).thenReturn(List.of());
+        when(names.byIds(any())).thenReturn(java.util.Map.of());
+
+        var pending = courseService.pending();
+
+        assertEquals("/api/images/courses/x", pending.get(0).coverImageUrl());
+        assertNull(pending.get(1).coverImageUrl());
+        assertEquals("/api/images/courses/x", courseService.detail(course.getId()).coverImageUrl());
+    }
+
+    @Test
+    void publishedListAlsoCarriesTheCoverImage() {
+        course.setStatus("PUBLISHED");
+        when(courses.findAllByStatus("PUBLISHED")).thenReturn(List.of(course));
+        when(lessons.findAllByCourseId(any())).thenReturn(List.of());
+        when(names.byIds(any())).thenReturn(java.util.Map.of());
+
+        assertEquals("/api/images/courses/x", courseService.published().get(0).coverImageUrl());
+    }
+
     @Test
     void hiddenCourse_teacherCanResubmitAfterFixing() {
         course.setStatus("HIDDEN");

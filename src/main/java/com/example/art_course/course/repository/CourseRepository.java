@@ -16,16 +16,22 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
 
     List<Course> findAllByStatus(String status);
 
-    // Đã có người mua: dòng đơn còn hiệu lực (đã trả hoặc đang chờ trả, chưa hoàn tiền) hoặc bé đang có quyền học.
-    // Khóa như vậy không xóa được; đơn đang chờ trả cũng tính để khách không trả tiền cho khóa vừa bị xóa.
+    // Các khóa (trong danh sách) đã có người mua: dòng đơn còn hiệu lực (đã trả hoặc đang chờ trả, chưa hoàn tiền) hoặc
+    // bé đang có quyền học. Khóa như vậy không xóa và không sửa nội dung được; đơn đang chờ trả cũng tính để khách
+    // không trả tiền cho khóa vừa bị xóa hoặc vừa bị đổi nội dung.
     @org.springframework.data.jpa.repository.Query(value = """
-            SELECT EXISTS (
-                SELECT 1 FROM order_details d JOIN orders o ON o.id = d.order_id
-                WHERE d.course_id = :courseId AND o.status IN ('PAID', 'PENDING_PAYMENT')
-                  AND d.delivery_status IS DISTINCT FROM 'REFUNDED'
-            ) OR EXISTS (SELECT 1 FROM child_enroll e WHERE e.course_id = :courseId)
+            SELECT d.course_id FROM order_details d JOIN orders o ON o.id = d.order_id
+            WHERE d.course_id IN (:courseIds) AND o.status IN ('PAID', 'PENDING_PAYMENT')
+              AND d.delivery_status IS DISTINCT FROM 'REFUNDED'
+            UNION
+            SELECT e.course_id FROM child_enroll e WHERE e.course_id IN (:courseIds)
             """, nativeQuery = true)
-    boolean hasBuyers(@org.springframework.data.repository.query.Param("courseId") UUID courseId);
+    List<UUID> findCourseIdsWithBuyers(
+            @org.springframework.data.repository.query.Param("courseIds") java.util.Collection<UUID> courseIds);
+
+    default boolean hasBuyers(UUID courseId) {
+        return !findCourseIdsWithBuyers(List.of(courseId)).isEmpty();
+    }
 
     List<Course> findAllByCustomizeRequestIdIn(java.util.Collection<UUID> customizeRequestIds);
 

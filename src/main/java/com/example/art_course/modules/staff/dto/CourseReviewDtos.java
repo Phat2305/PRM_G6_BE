@@ -11,7 +11,8 @@ public final class CourseReviewDtos {
     }
 
     public record Item(UUID id, String name, UUID teacherId, String teacherName, String category,
-                       BigDecimal price, boolean customize, int rejectionCount, int lessonCount, int readyCount) {
+                       BigDecimal price, boolean customize, int rejectionCount, int lessonCount, int readyCount,
+                       String coverImageUrl) {
     }
 
     public record LessonItem(UUID id, String title, boolean trial, boolean hasAssignment,
@@ -20,6 +21,6 @@ public final class CourseReviewDtos {
 
     public record Detail(UUID id, String name, String description, String category, BigDecimal price,
                          String status, UUID teacherId, String teacherName, boolean customize,
-                         int rejectionCount, String reviewNote, List<LessonItem> lessons) {
+                         int rejectionCount, String reviewNote, List<LessonItem> lessons, String coverImageUrl) {
     }
 }

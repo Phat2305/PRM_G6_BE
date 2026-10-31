@@ -30,7 +30,7 @@ public class CourseController {
     public List<CourseResponse> getAllCourses() {
         return courseService.getAllCourses()
                 .stream()
-                .map(this::toResponse)
+                .map(course -> toResponse(course, false))
                 .toList();
     }
 
@@ -38,17 +38,16 @@ public class CourseController {
     public CourseResponse getCourseById(
             @PathVariable UUID id, Authentication authentication
     ) {
-        return toResponse(courseService.getCourseForViewer(id, authentication.getName()));
+        return toResponses(List.of(courseService.getCourseForViewer(id, authentication.getName())),
+                authentication.getName()).get(0);
     }
 
     @GetMapping("/teacher/{teacherId}")
     public List<CourseResponse> getCoursesByTeacher(
             @PathVariable UUID teacherId, Authentication authentication
     ) {
-        return courseService.getCoursesForViewer(teacherId, authentication.getName())
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        return toResponses(courseService.getCoursesForViewer(teacherId, authentication.getName()),
+                authentication.getName());
     }
 
     @PostMapping
@@ -61,7 +60,8 @@ public class CourseController {
                 courseService.createCourse(
                         request,
                         authentication.getName()
-                )
+                ),
+                false
         );
     }
 
@@ -71,13 +71,14 @@ public class CourseController {
             @Valid @RequestBody UpdateCourseRequest request,
             Authentication authentication
     ) {
-        return toResponse(
-                courseService.updateCourse(
+        return toResponses(
+                List.of(courseService.updateCourse(
                         id,
                         request,
                         authentication.getName()
-                )
-        );
+                )),
+                authentication.getName()
+        ).get(0);
     }
 
     @DeleteMapping("/{id}")
@@ -89,7 +90,18 @@ public class CourseController {
         courseService.deleteCourse(id, authentication.getName());
     }
 
-    private CourseResponse toResponse(Course course) {
+    // hasBuyers chỉ tra cho khóa của chính người xem (một truy vấn cho cả danh sách), người khác luôn false.
+    private List<CourseResponse> toResponses(List<Course> courses, String viewer) {
+        java.util.function.Predicate<Course> owned =
+                course -> course.getTeacherId() != null && course.getTeacherId().toString().equals(viewer);
+        java.util.Set<UUID> sold = courseService.courseIdsWithBuyers(
+                courses.stream().filter(owned).map(Course::getId).toList());
+        return courses.stream()
+                .map(course -> toResponse(course, owned.test(course) && sold.contains(course.getId())))
+                .toList();
+    }
+
+    private CourseResponse toResponse(Course course, boolean hasBuyers) {
         return new CourseResponse(
                 course.getId(),
                 course.getTeacherId(),
@@ -101,7 +113,8 @@ public class CourseController {
                 course.getPrice(),
                 course.getStatus(),
                 course.getRejectionCount(),
-                course.getReviewNote()
+                course.getReviewNote(),
+                hasBuyers
         );
     }
 }

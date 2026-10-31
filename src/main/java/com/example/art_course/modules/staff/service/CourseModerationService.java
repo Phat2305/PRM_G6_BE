@@ -62,7 +62,7 @@ public class CourseModerationService {
             int ready = (int) lessons.stream().filter(CourseReviewPolicy::videoReady).count();
             return new CourseReviewDtos.Item(c.getId(), c.getName(), c.getTeacherId(), teachers.get(c.getTeacherId()),
                     c.getCategory(), c.getPrice(), CourseReviewPolicy.isCustomize(c), c.getRejectionCount(),
-                    lessons.size(), ready);
+                    lessons.size(), ready, c.getCoverImageUrl());
         }).toList();
     }
 
@@ -81,7 +81,7 @@ public class CourseModerationService {
         return new CourseReviewDtos.Detail(course.getId(), course.getName(), course.getDescription(),
                 course.getCategory(), course.getPrice(), course.getStatus(), course.getTeacherId(),
                 names.byId(course.getTeacherId()), CourseReviewPolicy.isCustomize(course),
-                course.getRejectionCount(), course.getReviewNote(), lessons);
+                course.getRejectionCount(), course.getReviewNote(), lessons, course.getCoverImageUrl());
     }
 
     @Transactional

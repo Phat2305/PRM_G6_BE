@@ -165,6 +165,7 @@ public class LessonService {
 
     // Sửa bài học là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.
     private void touchCourse(Course course) {
+        courseService.requireEditable(course);
         courseService.prepareCustomizeEdit(course);
         String before = course.getStatus();
         CourseReviewPolicy.onContentChanged(course);

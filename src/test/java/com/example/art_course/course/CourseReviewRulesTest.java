@@ -199,6 +199,30 @@ class CourseReviewRulesTest {
     }
 
     @Test
+    void publishedUnsoldCourseCanBeSoftDeletedWithoutUnpublishingFirst() {
+        stubCourse();
+        course.setStatus("PUBLISHED");
+
+        service.deleteCourse(course.getId(), login(teacherId, "TEACHER"));
+
+        assertEquals("DELETED", course.getStatus());
+        verify(courses, never()).delete(any());
+    }
+
+    @Test
+    void publishedCourseWithBuyersStaysPublishedWhenDeleteIsRefused() {
+        stubCourse();
+        course.setStatus("PUBLISHED");
+        when(courses.hasBuyers(course.getId())).thenReturn(true);
+
+        assertThrows(ResponseStatusException.class,
+                () -> service.deleteCourse(course.getId(), login(teacherId, "TEACHER")));
+
+        assertEquals("PUBLISHED", course.getStatus());
+        verify(courses, never()).save(any());
+    }
+
+    @Test
     void courseWithBuyersCannotBeDeleted() {
         stubCourse();
         when(courses.hasBuyers(course.getId())).thenReturn(true);
@@ -325,6 +349,65 @@ class CourseReviewRulesTest {
         assertEquals("PENDING_REVIEW", course.getStatus());
         assertEquals("/api/videos/hls/real/master.m3u8", lesson.getVideoUrl());
         verify(courses).save(course);
+    }
+
+    // Khóa đã có người mua: tắt sửa nội dung (thông tin khóa và bài học), nhưng vẫn gỡ về nháp được.
+    @Test
+    void courseWithBuyersCannotBeEdited() {
+        stubCourse();
+        course.setStatus("PUBLISHED");
+        when(courses.hasBuyers(course.getId())).thenReturn(true);
+        String teacher = login(teacherId, "TEACHER");
+
+        UpdateCourseRequest edit = new UpdateCourseRequest();
+        edit.setDescription("Mô tả mới");
+        var e = assertThrows(ResponseStatusException.class, () -> service.updateCourse(course.getId(), edit, teacher));
+
+        assertEquals(409, e.getStatusCode().value());
+        assertEquals("PUBLISHED", course.getStatus());
+        verify(courses, never()).save(any());
+    }
+
+    @Test
+    void courseWithBuyersCanStillBeUnpublishedWithoutChangingContent() {
+        stubCourse();
+        course.setStatus("PUBLISHED");
+        when(courses.hasBuyers(course.getId())).thenReturn(true);
+
+        assertEquals("DRAFT", service.updateCourse(course.getId(), status("DRAFT"),
+                login(teacherId, "TEACHER")).getStatus());
+    }
+
+    @Test
+    void courseWithBuyersCannotAddEditOrDeleteLessons() {
+        stubCourse();
+        Lesson lesson = readyLesson();
+        when(lessons.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(courses.hasBuyers(course.getId())).thenReturn(true);
+        String teacher = login(teacherId, "TEACHER");
+
+        UpdateLessonRequest edit = new UpdateLessonRequest();
+        edit.setTitle("Bài 1 (sửa)");
+        Lesson incoming = Lesson.builder().courseId(course.getId()).title("Bài mới").build();
+
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> lessonService.updateLesson(lesson.getId(), edit, teacher)).getStatusCode().value());
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> lessonService.createLesson(incoming, teacher)).getStatusCode().value());
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> lessonService.deleteLesson(lesson.getId(), teacher)).getStatusCode().value());
+        verify(lessons, never()).save(any());
+        verify(lessons, never()).delete(any());
+    }
+
+    @Test
+    void courseIdsWithBuyersAreCheckedInOneQuery() {
+        UUID sold = UUID.randomUUID();
+        UUID unsold = UUID.randomUUID();
+        when(courses.findCourseIdsWithBuyers(List.of(sold, unsold))).thenReturn(List.of(sold));
+
+        assertEquals(java.util.Set.of(sold), service.courseIdsWithBuyers(List.of(sold, unsold)));
+        assertTrue(service.courseIdsWithBuyers(List.of()).isEmpty());
     }
 
     @Test

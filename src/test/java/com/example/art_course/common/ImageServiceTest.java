@@ -79,6 +79,19 @@ class ImageServiceTest {
     }
 
     @Test
+    void coverOfACourseWithBuyersCannotBeChanged() {
+        UUID id = UUID.randomUUID();
+        Course course = Course.builder().teacherId(teacherId).build();
+        when(courses.findById(id)).thenReturn(Optional.of(course));
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT)).when(courseService).requireEditable(course);
+
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> service.uploadCourseCover(id, teacherId, png));
+        verifyNoInteractions(r2);
+    }
+
+    @Test
     void confirmedCustomizeCoverCannotBeChanged() {
         UUID id = UUID.randomUUID();
         Course course = Course.builder().teacherId(teacherId).customizeRequestId(UUID.randomUUID()).build();
