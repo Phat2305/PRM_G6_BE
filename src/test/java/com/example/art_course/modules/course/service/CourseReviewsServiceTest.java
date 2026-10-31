@@ -39,7 +39,8 @@ class CourseReviewsServiceTest {
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final CourseService service = new CourseService(
             courseRepo, reviewRepo, events, entityManager,
-            mock(IVideoAccessContract.class), names);
+            mock(IVideoAccessContract.class), names,
+            mock(com.example.art_course.modules.order.repository.OrderDetailRepository.class));
 
     private final UUID teacherId = UUID.randomUUID();
     private final UUID courseId = UUID.randomUUID();

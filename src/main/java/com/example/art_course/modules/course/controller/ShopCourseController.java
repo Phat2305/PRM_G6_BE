@@ -7,6 +7,7 @@ import com.example.art_course.modules.course.dto.TrialLessonDto;
 import com.example.art_course.modules.course.service.CourseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,8 +37,9 @@ public class ShopCourseController {
     }
 
     @GetMapping("/{courseId}")
-    public ApiResponse<CourseDetailDto> getCourseDetail(@PathVariable UUID courseId) {
-        return ApiResponse.ok(courseService.getCourseDetail(courseId));
+    public ApiResponse<CourseDetailDto> getCourseDetail(
+            @PathVariable UUID courseId, @AuthenticationPrincipal UUID callerId) {
+        return ApiResponse.ok(courseService.getCourseDetail(courseId, callerId));
     }
 
     @GetMapping("/lessons/{lessonId}/trial")

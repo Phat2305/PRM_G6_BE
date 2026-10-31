@@ -31,5 +31,7 @@ public class CourseDetailDto {
     // Điểm trung bình (làm tròn 1 chữ số) và số đánh giá; chưa có đánh giá thì null và 0.
     private Double averageRating;
     private long reviewCount;
+    // SHOP-04: người xem là phụ huynh đã trả tiền khóa này (kể cả chưa gán bé); FE ẩn nút mua. Khách chưa đăng nhập: false.
+    private boolean owned;
     private List<LessonSummaryDto> lessons;
 }

@@ -36,6 +36,7 @@ public class CourseService {
     private final EntityManager entityManager;
     private final IVideoAccessContract videoAccessContract;
     private final com.example.art_course.common.TeacherNames teacherNames;
+    private final com.example.art_course.modules.order.repository.OrderDetailRepository orderDetailRepository;
 
     /**
      * Danh mục khóa học đã xuất bản phục vụ mua sắm (SHOP-01).
@@ -122,6 +123,12 @@ public class CourseService {
      */
     @Transactional(readOnly = true)
     public CourseDetailDto getCourseDetail(UUID courseId) {
+        return getCourseDetail(courseId, null);
+    }
+
+    // viewerId = tài khoản đang xem (null nếu chưa đăng nhập), dùng để báo `owned` (SHOP-04).
+    @Transactional(readOnly = true)
+    public CourseDetailDto getCourseDetail(UUID courseId, UUID viewerId) {
         Course course = courseRepository.findById(courseId)
                 .filter(c -> c.getCustomizeRequestId() == null
                         && !"DRAFT".equalsIgnoreCase(c.getStatus()))
@@ -156,6 +163,7 @@ public class CourseService {
                 .status(course.getStatus())
                 .averageRating(averageOf(rating))
                 .reviewCount(countOf(rating))
+                .owned(viewerId != null && orderDetailRepository.parentOwnsCourse(viewerId, courseId))
                 .lessons(lessonDtos)
                 .build();
     }
