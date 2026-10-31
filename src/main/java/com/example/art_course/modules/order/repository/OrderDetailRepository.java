@@ -32,6 +32,17 @@ public interface OrderDetailRepository extends JpaRepository<OrderDetail, UUID> 
             """, nativeQuery = true)
     List<UUID> findMissingEnrollmentIds();
 
+    // SHOP-04: phụ huynh đã trả tiền khóa này (kể cả chưa gán bé). Khóa customize có course_id null ở dòng đơn nên tra qua yêu cầu.
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM order_details d JOIN orders o ON o.id = d.order_id
+                WHERE o.parent_id = :parentId AND o.status = 'PAID'
+                  AND d.delivery_status IS DISTINCT FROM 'REFUNDED'
+                  AND (d.course_id = :courseId
+                       OR d.customize_request_id = (SELECT c.customize_request_id FROM courses c WHERE c.id = :courseId)))
+            """, nativeQuery = true)
+    boolean parentOwnsCourse(@Param("parentId") UUID parentId, @Param("courseId") UUID courseId);
+
     List<OrderDetail> findByOrderId(UUID orderId);
     List<OrderDetail> findByOrderIdIn(java.util.Collection<UUID> orderIds);
     List<OrderDetail> findByOrderIdAndSupplyIdIsNotNull(UUID orderId);

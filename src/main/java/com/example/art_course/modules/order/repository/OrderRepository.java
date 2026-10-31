@@ -22,6 +22,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     Optional<Order> findByIdForUpdate(@Param("id") UUID id);
 
     List<Order> findByParentIdOrderByCreatedAtDesc(UUID parentId);
+    List<Order> findByParentIdAndStatus(UUID parentId, OrderStatus status);
     List<Order> findByTeacherIdOrderByCreatedAtDesc(UUID teacherId);
     List<Order> findByStatus(OrderStatus status);
     long countByStatus(OrderStatus status);

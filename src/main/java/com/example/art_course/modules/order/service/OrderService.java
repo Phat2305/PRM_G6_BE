@@ -54,6 +54,9 @@ public class OrderService {
      * Tự động tách theo từng Teacher: mỗi Teacher đúng một đơn riêng (SHOP-05, BR-04, #25).
      * Khóa dòng PESSIMISTIC_WRITE để chống bán vượt tồn và ghi nhận giữ chỗ kho (PAY-07, BR-11).
      */
+    // Số đơn tối đa được nhân vào hạn thanh toán của một lượt đặt nhiều giáo viên.
+    static final int MAX_DEADLINE_ORDERS = 5;
+
     @Transactional
     public List<Order> createOrdersFromCheckout(UUID parentId, CheckoutRequest request) {
         List<CartItem> itemsToProcess = new ArrayList<>();
@@ -82,6 +85,10 @@ public class OrderService {
             }
         }
 
+        // Đặt lại món đang nằm trong đơn chờ thanh toán (thoát giữa chừng rồi đặt lại): hủy đơn cũ, trả tồn kho giữ chỗ
+        // trước khi kiểm tồn, để không giữ chỗ hai lần và không thể trả cả hai đơn (mua trùng).
+        cancelSupersededPendingOrders(parentId, itemsToProcess);
+
         // PAY-07: các request khóa dụng cụ theo cùng thứ tự để tránh deadlock.
         itemsToProcess.sort(Comparator.comparing(i -> i.getSupplyId() == null ? "" : i.getSupplyId().toString()));
 
@@ -91,10 +98,19 @@ public class OrderService {
         BigDecimal commCourse = configService.getCommissionRateCourse();
         BigDecimal commSupply = configService.getCommissionRateSupply();
 
+        Set<UUID> courseIdsInOrder = new HashSet<>();
         for (CartItem item : itemsToProcess) {
             if ("COURSE".equalsIgnoreCase(item.getProductType())) {
                 if (item.getCourseId() == null) {
                     throw new AppError(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Khóa học phải có courseId");
+                }
+
+                // SHOP-04: mỗi khóa mua một lần (gán nhiều bé sau), không đặt hai dòng cùng khóa cho hai bé.
+                if (!courseIdsInOrder.add(item.getCourseId())) {
+                    throw new AppError(HttpStatus.CONFLICT, "DUPLICATE_COURSE_IN_ORDER", "Mỗi khóa học chỉ đặt một lần trong một lượt đặt hàng (SHOP-04)");
+                }
+                if (orderDetailRepository.parentOwnsCourse(parentId, item.getCourseId())) {
+                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bạn đã mua khóa học này, hãy kích hoạt cho bé ở đơn hàng (SHOP-04)");
                 }
 
                 // Bé có thể chọn sau khi thanh toán (assignChild); có chọn sẵn thì chặn mua trùng (SHOP-04)
@@ -148,7 +164,10 @@ public class OrderService {
             }
         }
 
-        int timeoutMinutes = configService.getOrderPaymentTimeoutMinutes();
+        // Khách trả lần lượt từng QR (mỗi giáo viên một đơn) nên hạn chung của cả lượt đặt nhân theo số đơn, tối đa
+        // MAX_DEADLINE_ORDERS lần; đơn lẻ vẫn đúng order_payment_timeout_minutes.
+        int timeoutMinutes = configService.getOrderPaymentTimeoutMinutes()
+                * Math.max(1, Math.min(teacherGroups.size(), MAX_DEADLINE_ORDERS));
         Instant expiredAt = Instant.now().plus(timeoutMinutes, ChronoUnit.MINUTES);
         List<Order> createdOrders = new ArrayList<>();
 
@@ -223,6 +242,35 @@ public class OrderService {
 
         withTeacherNames(createdOrders);
         return createdOrders;
+    }
+
+    private void cancelSupersededPendingOrders(UUID parentId, List<CartItem> wanted) {
+        for (Order candidate : orderRepository.findByParentIdAndStatus(parentId, OrderStatus.PENDING_PAYMENT)) {
+            List<OrderDetail> lines = orderDetailRepository.findByOrderId(candidate.getId());
+            // Đơn customize có luồng báo giá và hạn riêng, không đụng tới.
+            if (lines.stream().anyMatch(l -> l.getCustomizeRequestId() != null)
+                    || lines.stream().noneMatch(l -> repeatsAny(l, wanted))) {
+                continue;
+            }
+            // Khóa lại rồi kiểm tra lần nữa: webhook có thể vừa chuyển đơn sang đã thanh toán.
+            Order locked = orderRepository.findByIdForUpdate(candidate.getId()).orElse(null);
+            if (locked != null && locked.getStatus() == OrderStatus.PENDING_PAYMENT) {
+                cancelPending(locked);
+            }
+        }
+    }
+
+    // Cùng khóa (bất kể bé, vì khóa mua một lần theo phụ huynh, SHOP-04) hoặc cùng dụng cụ.
+    private static boolean repeatsAny(OrderDetail line, List<CartItem> wanted) {
+        for (CartItem item : wanted) {
+            if (line.getCourseId() != null && line.getCourseId().equals(item.getCourseId())) {
+                return true;
+            }
+            if (line.getSupplyId() != null && line.getSupplyId().equals(item.getSupplyId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // SHOP-03: nhận hàng vật lý phải đủ tên, SĐT và địa chỉ trước khi tạo đơn.
@@ -367,8 +415,12 @@ public class OrderService {
             throw new AppError(HttpStatus.BAD_REQUEST, "CANNOT_CANCEL", "Chỉ có thể hủy đơn hàng đang chờ thanh toán");
         }
 
-        // Hoàn trả tồn giữ chỗ
-        List<OrderDetail> details = new ArrayList<>(orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(orderId));
+        cancelPending(order);
+    }
+
+    // Đơn đang chờ thanh toán -> CANCELLED và trả lại tồn kho giữ chỗ (BR-11). Người gọi đã khóa đơn và kiểm trạng thái.
+    private void cancelPending(Order order) {
+        List<OrderDetail> details = new ArrayList<>(orderDetailRepository.findByOrderIdAndSupplyIdIsNotNull(order.getId()));
         details.sort(Comparator.comparing(d -> d.getSupplyId().toString()));
         for (OrderDetail d : details) {
             if (d.getSupplyId() != null) {

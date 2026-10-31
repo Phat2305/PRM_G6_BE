@@ -7,6 +7,7 @@ import com.example.art_course.modules.cart.repository.CartItemRepository;
 import com.example.art_course.modules.cart.repository.CartRepository;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.modules.order.repository.OrderDetailRepository;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
 import jakarta.persistence.EntityManager;
@@ -32,6 +33,7 @@ public class CartService {
     private final CourseRepository courseRepository;
     private final SupplyRepository supplyRepository;
     private final EntityManager entityManager;
+    private final OrderDetailRepository orderDetailRepository;
 
     @Transactional
     public Cart getOrCreateCart(UUID parentId) {
@@ -76,7 +78,10 @@ public class CartService {
                 throw new AppError(HttpStatus.BAD_REQUEST, "COURSE_UNAVAILABLE", "Khóa học chưa được công khai");
             }
 
-            // 3. Chặn mua trùng 1 khóa cho cùng 1 Child (SHOP-04)
+            // 3. Chặn mua trùng (SHOP-04): phụ huynh đã trả tiền khóa này thì gán thêm bé ở đơn cũ, không mua lại
+            if (orderDetailRepository.parentOwnsCourse(parentId, input.getCourseId())) {
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bạn đã mua khóa học này, hãy kích hoạt cho bé ở đơn hàng (SHOP-04)");
+            }
             if (input.getChildId() != null) {
                 String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
                 List<?> enrolled = entityManager.createNativeQuery(enrollSql)
@@ -89,9 +94,9 @@ public class CartService {
                 }
             }
 
-            // Kiểm tra trong giỏ hàng (childId null khớp dòng chưa chọn bé)
-            if (cartItemRepository.findByCartIdAndCourseIdAndChildId(cart.getId(), input.getCourseId(), input.getChildId()).isPresent()) {
-                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_IN_CART", "Khóa học này cho bé đã có trong giỏ hàng (SHOP-04)");
+            // Một khóa chỉ một dòng trong giỏ, bất kể bé (mua một lần, gán nhiều bé sau)
+            if (cartItemRepository.existsByCartIdAndCourseId(cart.getId(), input.getCourseId())) {
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_IN_CART", "Khóa học này đã có trong giỏ hàng (SHOP-04)");
             }
 
             CartItem item = CartItem.builder()

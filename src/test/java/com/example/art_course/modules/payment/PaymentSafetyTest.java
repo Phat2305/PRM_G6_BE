@@ -141,6 +141,39 @@ class PaymentSafetyTest {
         verify(gateway, never()).createPaymentUrl(any(), any(), any());
     }
 
+    // Bé đã có khóa (mua ở đơn khác sau khi đơn này được tạo): không tạo link thu thêm tiền.
+    @Test
+    void doesNotTakeMoneyForACourseTheChildAlreadyOwns() {
+        UUID childId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        OrderDetail course = OrderDetail.builder().id(UUID.randomUUID()).orderId(order.getId()).courseId(courseId)
+                .childId(childId).productName("Màu nước").quantity(1).subTotal(new BigDecimal("100000")).build();
+        when(details.findByOrderId(order.getId())).thenReturn(List.of(course));
+        when(enrollments.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(childId, courseId, "active")).thenReturn(true);
+
+        var e = assertThrows(AppError.class, () -> service.createPaymentUrl(order.getParentId(), createRequest()));
+
+        assertEquals("COURSE_ALREADY_OWNED", e.getErrorCode());
+        verify(gateway, never()).createPaymentUrl(any(), any(), any());
+        verify(payments, never()).save(any());
+    }
+
+    // SHOP-04: phụ huynh đã trả tiền khóa ở đơn khác (dù chưa gán bé) thì không thu thêm.
+    @Test
+    void doesNotTakeMoneyForACourseTheParentAlreadyPaidFor() {
+        UUID courseId = UUID.randomUUID();
+        OrderDetail course = OrderDetail.builder().id(UUID.randomUUID()).orderId(order.getId()).courseId(courseId)
+                .productName("Màu nước").quantity(1).subTotal(new BigDecimal("100000")).build();
+        when(details.findByOrderId(order.getId())).thenReturn(List.of(course));
+        when(details.parentOwnsCourse(order.getParentId(), courseId)).thenReturn(true);
+
+        var e = assertThrows(AppError.class, () -> service.createPaymentUrl(order.getParentId(), createRequest()));
+
+        assertEquals("COURSE_ALREADY_OWNED", e.getErrorCode());
+        verify(gateway, never()).createPaymentUrl(any(), any(), any());
+        verify(payments, never()).save(any());
+    }
+
     @Test
     void rejectsMockBeforeCallingGatewayOrRepositories() {
         assertEquals("UNSUPPORTED_GATEWAY", assertThrows(AppError.class,

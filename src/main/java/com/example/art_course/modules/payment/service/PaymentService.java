@@ -93,6 +93,17 @@ public class PaymentService {
             throw new AppError(HttpStatus.BAD_REQUEST, "ORDER_EXPIRED", "Đơn hàng đã hết hạn thanh toán");
         }
 
+        // Phụ huynh (hoặc bé) đã có khóa này ở đơn khác đã trả thì không nhận thêm tiền; khách hủy đơn rồi đặt lại (SHOP-04).
+        for (OrderDetail line : orderDetailRepository.findByOrderId(order.getId())) {
+            if (line.getCourseId() != null
+                    && ((line.getChildId() != null && enrollmentRepository.existsByIdChildIdAndIdCourseIdAndStatusIgnoreCase(
+                    line.getChildId(), line.getCourseId(), "active"))
+                    || orderDetailRepository.parentOwnsCourse(order.getParentId(), line.getCourseId()))) {
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED",
+                        "Bạn đã sở hữu khóa \"" + line.getProductName() + "\" ở đơn khác, hãy hủy đơn này");
+            }
+        }
+
         Payment payment = paymentRepository.findByOrderId(order.getId()).orElse(null);
         if (payment != null && (payment.getStatus() == PaymentStatus.HELD
                 || payment.getStatus() == PaymentStatus.RELEASED || payment.getStatus() == PaymentStatus.REFUNDED)) {

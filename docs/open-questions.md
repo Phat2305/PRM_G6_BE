@@ -130,3 +130,11 @@ Nguồn sự thật ưu tiên:
 
 
 
+
+## 9. Mua trùng khóa học: chặn theo phụ huynh (SHOP-04)
+
+SRS SHOP-04 ghi "cùng một bé", nhưng phụ huynh được phép thanh toán mà chưa gán bé và khóa customize có `order_details.course_id` null, nên chặn theo bé (`child_enroll`) bị hở. Chọn phương án tối thiểu: một khóa chỉ mua một lần cho mỗi phụ huynh; bé khác gán thêm ở đơn cũ bằng `assignChild` (giá 0, đã có sẵn).
+
+- "Đã sở hữu" = có dòng `order_details` thuộc đơn `PAID` của phụ huynh, chưa `REFUNDED`, khớp `course_id` hoặc `customize_request_id` của khóa (`OrderDetailRepository.parentOwnsCourse`).
+- Chặn ở giỏ (`CartService`), checkout (`OrderService`) và tạo link thanh toán (`PaymentService`); giỏ/lượt đặt không có hai dòng cùng khóa.
+- Câu hỏi mở: nhóm có muốn cho mua lần hai có trả tiền cho bé khác không? Nếu có thì phải bỏ chặn theo phụ huynh và bắt gán bé lúc thanh toán.

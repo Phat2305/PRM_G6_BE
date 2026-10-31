@@ -101,6 +101,126 @@ class OrderServiceSafetyTest {
         verify(details, times(3)).save(any());
     }
 
+    // Khách trả lần lượt từng QR nên hạn chung nhân theo số đơn: 2 giáo viên = 2 x 15 phút, 1 giáo viên = 15 phút.
+    @Test
+    void paymentDeadlineScalesWithTheNumberOfOrdersInOneCheckout() {
+        Instant before = Instant.now();
+        var two = service.createOrdersFromCheckout(parentId, request());
+        two.forEach(o -> {
+            long minutes = java.time.Duration.between(before, o.getExpiredAt()).toMinutes();
+            assertTrue(minutes >= 29 && minutes <= 30, "hai đơn: " + minutes);
+        });
+
+        var single = service.createOrdersFromCheckout(parentId, new OrderService.CheckoutRequest(false,
+                List.of(course(first)), null, null, null));
+        long one = java.time.Duration.between(before, single.get(0).getExpiredAt()).toMinutes();
+        assertTrue(one >= 14 && one <= 15, "một đơn: " + one);
+    }
+
+    @Test
+    void deadlineMultiplierIsCappedSoABigCartDoesNotHoldStockForever() {
+        List<OrderService.CheckoutItem> items = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            Course c = Course.builder().id(UUID.randomUUID()).teacherId(UUID.randomUUID()).name("K" + i)
+                    .price(new BigDecimal("100000")).status("PUBLISHED").build();
+            when(courses.findById(c.getId())).thenReturn(Optional.of(c));
+            items.add(course(c));
+        }
+        Instant before = Instant.now();
+
+        var orders8 = service.createOrdersFromCheckout(parentId,
+                new OrderService.CheckoutRequest(false, items, null, null, null));
+
+        assertEquals(8, orders8.size());
+        long minutes = java.time.Duration.between(before, orders8.get(0).getExpiredAt()).toMinutes();
+        assertTrue(minutes >= 74 && minutes <= 75, "tối đa 5 x 15 phút: " + minutes);
+    }
+
+    // Đặt lại món đang ở đơn chờ thanh toán: đơn cũ bị hủy và trả tồn kho giữ chỗ, không có hai đơn cùng chờ.
+    @Test
+    void checkoutAgainCancelsAnOlderPendingOrderWithTheSameItems() {
+        Order old = Order.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(first.getTeacherId())
+                .status(OrderStatus.PENDING_PAYMENT).totalAmount(new BigDecimal("150000")).build();
+        OrderDetail oldCourse = OrderDetail.builder().id(UUID.randomUUID()).orderId(old.getId())
+                .courseId(first.getId()).quantity(1).build();
+        OrderDetail oldSupply = OrderDetail.builder().id(UUID.randomUUID()).orderId(old.getId())
+                .supplyId(supply.getId()).quantity(2).build();
+        supply.setReservedQuantity(2);
+        when(orders.findByParentIdAndStatus(parentId, OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(old));
+        when(orders.findByIdForUpdate(old.getId())).thenReturn(Optional.of(old));
+        when(details.findByOrderId(old.getId())).thenReturn(List.of(oldCourse, oldSupply));
+        when(details.findByOrderIdAndSupplyIdIsNotNull(old.getId())).thenReturn(List.of(oldSupply));
+
+        service.createOrdersFromCheckout(parentId, request());
+
+        assertEquals(OrderStatus.CANCELLED, old.getStatus());
+        // 2 giữ chỗ của đơn cũ được trả, đơn mới giữ 1.
+        assertEquals(1, supply.getReservedQuantity());
+    }
+
+    @Test
+    void unrelatedOrCustomizeOrdersAreLeftAlone() {
+        Order other = Order.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(UUID.randomUUID())
+                .status(OrderStatus.PENDING_PAYMENT).totalAmount(BigDecimal.TEN).build();
+        Order customize = Order.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(first.getTeacherId())
+                .status(OrderStatus.PENDING_PAYMENT).totalAmount(BigDecimal.TEN).build();
+        when(orders.findByParentIdAndStatus(parentId, OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(other, customize));
+        when(details.findByOrderId(other.getId())).thenReturn(List.of(
+                OrderDetail.builder().orderId(other.getId()).courseId(UUID.randomUUID()).build()));
+        when(details.findByOrderId(customize.getId())).thenReturn(List.of(
+                OrderDetail.builder().orderId(customize.getId()).courseId(first.getId())
+                        .customizeRequestId(UUID.randomUUID()).build()));
+
+        service.createOrdersFromCheckout(parentId, request());
+
+        assertEquals(OrderStatus.PENDING_PAYMENT, other.getStatus());
+        assertEquals(OrderStatus.PENDING_PAYMENT, customize.getStatus());
+    }
+
+    // SHOP-04: khóa mua một lần theo phụ huynh, nên đặt lại cho bé khác cũng hủy đơn chờ cũ của khóa đó.
+    @Test
+    void courseForAnotherChildCancelsTheOlderPendingOrderOfTheSameCourse() {
+        UUID childA = UUID.randomUUID();
+        UUID childB = UUID.randomUUID();
+        Order old = Order.builder().id(UUID.randomUUID()).parentId(parentId).teacherId(first.getTeacherId())
+                .status(OrderStatus.PENDING_PAYMENT).totalAmount(BigDecimal.TEN).build();
+        when(orders.findByParentIdAndStatus(parentId, OrderStatus.PENDING_PAYMENT)).thenReturn(List.of(old));
+        when(orders.findByIdForUpdate(old.getId())).thenReturn(Optional.of(old));
+        when(details.findByOrderId(old.getId())).thenReturn(List.of(
+                OrderDetail.builder().orderId(old.getId()).courseId(first.getId()).childId(childA).build()));
+        when(children.findByUserIdAndParentId(childB, parentId)).thenReturn(Optional.of(new Child()));
+        Query query = mock(Query.class);
+        when(entityManager.createNativeQuery(anyString())).thenReturn(query);
+        when(query.setParameter(anyString(), any())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+
+        service.createOrdersFromCheckout(parentId, new OrderService.CheckoutRequest(false,
+                List.of(new OrderService.CheckoutItem("COURSE", first.getId(), null, childB, 1)), null, null, null));
+
+        assertEquals(OrderStatus.CANCELLED, old.getStatus());
+    }
+
+    // SHOP-04: phụ huynh đã trả tiền khóa (kể cả chưa gán bé) thì không tạo đơn mới.
+    @Test
+    void checkoutRejectsACourseTheParentAlreadyPaidFor() {
+        when(details.parentOwnsCourse(parentId, first.getId())).thenReturn(true);
+
+        var request = new OrderService.CheckoutRequest(false, List.of(course(first)), null, null, null);
+
+        assertEquals("COURSE_ALREADY_OWNED", assertThrows(AppError.class,
+                () -> service.createOrdersFromCheckout(parentId, request)).getErrorCode());
+        verify(orders, never()).save(any());
+    }
+
+    @Test
+    void checkoutRejectsTheSameCourseTwiceInOneRequest() {
+        var request = new OrderService.CheckoutRequest(false, List.of(course(first), course(first)), null, null, null);
+
+        assertEquals("DUPLICATE_COURSE_IN_ORDER", assertThrows(AppError.class,
+                () -> service.createOrdersFromCheckout(parentId, request)).getErrorCode());
+        verify(orders, never()).save(any());
+    }
+
     @Test
     void physicalCheckoutRejectsMissingOrInvalidRecipient() {
         var request = request();
