@@ -19,7 +19,9 @@ class ProductServiceTest {
 
     private final SupplyRepository repo = mock(SupplyRepository.class);
     private final TeacherNames names = mock(TeacherNames.class);
-    private final ProductService service = new ProductService(repo, names);
+    private final com.example.art_course.modules.systemconfig.service.ConfigService config =
+            mock(com.example.art_course.modules.systemconfig.service.ConfigService.class);
+    private final ProductService service = new ProductService(repo, names, config);
 
     private UUID supplyWith(String status) {
         UUID id = UUID.randomUUID();
@@ -33,6 +35,27 @@ class ProductServiceTest {
     void sellableStatusesAreVisible() {
         assertNotNull(service.getSupplyDetail(supplyWith("ACTIVE")));
         assertNotNull(service.getSupplyDetail(supplyWith("out_of_stock")));
+    }
+
+    @Test
+    @DisplayName("phí ship hiện ra là phí riêng của giáo viên, chưa đặt thì lấy mặc định trong system_config")
+    void shippingFeeIsTheTeacherFeeOrTheConfiguredDefault() {
+        UUID own = UUID.randomUUID();
+        UUID plain = UUID.randomUUID();
+        when(config.getDefaultShippingFee()).thenReturn(com.example.art_course.common.Money.of(25000));
+        when(names.shippingFeeOf(own)).thenReturn(40000L);
+        when(names.shippingFeeOf(plain)).thenReturn(null);
+        Supply a = Supply.builder().id(UUID.randomUUID()).teacherId(own).name("A").status("ACTIVE").build();
+        Supply b = Supply.builder().id(UUID.randomUUID()).teacherId(plain).name("B").status("ACTIVE").build();
+        when(repo.findByStatusInIgnoreCase(java.util.List.of("ACTIVE", "OUT_OF_STOCK"))).thenReturn(java.util.List.of(a, b));
+        when(names.byIds(any())).thenReturn(java.util.Map.of());
+        when(repo.findById(b.getId())).thenReturn(Optional.of(b));
+
+        service.listSupplies();
+
+        assertEquals(40000L, a.getShippingFee());
+        assertEquals(25000L, b.getShippingFee());
+        assertEquals(25000L, service.getSupplyDetail(b.getId()).getShippingFee());
     }
 
     @Test

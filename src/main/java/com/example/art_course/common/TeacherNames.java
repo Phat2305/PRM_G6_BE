@@ -42,6 +42,16 @@ public class TeacherNames {
         return names;
     }
 
+    // Giáo viên đang hoạt động chưa đặt phí ship riêng, tức đơn của họ tính theo mức mặc định của sàn.
+    public java.util.List<UUID> teacherIdsOnDefaultShippingFee() {
+        @SuppressWarnings("unchecked")
+        java.util.List<Object> rows = entityManager
+                .createNativeQuery("SELECT p.user_id FROM teacher_profiles p JOIN users u ON u.id = p.user_id "
+                        + "WHERE p.shipping_fee IS NULL AND u.status = 'ACTIVE'")
+                .getResultList();
+        return rows.stream().map(r -> (UUID) r).toList();
+    }
+
     // Phí ship riêng của giáo viên (teacher_profiles.shipping_fee); null = dùng mặc định trong system_config.
     public Long shippingFeeOf(UUID teacherId) {
         if (teacherId == null) {

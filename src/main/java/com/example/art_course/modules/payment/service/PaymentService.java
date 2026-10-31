@@ -99,7 +99,14 @@ public class PaymentService {
             throw new AppError(HttpStatus.CONFLICT, "ORDER_ALREADY_PAID", "Đơn hàng đã được thanh toán");
         }
         PaymentGateway gateway = paymentGatewayFactory.getGateway(PayOSPaymentGateway.GATEWAY_CODE);
-        if (payment != null && payment.getGatewayOrderCode() != null && payment.getPaymentUrl() != null) {
+        // Giao dịch chờ thanh toán còn số tiền lệch tổng đơn (tạo trước khi tổng đơn có phí ship): không dùng lại link cũ,
+        // sửa số tiền theo đơn rồi tạo link mới để QR luôn đúng tổng đơn.
+        boolean stale = payment != null && payment.getAmount().compareTo(order.getTotalAmount()) != 0;
+        if (stale) {
+            log.warn("[PAY-01] Giao dịch {} lệch tổng đơn {} ({} so với {}), tạo lại link", payment.getId(), order.getId(),
+                    payment.getAmount(), order.getTotalAmount());
+        }
+        if (payment != null && !stale && payment.getGatewayOrderCode() != null && payment.getPaymentUrl() != null) {
             PaymentGateway.GatewayQueryResult query = gateway.queryTransaction(payment);
             if (query.paid()) {
                 requireMatchingAmount(payment, query.amount());
@@ -112,7 +119,7 @@ public class PaymentService {
                 return paymentResponse(paymentRepository.save(payment));
             }
         }
-        if (payment == null) {
+        if (payment == null || stale) {
             List<OrderDetail> details = orderDetailRepository.findByOrderId(order.getId());
             BigDecimal totalCommission = BigDecimal.ZERO;
             BigDecimal totalDetailNet = BigDecimal.ZERO;
@@ -128,10 +135,16 @@ public class PaymentService {
                 totalCommission = totalCommission.add(commission);
                 totalDetailNet = totalDetailNet.add(detail.getNetAmount());
             }
-            payment = Payment.builder().orderId(order.getId()).teacherId(order.getTeacherId())
-                    .gateway(PayOSPaymentGateway.GATEWAY_CODE).amount(order.getTotalAmount())
-                    .commissionAmount(totalCommission).netAmount(totalDetailNet.add(order.getShippingFee()))
-                    .status(PaymentStatus.PENDING).build();
+            if (payment == null) {
+                payment = Payment.builder().orderId(order.getId()).teacherId(order.getTeacherId())
+                        .gateway(PayOSPaymentGateway.GATEWAY_CODE).amount(order.getTotalAmount())
+                        .commissionAmount(totalCommission).netAmount(totalDetailNet.add(order.getShippingFee()))
+                        .status(PaymentStatus.PENDING).build();
+            } else {
+                payment.setAmount(order.getTotalAmount());
+                payment.setCommissionAmount(totalCommission);
+                payment.setNetAmount(totalDetailNet.add(order.getShippingFee()));
+            }
         }
         payment.setStatus(PaymentStatus.PENDING);
         payment.setGatewayTransactionId(null);

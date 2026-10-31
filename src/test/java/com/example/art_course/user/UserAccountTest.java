@@ -31,7 +31,9 @@ class UserAccountTest {
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
     private final AuthRepository authRepo = mock(AuthRepository.class);
     private final R2StorageService r2 = mock(R2StorageService.class);
-    private final UserService userService = new UserService(repo, authRepo, encoder, r2);
+    private final com.example.art_course.modules.systemconfig.service.ConfigService config =
+            mock(com.example.art_course.modules.systemconfig.service.ConfigService.class);
+    private final UserService userService = new UserService(repo, authRepo, encoder, r2, config);
     private final ModerationService moderation = mock(ModerationService.class);
     private final AdminUserService adminService = new AdminUserService(repo, encoder, moderation);
 
@@ -166,8 +168,9 @@ class UserAccountTest {
     @Test
     void updateProfile_teacher_savesPhoneBioAndCertificatesAsLines() {
         User u = user("TEACHER");
+        when(config.getDefaultShippingFee()).thenReturn(com.example.art_course.common.Money.of(30000));
         when(authRepo.updateTeacherProfile(u.getId(), null, null, "0901234567", "Dạy vẽ 8 năm",
-                "Chứng chỉ A\nChứng chỉ B", null)).thenReturn(1);
+                "Chứng chỉ A\nChứng chỉ B", null, false)).thenReturn(1);
         when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(new AuthRepository.ProfileRow(
                 "Lan", null, "VCB 1234", "0901234567", "Dạy vẽ 8 năm", "Chứng chỉ A\nChứng chỉ B")));
         UpdateProfileRequest req = new UpdateProfileRequest();
@@ -184,7 +187,8 @@ class UserAccountTest {
     @Test
     void updateProfile_teacher_emptyCertificatesClearsAndNullKeeps() {
         User u = user("TEACHER");
-        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, "", null)).thenReturn(1);
+        when(config.getDefaultShippingFee()).thenReturn(com.example.art_course.common.Money.of(30000));
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, "", null, false)).thenReturn(1);
         when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(
                 new AuthRepository.ProfileRow("Lan", null, "", null, null, null)));
         UpdateProfileRequest req = new UpdateProfileRequest();
@@ -226,13 +230,45 @@ class UserAccountTest {
     @Test
     void updateProfile_teacher_savesShippingFee() {
         User u = user("TEACHER");
-        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, null, 25000L)).thenReturn(1);
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, null, 25000L, false)).thenReturn(1);
         when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(
                 new AuthRepository.ProfileRow("Lan", null, "", null, null, null, 25000L)));
+        when(config.getDefaultShippingFee()).thenReturn(com.example.art_course.common.Money.of(30000));
         UpdateProfileRequest req = new UpdateProfileRequest();
         req.setShippingFee(25000L);
 
-        assertEquals(25000L, userService.updateProfile(u.getId(), req).getShippingFee());
+        var res = userService.updateProfile(u.getId(), req);
+
+        assertEquals(25000L, res.getShippingFee());
+        // Giáo viên luôn thấy mức mặc định của sàn bên cạnh phí riêng của mình.
+        assertEquals(30000L, res.getDefaultShippingFee());
+    }
+
+    @Test
+    void updateProfile_teacher_canGoBackToTheDefaultShippingFee() {
+        User u = user("TEACHER");
+        when(authRepo.updateTeacherProfile(u.getId(), null, null, null, null, null, null, true)).thenReturn(1);
+        when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("Lan", null, "", null, null, null, null)));
+        when(config.getDefaultShippingFee()).thenReturn(com.example.art_course.common.Money.of(30000));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUseDefaultShippingFee(true);
+
+        var res = userService.updateProfile(u.getId(), req);
+
+        verify(authRepo).updateTeacherProfile(u.getId(), null, null, null, null, null, null, true);
+        assertNull(res.getShippingFee());
+        assertEquals(30000L, res.getDefaultShippingFee());
+    }
+
+    @Test
+    void profile_defaultShippingFeeIsOnlyForTeachers() {
+        User parent = user("PARENT");
+        when(authRepo.findParentProfile(parent.getId())).thenReturn(Optional.of(
+                new AuthRepository.ProfileRow("Mai", "", null)));
+
+        assertNull(userService.getProfile(parent.getId()).getDefaultShippingFee());
+        verifyNoInteractions(config);
     }
 
     @Test

@@ -82,15 +82,17 @@ public class AuthRepository {
         jdbcTemplate.update("UPDATE teacher_profiles SET certificate_keys = ? WHERE user_id = ?", keys, userId);
     }
 
-    // Chuỗi rỗng xóa giá trị (phone, bio, certificatesText); null giữ nguyên.
+    // Chuỗi rỗng xóa giá trị (phone, bio, certificatesText); null giữ nguyên. useDefaultShippingFee = đặt phí ship về NULL
+    // (dùng mức mặc định của sàn), vì COALESCE không xóa được giá trị.
     public int updateTeacherProfile(UUID userId, String fullName, String bankAccountInfo,
-                                    String phone, String bio, String certificatesText, Long shippingFee) {
+                                    String phone, String bio, String certificatesText, Long shippingFee,
+                                    boolean useDefaultShippingFee) {
         return jdbcTemplate.update(
                 "UPDATE teacher_profiles SET full_name = COALESCE(?, full_name), "
                         + "bank_account_info = COALESCE(?, bank_account_info), "
                         + "phone = COALESCE(?, phone), bio = COALESCE(?, bio), "
                         + "certificates_text = COALESCE(?, certificates_text), "
-                        + "shipping_fee = COALESCE(?, shipping_fee) WHERE user_id = ?",
-                fullName, bankAccountInfo, phone, bio, certificatesText, shippingFee, userId);
+                        + "shipping_fee = CASE WHEN ? THEN NULL ELSE COALESCE(?, shipping_fee) END WHERE user_id = ?",
+                fullName, bankAccountInfo, phone, bio, certificatesText, useDefaultShippingFee, shippingFee, userId);
     }
 }

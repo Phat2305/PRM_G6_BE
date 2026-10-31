@@ -168,7 +168,7 @@ public class OrderService {
                 }
             }
 
-            // Phí ship: đọc từ system_config (shipping_fee_default) hoặc cấu hình Teacher nếu có
+            // Phí ship: phí riêng của giáo viên nếu có, không thì default_shipping_fee trong system_config
             Money shippingFee = hasSupply ? resolveShippingFee(teacherId) : Money.ZERO;
             Money totalAmount = subtotal.add(shippingFee);
 
@@ -304,7 +304,7 @@ public class OrderService {
 
     /**
      * Xác định phí vận chuyển cho đơn hàng của Teacher:
-     * Phí ship riêng của Teacher (teacher_profiles.shipping_fee); chưa đặt thì đọc system_config (shipping_fee_default).
+     * Phí ship riêng của Teacher (teacher_profiles.shipping_fee); chưa đặt thì đọc system_config (default_shipping_fee).
      */
     public Money resolveShippingFee(UUID teacherId) {
         Long own = teacherNames.shippingFeeOf(teacherId);

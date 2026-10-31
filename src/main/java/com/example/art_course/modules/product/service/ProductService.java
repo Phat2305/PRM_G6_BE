@@ -17,6 +17,7 @@ public class ProductService {
 
     private final SupplyRepository supplyRepository;
     private final com.example.art_course.common.TeacherNames teacherNames;
+    private final com.example.art_course.modules.systemconfig.service.ConfigService configService;
 
     @Transactional(readOnly = true)
     public List<Supply> listSupplies() {
@@ -46,9 +47,16 @@ public class ProductService {
         java.util.Map<UUID, Long> fees = new java.util.HashMap<>();
         paged.items().forEach(s -> {
             s.setTeacherName(names.get(s.getTeacherId()));
-            s.setShippingFee(fees.computeIfAbsent(s.getTeacherId(), teacherNames::shippingFeeOf));
+            s.setShippingFee(fees.computeIfAbsent(s.getTeacherId(), this::effectiveShippingFee));
         });
         return paged;
+    }
+
+    // Phí ship thực tế của đơn: phí riêng của giáo viên, chưa đặt thì mặc định trong system_config. Cùng quy tắc với
+    // OrderService.resolveShippingFee nên số FE hiện ở bước xác nhận khớp số BE tính khi tạo đơn.
+    private Long effectiveShippingFee(UUID teacherId) {
+        Long own = teacherNames.shippingFeeOf(teacherId);
+        return own != null ? own : configService.getDefaultShippingFee().getAmount().longValue();
     }
 
     private static boolean contains(String text, String lowerNeedle) {
@@ -62,7 +70,7 @@ public class ProductService {
                 .filter(s -> "ACTIVE".equalsIgnoreCase(s.getStatus()) || "OUT_OF_STOCK".equalsIgnoreCase(s.getStatus()))
                 .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "SUPPLY_NOT_FOUND", "Không tìm thấy dụng cụ vẽ"));
         supply.setTeacherName(teacherNames.byId(supply.getTeacherId()));
-        supply.setShippingFee(teacherNames.shippingFeeOf(supply.getTeacherId()));
+        supply.setShippingFee(effectiveShippingFee(supply.getTeacherId()));
         return supply;
     }
 }

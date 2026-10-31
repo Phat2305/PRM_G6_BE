@@ -27,7 +27,7 @@ class AdminWithdrawalListTest {
     void attachesTeacherNames() {
         WithdrawalService withdrawals = mock(WithdrawalService.class);
         TeacherNames names = mock(TeacherNames.class);
-        AdminFinanceController controller = new AdminFinanceController(withdrawals, mock(ConfigService.class), names);
+        AdminFinanceController controller = new AdminFinanceController(withdrawals, mock(ConfigService.class), names, mock(com.example.art_course.modules.systemconfig.service.ShippingFeeNotifier.class));
 
         UUID named = UUID.randomUUID();
         UUID unnamed = UUID.randomUUID();

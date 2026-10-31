@@ -37,6 +37,16 @@ public class NotificationService {
         }
     }
 
+    // Admin đổi phí ship mặc định: báo giáo viên đang dùng mức mặc định. Không nêu người đổi; đơn đã tạo giữ phí cũ.
+    @Async
+    public void notifyShippingFeeChanged(UUID teacherId, long oldFee, long newFee) {
+        sendNotificationAsync(teacherId, "Phí ship mặc định đã đổi",
+                "Phí ship mặc định của sàn đổi từ " + vnd(BigDecimal.valueOf(oldFee)) + " sang "
+                        + vnd(BigDecimal.valueOf(newFee)) + ", áp dụng cho đơn mới (đơn đã tạo giữ nguyên). "
+                        + "Bạn có thể đặt phí riêng ở Hồ sơ giáo viên.",
+                "SHIPPING_FEE_CHANGED", null);
+    }
+
     // MSG-05: tin nhắn mới cho bên còn lại. Còn thông báo tin mới chưa đọc của hội thoại này thì không tạo thêm.
     @Async
     public void notifyNewMessage(UUID recipientId, UUID conversationId, String preview) {

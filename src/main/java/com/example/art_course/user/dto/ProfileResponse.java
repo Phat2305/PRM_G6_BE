@@ -6,7 +6,7 @@ import lombok.Getter;
 import java.util.List;
 import java.util.UUID;
 
-// shippingAddress chỉ có ở Parent; bankAccountInfo, bio, certificates, shippingFee chỉ có ở Teacher; phone cả hai
+// shippingAddress chỉ có ở Parent; bankAccountInfo, bio, certificates, shippingFee, defaultShippingFee chỉ có ở Teacher; phone cả hai
 @Getter
 @AllArgsConstructor
 public class ProfileResponse {
@@ -22,6 +22,8 @@ public class ProfileResponse {
     private String bio;
     private List<String> certificates;
     private Long shippingFee;
+    // Chỉ giáo viên: mức phí ship mặc định hiện tại của sàn (system_config) để giáo viên biết khi để trống phí riêng
+    private Long defaultShippingFee;
     // Chỉ giáo viên: certificateFiles[i] = chứng chỉ thứ i đã đính kèm file
     private List<Boolean> certificateFiles;
 }

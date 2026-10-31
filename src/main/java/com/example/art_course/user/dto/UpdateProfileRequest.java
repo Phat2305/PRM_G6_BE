@@ -41,4 +41,7 @@ public class UpdateProfileRequest {
     @jakarta.validation.constraints.Min(value = 0, message = "Phí ship không âm")
     @jakarta.validation.constraints.Max(value = 1_000_000, message = "Phí ship tối đa 1.000.000đ")
     private Long shippingFee;
+
+    // Chỉ giáo viên: true = bỏ phí riêng, quay về mức mặc định của sàn (shipping_fee = NULL). Thắng shippingFee nếu gửi cả hai.
+    private Boolean useDefaultShippingFee;
 }

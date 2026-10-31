@@ -57,7 +57,7 @@ public class StaffAdminJobTests {
     void testRoleAuthorization_StaffCannotApproveWithdrawal() {
         WithdrawalService withdrawalService = mock(WithdrawalService.class);
         ConfigService configService = mock(ConfigService.class);
-        AdminFinanceController controller = new AdminFinanceController(withdrawalService, configService, mock(TeacherNames.class));
+        AdminFinanceController controller = new AdminFinanceController(withdrawalService, configService, mock(TeacherNames.class), mock(com.example.art_course.modules.systemconfig.service.ShippingFeeNotifier.class));
 
         UUID staffId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
@@ -87,7 +87,7 @@ public class StaffAdminJobTests {
     void testRoleAuthorization_StaffPaidAndAdminExclusiveApprove() {
         WithdrawalService withdrawalService = mock(WithdrawalService.class);
         ConfigService configService = mock(ConfigService.class);
-        AdminFinanceController controller = new AdminFinanceController(withdrawalService, configService, mock(TeacherNames.class));
+        AdminFinanceController controller = new AdminFinanceController(withdrawalService, configService, mock(TeacherNames.class), mock(com.example.art_course.modules.systemconfig.service.ShippingFeeNotifier.class));
 
         UUID staffId = UUID.randomUUID();
         UUID adminId = UUID.randomUUID();

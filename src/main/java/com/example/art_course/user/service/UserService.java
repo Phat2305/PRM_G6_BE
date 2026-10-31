@@ -39,6 +39,7 @@ public class UserService {
     private final AuthRepository authRepository;
     private final PasswordEncoder passwordEncoder;
     private final R2StorageService r2StorageService;
+    private final com.example.art_course.modules.systemconfig.service.ConfigService configService;
 
     private static final long MAX_CERT_BYTES = 5L * 1024 * 1024;
     private static final Set<String> CERT_TYPES = Set.of("image/jpeg", "image/png", "image/webp", "application/pdf");
@@ -65,7 +66,7 @@ public class UserService {
             case "TEACHER" -> authRepository.updateTeacherProfile(
                     userId, request.getFullName(), request.getBankAccountInfo(),
                     request.getPhone(), request.getBio(), joinCertificates(request.getCertificates()),
-                    request.getShippingFee());
+                    request.getShippingFee(), Boolean.TRUE.equals(request.getUseDefaultShippingFee()));
             default -> 0;
         };
         if (certsGiven && updated > 0) {
@@ -166,6 +167,7 @@ public class UserService {
         return new ProfileResponse(u.getId(), u.getUsername(), u.getEmail(), u.getRole(), u.getStatus(),
                 p.fullName(), p.shippingAddress(), p.bankAccountInfo(),
                 p.phone(), p.bio(), splitCertificates(p.certificatesText()), p.shippingFee(),
+                "TEACHER".equals(u.getRole()) ? configService.getDefaultShippingFee().getAmount().longValue() : null,
                 "TEACHER".equals(u.getRole())
                         ? certificateKeys(u.getId(), splitCertificates(p.certificatesText()).size()).stream()
                                 .map(k -> !k.isEmpty()).toList()

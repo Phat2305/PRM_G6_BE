@@ -5,6 +5,7 @@ import com.example.art_course.common.TeacherNames;
 import com.example.art_course.common.statemachine.WithdrawalStatus;
 import com.example.art_course.modules.systemconfig.entity.SystemConfig;
 import com.example.art_course.modules.systemconfig.service.ConfigService;
+import com.example.art_course.modules.systemconfig.service.ShippingFeeNotifier;
 import com.example.art_course.modules.withdrawal.dto.MarkPaidRequest;
 import com.example.art_course.modules.withdrawal.dto.RejectWithdrawalRequest;
 import com.example.art_course.modules.withdrawal.dto.WithdrawalResponseDto;
@@ -31,6 +32,7 @@ public class AdminFinanceController {
     private final WithdrawalService withdrawalService;
     private final ConfigService configService;
     private final TeacherNames teacherNames;
+    private final ShippingFeeNotifier shippingFeeNotifier;
 
     /**
      * Danh sách tất cả yêu cầu rút tiền (lọc theo trạng thái) (FIN-04).
@@ -121,7 +123,13 @@ public class AdminFinanceController {
     ) {
         UUID adminId = UUID.fromString(auth.getName());
         String value = body.get("value");
+        boolean shippingFee = ConfigService.isShippingFeeKey(key);
+        var feeBefore = shippingFee ? configService.getDefaultShippingFee() : null;
         SystemConfig updated = configService.updateConfig(key, value, adminId);
+        // Sau khi đã lưu: báo giáo viên đang dùng phí mặc định nếu mức thực tế đổi.
+        if (shippingFee) {
+            shippingFeeNotifier.notifyIfChanged(feeBefore, configService.getDefaultShippingFee());
+        }
         return ApiResponse.ok("Cập nhật cấu hình thành công", updated);
     }
 }

@@ -85,7 +85,8 @@ public class OrderSecurityWebMvcTest {
         public com.example.art_course.modules.finance.controller.AdminFinanceController adminFinanceController(
                 com.example.art_course.modules.withdrawal.service.WithdrawalService service) {
             return new com.example.art_course.modules.finance.controller.AdminFinanceController(service,
-                    mock(com.example.art_course.modules.systemconfig.service.ConfigService.class), mock(com.example.art_course.common.TeacherNames.class));
+                    mock(com.example.art_course.modules.systemconfig.service.ConfigService.class), mock(com.example.art_course.common.TeacherNames.class),
+                    mock(com.example.art_course.modules.systemconfig.service.ShippingFeeNotifier.class));
         }
 
         @Bean

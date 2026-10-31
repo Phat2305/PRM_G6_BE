@@ -25,7 +25,7 @@ public class Supply {
     @Transient
     private String teacherName;
 
-    // Phí ship riêng của giáo viên (VND); null = dùng mặc định trong system_config.
+    // Phí ship thực tế của đơn có dụng cụ này (VND): phí riêng của giáo viên hoặc mặc định trong system_config; chỉ điền khi trả API.
     @Transient
     private Long shippingFee;
 

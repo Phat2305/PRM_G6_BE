@@ -88,6 +88,59 @@ class PaymentSafetyTest {
                 true, true, "tx", payment.getAmount(), "ok"));
     }
 
+    private CreatePaymentRequest createRequest() {
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setOrderId(order.getId());
+        request.setGateway("PAYOS");
+        request.setReturnUrl("https://example.com/return");
+        return request;
+    }
+
+    // Số tiền ở link/QR PayOS phải đúng tổng đơn gồm cả phí ship (130.000 = 100.000 dụng cụ + 30.000 ship).
+    @Test
+    void newPaymentChargesTheOrderTotalIncludingShipping() {
+        when(payments.findByOrderId(order.getId())).thenReturn(Optional.empty());
+        when(config.getCommissionRateCourse()).thenReturn(new BigDecimal("0.20"));
+        when(config.getCommissionRateSupply()).thenReturn(new BigDecimal("0.10"));
+        when(gateway.createPaymentUrl(any(), any(), any())).thenReturn("https://pay.payos.vn/new");
+
+        var response = service.createPaymentUrl(order.getParentId(), createRequest());
+
+        assertEquals(0, new BigDecimal("130000").compareTo(response.getAmount()));
+        verify(gateway).createPaymentUrl(eq(order), argThat(p -> p.getAmount().compareTo(new BigDecimal("130000")) == 0),
+                eq("https://example.com/return"));
+        // Giáo viên nhận tiền dụng cụ sau hoa hồng cộng nguyên phí ship.
+        verify(payments, atLeastOnce()).save(argThat(p -> p.getNetAmount().compareTo(new BigDecimal("120000")) == 0));
+    }
+
+    // Giao dịch chờ thanh toán còn số tiền cũ (ví dụ tạo lúc tổng đơn chưa có phí ship) không được dùng lại link cũ.
+    @Test
+    void stalePendingPaymentIsCorrectedToTheOrderTotalWithANewLink() {
+        payment.setAmount(new BigDecimal("100000"));
+        payment.setNetAmount(new BigDecimal("90000"));
+        when(config.getCommissionRateCourse()).thenReturn(new BigDecimal("0.20"));
+        when(config.getCommissionRateSupply()).thenReturn(new BigDecimal("0.10"));
+        when(gateway.createPaymentUrl(any(), any(), any())).thenReturn("https://pay.payos.vn/fixed");
+
+        var response = service.createPaymentUrl(order.getParentId(), createRequest());
+
+        assertEquals(0, new BigDecimal("130000").compareTo(payment.getAmount()));
+        assertEquals(0, new BigDecimal("120000").compareTo(payment.getNetAmount()));
+        assertEquals("https://pay.payos.vn/fixed", response.getPaymentUrl());
+        verify(gateway, never()).queryTransaction(any());
+    }
+
+    @Test
+    void matchingPendingPaymentKeepsItsExistingLink() {
+        when(gateway.queryTransaction(payment)).thenReturn(
+                new PaymentGateway.GatewayQueryResult(true, false, null, payment.getAmount(), false));
+
+        var response = service.createPaymentUrl(order.getParentId(), createRequest());
+
+        assertEquals("https://pay.payos.vn/old", response.getPaymentUrl());
+        verify(gateway, never()).createPaymentUrl(any(), any(), any());
+    }
+
     @Test
     void rejectsMockBeforeCallingGatewayOrRepositories() {
         assertEquals("UNSUPPORTED_GATEWAY", assertThrows(AppError.class,

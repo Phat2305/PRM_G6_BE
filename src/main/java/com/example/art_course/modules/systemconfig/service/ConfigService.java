@@ -21,8 +21,10 @@ public class ConfigService {
 
     @Transactional(readOnly = true)
     public Money getDefaultShippingFee() {
-        return systemConfigRepository.findByKey("shipping_fee_default")
-                .or(() -> systemConfigRepository.findByKey("default_shipping_fee"))
+        // default_shipping_fee là khóa màn Cấu hình của Admin ghi (và migration seed); shipping_fee_default là tên cũ,
+        // chỉ dùng khi chưa có khóa mới để giá Admin vừa đặt không bị khóa cũ che mất.
+        return systemConfigRepository.findByKey("default_shipping_fee")
+                .or(() -> systemConfigRepository.findByKey("shipping_fee_default"))
                 .map(sc -> Money.of(new BigDecimal(sc.getValue())))
                 .orElse(Money.of(30000));
     }
@@ -94,6 +96,11 @@ public class ConfigService {
             "customize_auto_confirm_days", new Rule(false, 1, 365, true),
             "default_shipping_fee", new Rule(false, 0, 1_000_000, false),
             "shipping_fee_default", new Rule(false, 0, 1_000_000, false));
+
+    // Hai khóa cùng là phí ship mặc định (khóa cũ shipping_fee_default còn được đọc khi chưa có khóa mới).
+    public static boolean isShippingFeeKey(String key) {
+        return "default_shipping_fee".equals(key) || "shipping_fee_default".equals(key);
+    }
 
     @Transactional
     public SystemConfig updateConfig(String key, String value, UUID adminId) {
