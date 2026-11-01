@@ -200,6 +200,45 @@ class UserAccountTest {
     }
 
     @Test
+    void updateProfile_teacher_bankAccountMustFollowTheFormatAndMatchTheNameIgnoringAccents() {
+        User u = user("TEACHER");
+        when(config.getDefaultShippingFee()).thenReturn(com.example.art_course.common.Money.of(30000));
+        when(authRepo.findTeacherProfile(u.getId())).thenReturn(Optional.of(new AuthRepository.ProfileRow(
+                "Nguyễn Thị Lan", null, "VCB - 0123456789 - NGUYEN THI LAN")));
+        when(authRepo.updateTeacherProfile(u.getId(), null, "VCB - 0123456789 - NGUYEN THI LAN",
+                null, null, null, null, false)).thenReturn(1);
+        UpdateProfileRequest ok = new UpdateProfileRequest();
+        ok.setBankAccountInfo("VCB -  0123 456789 - NGUYEN  THI LAN");
+
+        userService.updateProfile(u.getId(), ok);
+
+        verify(authRepo).updateTeacherProfile(u.getId(), null, "VCB - 0123456789 - NGUYEN THI LAN",
+                null, null, null, null, false);
+
+        UpdateProfileRequest other = new UpdateProfileRequest();
+        other.setBankAccountInfo("VCB - 0123456789 - TRAN VAN BINH");
+        assertEquals("BANK_HOLDER_MISMATCH",
+                assertThrows(AppError.class, () -> userService.updateProfile(u.getId(), other)).getErrorCode());
+
+        UpdateProfileRequest free = new UpdateProfileRequest();
+        free.setBankAccountInfo("VCB 0123 LAN");
+        assertEquals("BANK_ACCOUNT_INVALID",
+                assertThrows(AppError.class, () -> userService.updateProfile(u.getId(), free)).getErrorCode());
+    }
+
+    @Test
+    void updateProfile_teacher_bankAccountIsComparedWithTheNewNameWhenBothAreSent() {
+        User u = user("TEACHER");
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setFullName("Trần Văn Bình");
+        req.setBankAccountInfo("VCB - 0123456789 - NGUYEN THI LAN");
+
+        assertEquals("BANK_HOLDER_MISMATCH",
+                assertThrows(AppError.class, () -> userService.updateProfile(u.getId(), req)).getErrorCode());
+        verify(authRepo, never()).updateTeacherProfile(any(), any(), any(), any(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
     void updateProfile_parent_goesThroughRepository() {
         User u = user("PARENT");
         when(authRepo.updateParentProfile(u.getId(), "An", "HCM", null)).thenReturn(1);

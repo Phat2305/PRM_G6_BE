@@ -138,3 +138,13 @@ SRS SHOP-04 ghi "cùng một bé", nhưng phụ huynh được phép thanh toán
 - "Đã sở hữu" = có dòng `order_details` thuộc đơn `PAID` của phụ huynh, chưa `REFUNDED`, khớp `course_id` hoặc `customize_request_id` của khóa (`OrderDetailRepository.parentOwnsCourse`).
 - Chặn ở giỏ (`CartService`), checkout (`OrderService`) và tạo link thanh toán (`PaymentService`); giỏ/lượt đặt không có hai dòng cùng khóa.
 - Câu hỏi mở: nhóm có muốn cho mua lần hai có trả tiền cho bé khác không? Nếu có thì phải bỏ chặn theo phụ huynh và bắt gán bé lúc thanh toán.
+
+
+## 10. Tài khoản nhận tiền của giáo viên (FIN-04)
+
+SRS không nói tiền rút về đâu. Chọn phương án tối thiểu: `teacher_profiles.bank_account_info` là một chuỗi `Ngân hàng - số tài khoản - chủ tài khoản` (cột vẫn `text`, không thêm cột), kiểm tra bởi `common/BankAccountInfo`; tên chủ tài khoản phải trùng họ tên hồ sơ khi lưu, so khớp bỏ dấu và hoa thường vì ngân hàng thường in tên viết hoa không dấu.
+
+- Rút tiền chỉ về tài khoản trong hồ sơ (`WithdrawalBankAccount`, gọi ở `TeacherFinanceController`); `bankInfo` trong yêu cầu rút là tùy chọn và nếu có phải trùng hồ sơ.
+- Hồ sơ cũ nhập tự do chưa đúng định dạng thì chưa rút được tới khi giáo viên cập nhật lại (`BANK_ACCOUNT_INVALID`).
+- Chỉ kiểm tên khi lưu hồ sơ; đổi họ tên sau đó không kiểm lại tài khoản đã lưu.
+- Câu hỏi mở: tài khoản công ty hoặc tên chủ tài khoản khác họ tên (ví dụ bỏ tên đệm) sẽ bị chặn; nhóm có muốn nới không?

@@ -6,6 +6,7 @@ import com.example.art_course.modules.finance.service.LedgerService;
 import com.example.art_course.modules.finance.service.RevenueService;
 import com.example.art_course.modules.withdrawal.dto.CreateWithdrawalRequest;
 import com.example.art_course.modules.withdrawal.dto.WithdrawalResponseDto;
+import com.example.art_course.modules.withdrawal.service.WithdrawalBankAccount;
 import com.example.art_course.modules.withdrawal.service.WithdrawalService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class TeacherFinanceController {
     private final LedgerService ledgerService;
     private final WithdrawalService withdrawalService;
     private final RevenueService revenueService;
+    private final WithdrawalBankAccount bankAccount;
 
     // FIN-06, NFR-04: kiểm tra chủ yêu cầu trước khi đọc ảnh từ R2.
     @GetMapping("/withdrawals/{requestId}/proof")
@@ -75,6 +77,8 @@ public class TeacherFinanceController {
             Authentication auth
     ) {
         UUID teacherId = UUID.fromString(auth.getName());
+        // FIN-04: chỉ rút về tài khoản trong hồ sơ; tài khoản client gửi (nếu có) phải trùng hồ sơ.
+        request.setBankInfo(bankAccount.resolve(teacherId, request.getBankInfo()));
         WithdrawalResponseDto dto = withdrawalService.requestWithdrawal(teacherId, request);
         return ApiResponse.ok("Gửi yêu cầu rút tiền thành công", dto);
     }

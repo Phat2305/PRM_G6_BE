@@ -4,6 +4,7 @@ import com.example.art_course.auth.repository.AuthRepository;
 import com.example.art_course.auth.service.PasswordResetService;
 import com.example.art_course.auth.repository.AuthRepository.ProfileRow;
 import com.example.art_course.common.AppError;
+import com.example.art_course.common.BankAccountInfo;
 import com.example.art_course.user.dto.ChangePasswordRequest;
 import com.example.art_course.user.dto.ProfileResponse;
 import com.example.art_course.user.dto.UpdateProfileRequest;
@@ -60,6 +61,9 @@ public class UserService {
         // Đổi danh sách chứng chỉ thì khóa file phải đi theo đúng tên chứng chỉ, không theo vị trí.
         boolean certsGiven = "TEACHER".equals(user.getRole()) && request.getCertificates() != null;
         Map<String, String> keyByName = certsGiven ? certificateKeyByName(userId) : Map.of();
+        if ("TEACHER".equals(user.getRole())) {
+            validateBankAccount(userId, request);
+        }
         int updated = switch (user.getRole()) {
             case "PARENT" -> authRepository.updateParentProfile(
                     userId, request.getFullName(), request.getShippingAddress(), request.getPhone());
@@ -77,6 +81,22 @@ public class UserService {
             throw new AppError(HttpStatus.BAD_REQUEST, "NO_PROFILE", "Tài khoản này không có hồ sơ để cập nhật");
         }
         return toResponse(user);
+    }
+
+    // FIN-04: tài khoản nhận tiền đúng định dạng "Ngân hàng - số - chủ tài khoản" và chủ tài khoản trùng họ tên hồ sơ
+    // (không phân biệt dấu). Chuỗi rỗng = xóa; null = giữ nguyên.
+    private void validateBankAccount(UUID userId, UpdateProfileRequest request) {
+        String bank = request.getBankAccountInfo();
+        if (bank == null) {
+            return;
+        }
+        if (bank.isBlank()) {
+            request.setBankAccountInfo("");
+            return;
+        }
+        String fullName = request.getFullName() != null ? request.getFullName()
+                : authRepository.findTeacherProfile(userId).map(ProfileRow::fullName).orElse(null);
+        request.setBankAccountInfo(BankAccountInfo.validate(bank, fullName));
     }
 
     @Transactional

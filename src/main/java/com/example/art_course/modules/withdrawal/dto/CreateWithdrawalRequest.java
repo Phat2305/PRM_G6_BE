@@ -2,7 +2,6 @@ package com.example.art_course.modules.withdrawal.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
@@ -20,7 +19,7 @@ public class CreateWithdrawalRequest {
     @JsonAlias({"amount", "money", "totalAmount", "total_amount"})
     private BigDecimal amount;
 
-    @NotBlank(message = "Thông tin tài khoản nhận tiền không được để trống")
+    // Không bắt buộc: tiền luôn về tài khoản trong hồ sơ (WithdrawalBankAccount); có gửi thì phải trùng hồ sơ.
     @JsonAlias({"bankInfo", "bank_info", "bankAccount", "bank_account", "accountInfo", "account_info"})
     private String bankInfo;
 }

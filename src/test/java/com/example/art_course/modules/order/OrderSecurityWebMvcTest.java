@@ -94,7 +94,8 @@ public class OrderSecurityWebMvcTest {
                 com.example.art_course.modules.withdrawal.service.WithdrawalService service) {
             return new com.example.art_course.modules.finance.controller.TeacherFinanceController(
                     mock(com.example.art_course.modules.finance.service.LedgerService.class), service,
-                    mock(com.example.art_course.modules.finance.service.RevenueService.class));
+                    mock(com.example.art_course.modules.finance.service.RevenueService.class),
+                    mock(com.example.art_course.modules.withdrawal.service.WithdrawalBankAccount.class));
         }
 
         @Bean
