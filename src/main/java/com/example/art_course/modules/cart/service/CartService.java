@@ -80,7 +80,7 @@ public class CartService {
 
             // 3. Chặn mua trùng (SHOP-04): phụ huynh đã trả tiền khóa này thì gán thêm bé ở đơn cũ, không mua lại
             if (orderDetailRepository.parentOwnsCourse(parentId, input.getCourseId())) {
-                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bạn đã mua khóa học này, hãy kích hoạt cho bé ở đơn hàng (SHOP-04)");
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bạn đã mua khóa học này, hãy kích hoạt cho bé ở đơn hàng");
             }
             if (input.getChildId() != null) {
                 String enrollSql = "SELECT 1 FROM child_enroll WHERE child_id = :childId AND course_id = :courseId AND LOWER(status) = 'active'";
@@ -90,13 +90,13 @@ public class CartService {
                         .getResultList();
 
                 if (!enrolled.isEmpty()) {
-                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này");
                 }
             }
 
             // Một khóa chỉ một dòng trong giỏ, bất kể bé (mua một lần, gán nhiều bé sau)
             if (cartItemRepository.existsByCartIdAndCourseId(cart.getId(), input.getCourseId())) {
-                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_IN_CART", "Khóa học này đã có trong giỏ hàng (SHOP-04)");
+                throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_IN_CART", "Khóa học này đã có trong giỏ hàng");
             }
 
             CartItem item = CartItem.builder()

@@ -107,10 +107,10 @@ public class OrderService {
 
                 // SHOP-04: mỗi khóa mua một lần (gán nhiều bé sau), không đặt hai dòng cùng khóa cho hai bé.
                 if (!courseIdsInOrder.add(item.getCourseId())) {
-                    throw new AppError(HttpStatus.CONFLICT, "DUPLICATE_COURSE_IN_ORDER", "Mỗi khóa học chỉ đặt một lần trong một lượt đặt hàng (SHOP-04)");
+                    throw new AppError(HttpStatus.CONFLICT, "DUPLICATE_COURSE_IN_ORDER", "Mỗi khóa học chỉ đặt một lần trong một lượt đặt hàng");
                 }
                 if (orderDetailRepository.parentOwnsCourse(parentId, item.getCourseId())) {
-                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bạn đã mua khóa học này, hãy kích hoạt cho bé ở đơn hàng (SHOP-04)");
+                    throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bạn đã mua khóa học này, hãy kích hoạt cho bé ở đơn hàng");
                 }
 
                 // Bé có thể chọn sau khi thanh toán (assignChild); có chọn sẵn thì chặn mua trùng (SHOP-04)
@@ -297,7 +297,7 @@ public class OrderService {
                 .setParameter("courseId", courseId)
                 .getResultList();
         if (!enrolled.isEmpty()) {
-            throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này (SHOP-04)");
+            throw new AppError(HttpStatus.CONFLICT, "COURSE_ALREADY_OWNED", "Bé đã sở hữu khóa học này");
         }
     }
 

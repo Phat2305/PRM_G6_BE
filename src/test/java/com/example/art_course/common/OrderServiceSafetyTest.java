@@ -207,8 +207,9 @@ class OrderServiceSafetyTest {
 
         var request = new OrderService.CheckoutRequest(false, List.of(course(first)), null, null, null);
 
-        assertEquals("COURSE_ALREADY_OWNED", assertThrows(AppError.class,
-                () -> service.createOrdersFromCheckout(parentId, request)).getErrorCode());
+        AppError owned = assertThrows(AppError.class, () -> service.createOrdersFromCheckout(parentId, request));
+        assertEquals("COURSE_ALREADY_OWNED", owned.getErrorCode());
+        assertFalse(owned.getMessage().contains("SHOP-"), owned.getMessage());
         verify(orders, never()).save(any());
     }
 
@@ -228,8 +229,9 @@ class OrderServiceSafetyTest {
     void checkoutRejectsTheSameCourseTwiceInOneRequest() {
         var request = new OrderService.CheckoutRequest(false, List.of(course(first), course(first)), null, null, null);
 
-        assertEquals("DUPLICATE_COURSE_IN_ORDER", assertThrows(AppError.class,
-                () -> service.createOrdersFromCheckout(parentId, request)).getErrorCode());
+        AppError twice = assertThrows(AppError.class, () -> service.createOrdersFromCheckout(parentId, request));
+        assertEquals("DUPLICATE_COURSE_IN_ORDER", twice.getErrorCode());
+        assertFalse(twice.getMessage().contains("SHOP-"), twice.getMessage());
         verify(orders, never()).save(any());
     }
 

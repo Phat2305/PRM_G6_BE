@@ -69,6 +69,8 @@ class CartServiceTest {
         AppError e = assertThrows(AppError.class, () -> service.addToCart(parentId, course()));
 
         assertEquals("COURSE_ALREADY_IN_CART", e.getErrorCode());
+        // Lời nhắn hiện thẳng cho phụ huynh, không kèm mã yêu cầu như (SHOP-04).
+        assertFalse(e.getMessage().contains("SHOP-"), e.getMessage());
     }
 
     // SHOP-04: đã có dòng khóa này cho bé A thì không thêm tiếp cho bé B, một khóa mua một lần.
@@ -115,6 +117,7 @@ class CartServiceTest {
         AppError e = assertThrows(AppError.class, () -> service.addToCart(parentId, course()));
 
         assertEquals("COURSE_ALREADY_OWNED", e.getErrorCode());
+        assertFalse(e.getMessage().contains("SHOP-"), e.getMessage());
         verify(items, never()).save(any());
     }
 }
