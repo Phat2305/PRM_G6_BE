@@ -20,6 +20,9 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
     List<Object[]> countByCourseIds(
             @org.springframework.data.repository.query.Param("courseIds") java.util.Collection<UUID> courseIds);
 
+    // Tìm bài học có ảnh tranh mẫu này (kiểm quyền xem ảnh của khóa nháp).
+    java.util.Optional<Lesson> findBySampleImageUrl(String sampleImageUrl);
+
     // Tìm bài học dùng một video HLS (kiểm quyền xem video).
     List<Lesson> findAllByVideoUrlContaining(String fragment);
 }

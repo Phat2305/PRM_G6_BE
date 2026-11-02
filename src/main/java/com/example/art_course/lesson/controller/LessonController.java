@@ -115,7 +115,8 @@ public class LessonController {
                 lesson.getVideoStatus(),
                 lesson.getDurationSeconds(),
                 lesson.getAssignmentTitle(),
-                lesson.getAssignmentPrompt()
+                lesson.getAssignmentPrompt(),
+                lesson.getSampleImageUrl()
         );
     }
 }

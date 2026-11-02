@@ -33,4 +33,5 @@ public class LessonResponse {
     private Integer durationSeconds;
     private String assignmentTitle;
     private String assignmentPrompt;
+    private String sampleImageUrl;
 }

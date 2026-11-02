@@ -37,7 +37,9 @@ class CourseReviewRulesTest {
     private final OfferRepository offers = mock(OfferRepository.class);
     private final CourseService service = new CourseService(courses, users, requests,
             history, offers, lessons);
-    private final LessonService lessonService = new LessonService(lessons, courses, users, service);
+    private final com.example.art_course.lesson_supply.repository.LessonSupplyRepository lessonSupplies =
+            mock(com.example.art_course.lesson_supply.repository.LessonSupplyRepository.class);
+    private final LessonService lessonService = new LessonService(lessons, courses, users, service, lessonSupplies);
 
     @Test
     void draftIsVisibleOnlyToItsTeacher() {
@@ -398,6 +400,39 @@ class CourseReviewRulesTest {
                 () -> lessonService.deleteLesson(lesson.getId(), teacher)).getStatusCode().value());
         verify(lessons, never()).save(any());
         verify(lessons, never()).delete(any());
+    }
+
+    // Xóa bài học có học cụ gắn kèm: lesson_supplies tham chiếu lessons nên phải gỡ liên kết trước, không thì DB từ chối.
+    @Test
+    void deletingALessonFirstRemovesItsSupplyLinks() {
+        stubCourse();
+        Lesson lesson = readyLesson();
+        when(lessons.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        var link = new com.example.art_course.lesson_supply.entity.LessonSupply();
+        when(lessonSupplies.findAllByIdLessonId(lesson.getId())).thenReturn(List.of(link));
+
+        lessonService.deleteLesson(lesson.getId(), login(teacherId, "TEACHER"));
+
+        var order = inOrder(lessonSupplies, lessons);
+        order.verify(lessonSupplies).deleteAll(List.of(link));
+        order.verify(lessons).delete(lesson);
+        order.verify(lessons).flush();
+    }
+
+    // Bài đã có tiến độ, bài nộp hoặc hội thoại: nói rõ lý do (409) thay vì lỗi 500 của DB, và không xóa dở dang.
+    @Test
+    void deletingALessonWithLearnerDataIsAClearConflict() {
+        stubCourse();
+        Lesson lesson = readyLesson();
+        when(lessons.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("fk_learning_progress_lesson"))
+                .when(lessons).flush();
+
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> lessonService.deleteLesson(lesson.getId(), login(teacherId, "TEACHER")));
+
+        assertEquals(409, e.getStatusCode().value());
+        assertTrue(e.getReason().contains("đã có"), e.getReason());
     }
 
     @Test

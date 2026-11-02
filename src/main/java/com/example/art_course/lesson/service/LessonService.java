@@ -7,9 +7,11 @@ import com.example.art_course.course.service.CourseReviewPolicy;
 import com.example.art_course.lesson.dto.UpdateLessonRequest;
 import com.example.art_course.lesson.entity.Lesson;
 import com.example.art_course.lesson.repository.LessonRepository;
+import com.example.art_course.lesson_supply.repository.LessonSupplyRepository;
 import com.example.art_course.user.entity.User;
 import com.example.art_course.user.repository.UserRepository;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +27,20 @@ public class LessonService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final com.example.art_course.course.service.CourseService courseService;
+    private final LessonSupplyRepository lessonSupplyRepository;
 
     public LessonService(
             LessonRepository lessonRepository,
             CourseRepository courseRepository,
             UserRepository userRepository,
-            com.example.art_course.course.service.CourseService courseService) {
+            com.example.art_course.course.service.CourseService courseService,
+            LessonSupplyRepository lessonSupplyRepository) {
 
         this.lessonRepository = lessonRepository;
         this.courseRepository = courseRepository;
         this.userRepository = userRepository;
         this.courseService = courseService;
+        this.lessonSupplyRepository = lessonSupplyRepository;
     }
 
     @Transactional(readOnly = true)
@@ -160,7 +165,18 @@ public class LessonService {
         checkCourseOwnership(course, user);
         touchCourse(course);
 
-        lessonRepository.delete(lesson);
+        // Học cụ gắn với bài là cấu hình của chính bài này nên gỡ cùng (lesson_supplies tham chiếu lessons, DB không xóa dây chuyền).
+        lessonSupplyRepository.deleteAll(lessonSupplyRepository.findAllByIdLessonId(lessonId));
+        try {
+            lessonRepository.delete(lesson);
+            lessonRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // Tiến độ học, bài nộp hoặc hội thoại vẫn tham chiếu bài: giữ nguyên (cả việc gỡ học cụ ở trên bị hủy theo giao dịch).
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bài học đã có tiến độ học, bài nộp hoặc hội thoại nên không xóa được"
+            );
+        }
     }
 
     // Sửa bài học là sửa nội dung khóa: khóa đang công khai quay về chờ Staff duyệt lại.

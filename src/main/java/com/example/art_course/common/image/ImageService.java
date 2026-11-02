@@ -4,6 +4,8 @@ import com.example.art_course.common.AppError;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
 import com.example.art_course.course.service.CourseReviewPolicy;
+import com.example.art_course.lesson.entity.Lesson;
+import com.example.art_course.lesson.repository.LessonRepository;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
 import com.example.art_course.video.service.R2StorageService;
@@ -19,19 +21,21 @@ import java.io.IOException;
 import java.util.Set;
 import java.util.UUID;
 
-// Ảnh dụng cụ và ảnh bìa khóa học do giáo viên tải lên (R2 key images/{kind}/{uuid}); ảnh danh mục là công khai.
+// Ảnh dụng cụ, ảnh bìa khóa học và ảnh tranh mẫu của bài tập do giáo viên tải lên (R2 key images/{kind}/{uuid}); ảnh danh mục là công khai.
 @Service
 @RequiredArgsConstructor
 public class ImageService {
 
     static final String SUPPLIES = "supplies";
     static final String COURSES = "courses";
+    static final String LESSONS = "lessons";
     private static final String URL_PREFIX = "/api/images/";
     private static final long MAX_BYTES = 5L * 1024 * 1024;
     private static final Set<String> TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     private final SupplyRepository supplyRepository;
     private final CourseRepository courseRepository;
+    private final LessonRepository lessonRepository;
     private final R2StorageService r2StorageService;
     private final com.example.art_course.course.service.CourseService courseService;
 
@@ -71,16 +75,73 @@ public class ImageService {
         return url;
     }
 
+    // Ảnh tranh mẫu là nội dung khóa như ảnh bìa: đổi ảnh thì khóa đang công khai quay về chờ Staff duyệt lại.
+    // Chỉ bài đã bật bài tập vẽ mới có ảnh mẫu.
+    @Transactional
+    public String uploadLessonSample(UUID lessonId, UUID teacherId, MultipartFile file) {
+        Lesson lesson = findLesson(lessonId);
+        Course course = editableCourse(lesson, teacherId);
+        if (!Boolean.TRUE.equals(lesson.getHasAssignment())) {
+            throw new AppError(HttpStatus.BAD_REQUEST, "LESSON_NO_ASSIGNMENT", "Bài học chưa bật bài tập vẽ");
+        }
+        String old = lesson.getSampleImageUrl();
+        String url = store(LESSONS, file);
+        lesson.setSampleImageUrl(url);
+        lessonRepository.save(lesson);
+        CourseReviewPolicy.onContentChanged(course);
+        courseRepository.save(course);
+        deleteIfOurs(old);
+        return url;
+    }
+
+    // Gỡ ảnh mẫu (cũng khi tắt bài tập); bài không có ảnh thì không làm gì và không đổi trạng thái khóa.
+    @Transactional
+    public void deleteLessonSample(UUID lessonId, UUID teacherId) {
+        Lesson lesson = findLesson(lessonId);
+        Course course = editableCourse(lesson, teacherId);
+        String old = lesson.getSampleImageUrl();
+        if (old == null || old.isBlank()) {
+            return;
+        }
+        lesson.setSampleImageUrl(null);
+        lessonRepository.save(lesson);
+        CourseReviewPolicy.onContentChanged(course);
+        courseRepository.save(course);
+        deleteIfOurs(old);
+    }
+
+    private Lesson findLesson(UUID lessonId) {
+        return lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "LESSON_NOT_FOUND", "Không tìm thấy bài học"));
+    }
+
+    private Course editableCourse(Lesson lesson, UUID teacherId) {
+        Course course = courseRepository.findById(lesson.getCourseId())
+                .filter(c -> !CourseReviewPolicy.is(c, CourseReviewPolicy.DELETED))
+                .orElseThrow(() -> new AppError(HttpStatus.NOT_FOUND, "COURSE_NOT_FOUND", "Không tìm thấy khóa học"));
+        if (course.getTeacherId() == null || !course.getTeacherId().equals(teacherId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Bạn không quản lý khóa học này");
+        }
+        courseService.requireEditable(course);
+        courseService.prepareCustomizeEdit(course);
+        return course;
+    }
+
     public ResponseInputStream<GetObjectResponse> read(String kind, UUID id, UUID viewerId) {
-        if (!SUPPLIES.equals(kind) && !COURSES.equals(kind)) {
+        if (!SUPPLIES.equals(kind) && !COURSES.equals(kind) && !LESSONS.equals(kind)) {
             throw new AppError(HttpStatus.NOT_FOUND, "IMAGE_NOT_FOUND", "Không tìm thấy ảnh");
         }
+        String url = URL_PREFIX + kind + "/" + id;
+        Course course = null;
         if (COURSES.equals(kind)) {
-            Course course = courseRepository.findByCoverImageUrl(URL_PREFIX + kind + "/" + id).orElse(null);
-            if (course != null && CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)
-                    && !java.util.Objects.equals(course.getTeacherId(), viewerId)) {
-                throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không được xem ảnh bản nháp");
-            }
+            course = courseRepository.findByCoverImageUrl(url).orElse(null);
+        } else if (LESSONS.equals(kind)) {
+            course = lessonRepository.findBySampleImageUrl(url)
+                    .flatMap(l -> courseRepository.findById(l.getCourseId())).orElse(null);
+        }
+        if (course != null && CourseReviewPolicy.is(course, CourseReviewPolicy.DRAFT)
+                && !java.util.Objects.equals(course.getTeacherId(), viewerId)) {
+            throw new AppError(HttpStatus.FORBIDDEN, "FORBIDDEN", "Không được xem ảnh bản nháp");
         }
         return r2StorageService.getObject(key(kind, id));
     }

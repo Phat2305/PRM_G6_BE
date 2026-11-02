@@ -38,6 +38,20 @@ public class ImageController {
         return Map.of("coverImageUrl", imageService.uploadCourseCover(id, currentUserId(auth), file));
     }
 
+    @PostMapping(value = "/api/lessons/{lessonId}/sample-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('TEACHER')")
+    public Map<String, String> uploadLessonSample(@PathVariable UUID lessonId,
+                                                  @RequestParam("file") MultipartFile file, Authentication auth) {
+        return Map.of("sampleImageUrl", imageService.uploadLessonSample(lessonId, currentUserId(auth), file));
+    }
+
+    @DeleteMapping("/api/lessons/{lessonId}/sample-image")
+    @PreAuthorize("hasRole('TEACHER')")
+    public ResponseEntity<Void> deleteLessonSample(@PathVariable UUID lessonId, Authentication auth) {
+        imageService.deleteLessonSample(lessonId, currentUserId(auth));
+        return ResponseEntity.noContent().build();
+    }
+
     // Công khai (SecurityConfig): ảnh danh mục hiện cho mọi người dùng, kể cả chưa đăng nhập.
     @GetMapping("/api/images/{kind}/{id}")
     public ResponseEntity<Resource> image(@PathVariable String kind, @PathVariable UUID id,

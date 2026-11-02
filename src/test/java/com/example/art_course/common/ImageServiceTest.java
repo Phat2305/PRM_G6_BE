@@ -3,6 +3,8 @@ package com.example.art_course.common;
 import com.example.art_course.common.image.ImageService;
 import com.example.art_course.course.entity.Course;
 import com.example.art_course.course.repository.CourseRepository;
+import com.example.art_course.lesson.entity.Lesson;
+import com.example.art_course.lesson.repository.LessonRepository;
 import com.example.art_course.supply.entity.Supply;
 import com.example.art_course.supply.repository.SupplyRepository;
 import com.example.art_course.video.service.R2StorageService;
@@ -23,10 +25,11 @@ class ImageServiceTest {
 
     private final SupplyRepository supplies = mock(SupplyRepository.class);
     private final CourseRepository courses = mock(CourseRepository.class);
+    private final LessonRepository lessons = mock(LessonRepository.class);
     private final R2StorageService r2 = mock(R2StorageService.class);
     private final com.example.art_course.course.service.CourseService courseService =
             mock(com.example.art_course.course.service.CourseService.class);
-    private final ImageService service = new ImageService(supplies, courses, r2, courseService);
+    private final ImageService service = new ImageService(supplies, courses, lessons, r2, courseService);
     private final UUID teacherId = UUID.randomUUID();
     private final MockMultipartFile png = new MockMultipartFile("file", "a.png", "image/png", new byte[]{1, 2, 3});
 
@@ -102,6 +105,109 @@ class ImageServiceTest {
         assertThrows(org.springframework.web.server.ResponseStatusException.class,
                 () -> service.uploadCourseCover(id, teacherId, png));
         verifyNoInteractions(r2);
+    }
+
+    private Lesson lessonOf(Course course, String sample) {
+        UUID courseId = UUID.randomUUID();
+        course.setId(courseId);
+        Lesson lesson = Lesson.builder().id(UUID.randomUUID()).courseId(courseId).hasAssignment(true)
+                .sampleImageUrl(sample).build();
+        when(lessons.findById(lesson.getId())).thenReturn(Optional.of(lesson));
+        when(courses.findById(courseId)).thenReturn(Optional.of(course));
+        return lesson;
+    }
+
+    @Test
+    @DisplayName("ảnh tranh mẫu: chủ khóa tải lên thì lưu R2, đặt URL công khai, khóa công khai về chờ duyệt, xóa ảnh cũ của mình")
+    void lessonSample() {
+        UUID oldId = UUID.randomUUID();
+        Course course = Course.builder().teacherId(teacherId).status("PUBLISHED").build();
+        Lesson lesson = lessonOf(course, "/api/images/lessons/" + oldId);
+
+        String url = service.uploadLessonSample(lesson.getId(), teacherId, png);
+
+        assertTrue(url.startsWith("/api/images/lessons/"));
+        assertEquals(url, lesson.getSampleImageUrl());
+        assertEquals("PENDING_REVIEW", course.getStatus());
+        verify(r2).uploadBytes(startsWith("images/lessons/"), any(), eq("image/png"));
+        verify(r2).deleteObject("images/lessons/" + oldId);
+        verify(courseService).requireEditable(course);
+        verify(courseService).prepareCustomizeEdit(course);
+        verify(lessons).save(lesson);
+        verify(courses).save(course);
+    }
+
+    @Test
+    @DisplayName("ảnh tranh mẫu: bài chưa bật bài tập vẽ → 400, không lưu gì")
+    void lessonSampleNeedsAnAssignment() {
+        Course course = Course.builder().teacherId(teacherId).status("DRAFT").build();
+        Lesson lesson = lessonOf(course, null);
+        lesson.setHasAssignment(false);
+
+        AppError e = assertThrows(AppError.class, () -> service.uploadLessonSample(lesson.getId(), teacherId, png));
+
+        assertEquals("LESSON_NO_ASSIGNMENT", e.getErrorCode());
+        verifyNoInteractions(r2);
+        verify(lessons, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("ảnh tranh mẫu: người khác → 403, khóa đã có người mua → không sửa, bài không tồn tại → 404")
+    void lessonSampleRejects() {
+        Course course = Course.builder().teacherId(UUID.randomUUID()).status("DRAFT").build();
+        Lesson lesson = lessonOf(course, null);
+        assertEquals(403, assertThrows(AppError.class,
+                () -> service.uploadLessonSample(lesson.getId(), teacherId, png)).getStatus().value());
+        assertEquals(403, assertThrows(AppError.class,
+                () -> service.deleteLessonSample(lesson.getId(), teacherId)).getStatus().value());
+
+        course.setTeacherId(teacherId);
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.CONFLICT)).when(courseService).requireEditable(course);
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> service.uploadLessonSample(lesson.getId(), teacherId, png));
+
+        assertEquals(404, assertThrows(AppError.class,
+                () -> service.uploadLessonSample(UUID.randomUUID(), teacherId, png)).getStatus().value());
+        verifyNoInteractions(r2);
+    }
+
+    @Test
+    @DisplayName("gỡ ảnh tranh mẫu: xóa URL và ảnh trên R2, khóa công khai về chờ duyệt; bài không có ảnh thì không làm gì")
+    void lessonSampleDelete() {
+        UUID oldId = UUID.randomUUID();
+        Course course = Course.builder().teacherId(teacherId).status("PUBLISHED").build();
+        Lesson lesson = lessonOf(course, "/api/images/lessons/" + oldId);
+
+        service.deleteLessonSample(lesson.getId(), teacherId);
+
+        assertNull(lesson.getSampleImageUrl());
+        assertEquals("PENDING_REVIEW", course.getStatus());
+        verify(r2).deleteObject("images/lessons/" + oldId);
+
+        // Gọi lại khi đã hết ảnh: không đổi trạng thái khóa nữa.
+        course.setStatus("PUBLISHED");
+        service.deleteLessonSample(lesson.getId(), teacherId);
+        assertEquals("PUBLISHED", course.getStatus());
+        verify(r2, times(1)).deleteObject(any());
+    }
+
+    @Test
+    @DisplayName("ảnh tranh mẫu của khóa nháp chỉ giáo viên chủ khóa xem được")
+    void draftLessonSampleIsOnlyVisibleToItsTeacher() {
+        UUID imageId = UUID.randomUUID();
+        Course draft = Course.builder().teacherId(teacherId).status("DRAFT").build();
+        Lesson lesson = lessonOf(draft, "/api/images/lessons/" + imageId);
+        when(lessons.findBySampleImageUrl("/api/images/lessons/" + imageId)).thenReturn(Optional.of(lesson));
+
+        assertEquals(403, assertThrows(AppError.class,
+                () -> service.read("lessons", imageId, UUID.randomUUID())).getStatus().value());
+        service.read("lessons", imageId, teacherId);
+        verify(r2).getObject("images/lessons/" + imageId);
+
+        draft.setStatus("PUBLISHED");
+        service.read("lessons", imageId, null);
+        verify(r2, times(2)).getObject("images/lessons/" + imageId);
     }
 
     @Test

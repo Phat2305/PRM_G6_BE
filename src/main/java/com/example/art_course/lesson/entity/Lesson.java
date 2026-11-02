@@ -55,6 +55,10 @@ public class Lesson {
     @Column(name = "assignment_prompt", columnDefinition = "text")
     private String assignmentPrompt;
 
+    // Ảnh tranh mẫu của bài tập (đường dẫn công khai /api/images/lessons/{uuid}); chỉ đặt qua ImageService, client không gửi.
+    @Column(name = "sample_image_url", length = 255)
+    private String sampleImageUrl;
+
     @Column(name = "status", length = 20)
     private String status;
 }
