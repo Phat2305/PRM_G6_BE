@@ -3,6 +3,7 @@ package com.example.art_course.modules.course.service;
 import com.example.art_course.common.AppError;
 import com.example.art_course.contracts.events.CourseReviewedEvent;
 import com.example.art_course.course.entity.Course;
+import com.example.art_course.course.service.CourseReviewPolicy;
 import com.example.art_course.customize_request.entity.CustomizeRequest;
 import com.example.art_course.modules.course.entity.CourseReview;
 import com.example.art_course.lesson.entity.Lesson;
@@ -149,6 +150,8 @@ public class CourseService {
                         .isTrial(Boolean.TRUE.equals(l.getIsTrial()))
                         .hasAssignment(Boolean.TRUE.equals(l.getHasAssignment()))
                         .status(l.getStatus())
+                        .videoStatus(videoStatusOf(l))
+                        .durationSeconds(l.getDurationSeconds())
                         .build())
                 .toList();
 
@@ -167,6 +170,14 @@ public class CourseService {
                 .owned(viewerId != null && orderDetailRepository.parentOwnsCourse(viewerId, courseId))
                 .lessons(lessonDtos)
                 .build();
+    }
+
+    // Bài cũ chưa có cột video_status nhưng đã có video thì READY; chưa có gì thì NO_VIDEO.
+    private static String videoStatusOf(Lesson lesson) {
+        if (CourseReviewPolicy.videoReady(lesson)) {
+            return "READY";
+        }
+        return lesson.getVideoStatus() == null ? "NO_VIDEO" : lesson.getVideoStatus();
     }
 
     /**

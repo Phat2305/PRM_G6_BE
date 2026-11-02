@@ -21,4 +21,7 @@ public class LessonSummaryDto {
     private boolean isTrial;
     private boolean hasAssignment;
     private String status;
+    // Trạng thái xử lý video (READY, PROCESSING, NO_VIDEO...) và thời lượng, để app cho xem thử thật; không phải đường dẫn video.
+    private String videoStatus;
+    private Integer durationSeconds;
 }

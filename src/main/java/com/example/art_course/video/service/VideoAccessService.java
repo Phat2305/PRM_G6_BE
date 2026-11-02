@@ -72,6 +72,16 @@ public class VideoAccessService {
         return false;
     }
 
+    // Người được xem nội dung trả phí của khóa (đề bài tập, ảnh mẫu, đường dẫn video): giáo viên chủ khóa, Staff/Admin,
+    // bé ghi danh, phụ huynh của bé ghi danh và phụ huynh nhận khóa riêng. Cùng quy tắc với việc xem luồng video.
+    public boolean canViewCourse(UUID courseId, UUID userId, String role) {
+        if (userId == null || role == null) {
+            return false;
+        }
+        String r = role.trim().toUpperCase();
+        return r.equals("STAFF") || r.equals("ADMIN") || allowedForCourse(courseId, userId, r);
+    }
+
     private boolean allowedForCourse(UUID courseId, UUID userId, String role) {
         switch (role) {
             case "TEACHER":

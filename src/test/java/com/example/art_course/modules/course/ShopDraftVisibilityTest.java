@@ -47,6 +47,35 @@ class ShopDraftVisibilityTest {
         assertFalse(service.getCourseDetail(course.getId()).isOwned());
     }
 
+    // SHOP-10: app cần biết bài nào có video xử lý xong (để cho xem thử thật) và thời lượng, nhưng không bao giờ thấy đường dẫn video.
+    @Test
+    void detailLessonsCarryVideoStatusAndDurationButNeverTheVideoUrl() {
+        Course course = Course.builder().id(UUID.randomUUID()).status("PUBLISHED").build();
+        when(courses.findById(course.getId())).thenReturn(Optional.of(course));
+        Lesson ready = Lesson.builder().id(UUID.randomUUID()).title("Bài 1").isTrial(true)
+                .videoStatus("READY").durationSeconds(185).videoUrl("/api/videos/hls/x/master.m3u8").build();
+        Lesson legacy = Lesson.builder().id(UUID.randomUUID()).title("Bài cũ")
+                .videoUrl("/api/videos/hls/y/master.m3u8").build();
+        Lesson processing = Lesson.builder().id(UUID.randomUUID()).title("Bài 3").videoStatus("PROCESSING").build();
+        Lesson none = Lesson.builder().id(UUID.randomUUID()).title("Bài 4").build();
+        TypedQuery<Lesson> query = mock(TypedQuery.class);
+        when(entityManager.createQuery(anyString(), eq(Lesson.class))).thenReturn(query);
+        when(query.setParameter(anyString(), any())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of(ready, legacy, processing, none));
+
+        var lessons = service.getCourseDetail(course.getId()).getLessons();
+
+        assertEquals("READY", lessons.get(0).getVideoStatus());
+        assertEquals(185, lessons.get(0).getDurationSeconds());
+        // Bài cũ chưa có cột video_status nhưng đã có video: coi như READY (cùng quy tắc với lúc gửi duyệt).
+        assertEquals("READY", lessons.get(1).getVideoStatus());
+        assertEquals("PROCESSING", lessons.get(2).getVideoStatus());
+        assertEquals("NO_VIDEO", lessons.get(3).getVideoStatus());
+        assertFalse(java.util.Arrays.stream(
+                com.example.art_course.modules.course.dto.LessonSummaryDto.class.getDeclaredFields())
+                .anyMatch(f -> f.getName().toLowerCase().contains("videourl")));
+    }
+
     @Test
     void shoppingDetailsDoNotExposeDraft() {
         Course draft = Course.builder().id(UUID.randomUUID()).status("DRAFT").build();
